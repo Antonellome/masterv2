@@ -1,0 +1,58 @@
+{
+  "hash": "e2f30bcc",
+  "configHash": "e65743ce",
+  "lockfileHash": "d554e16c",
+  "browserHash": "0a474c3e",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "d1b0af42",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "8b4b3ebd",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "4e29ea9c",
+      "needsInterop": true
+    },
+    "@mui/x-date-pickers/LocalizationProvider": {
+      "src": "../../node_modules/@mui/x-date-pickers/LocalizationProvider/index.js",
+      "file": "@mui_x-date-pickers_LocalizationProvider.js",
+      "fileHash": "1257481c",
+      "needsInterop": false
+    },
+    "@mui/x-date-pickers/AdapterDayjs": {
+      "src": "../../node_modules/@mui/x-date-pickers/AdapterDayjs/index.js",
+      "file": "@mui_x-date-pickers_AdapterDayjs.js",
+      "fileHash": "629e0349",
+      "needsInterop": false
+    },
+    "dayjs/locale/it": {
+      "src": "../../node_modules/dayjs/locale/it.js",
+      "file": "dayjs_locale_it.js",
+      "fileHash": "d7ed12d1",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "chunk-5FH4KILI": {
+      "file": "chunk-5FH4KILI.js"
+    },
+    "chunk-65KY755N": {
+      "file": "chunk-65KY755N.js"
+    },
+    "chunk-RFWPZ66T": {
+      "file": "chunk-RFWPZ66T.js"
+    },
+    "chunk-V4OQ3NZ2": {
+      "file": "chunk-V4OQ3NZ2.js"
+    }
+  }
+}
