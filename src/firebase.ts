@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDxxKS8FufOzZxlX2ncDwH3QJRuaHTADf8",
-  authDomain: "riso-project-app.firebaseapp.com",
-  projectId: "riso-project-app",
-  storageBucket: "riso-project-app.firebasestorage.app",
-  messagingSenderId: "157316892209",
-  appId: "1:157316892209:web:c591c034fa132e549bb710"
+  apiKey: import.meta.env.VITE_API_KEY,
+  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
