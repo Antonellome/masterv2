@@ -1,105 +1,90 @@
-# Blueprint Progetto R.I.S.O. M.O. v3
+# Blueprint: R.I.S.O. App Tecnici (Versione Mobile)
 
-Questo documento delinea l'architettura, le funzionalità e lo stato di avanzamento del progetto di gestione per R.I.S.O. Master Office
+## 1. Panoramica del Progetto
 
-## 1. Overview Applicazione
+**Scopo:** Realizzare la versione mobile per Android e iOS dell'applicazione "R.I.S.O. App Tecnici". Quest'app è uno strumento di lavoro mirato per i tecnici sul campo, permettendo loro di compilare e gestire i propri rapportini di lavoro giornalieri in modo efficiente, anche in assenza di connessione internet.
 
-L'applicazione è un gestionale web-based (PWA) progettato per l'ambiente Firebase Studio. Serve a digitalizzare e ottimizzare le operazioni di R.I.S.O. Master Office, una ditta di assistenza tecnica. Le funzionalità chiave includono la gestione dell'anagrafica dei tecnici, dei veicoli, delle scadenze amministrative e la sincronizzazione dei dati per l'accesso tramite un'app mobile.
-
-## 2. Outline del Progetto e Funzionalità Implementate
-
-Questa sezione documenta le decisioni architetturali, di design e le funzionalità implementate dall'inizio dello sviluppo fino alla versione corrente.
-
-### Architettura e Stack Tecnologico
-- **Frontend:** React con Vite.
-- **Libreria Componenti:** Material-UI (MUI) per un design moderno e coerente.
-- **Database:** Cloud Firestore per la persistenza dei dati.
-- **Styling:** CSS-in-JS con le utility di MUI (`sx` prop).
-- **Gestione Date:** `dayjs` per la manipolazione e formattazione delle date, in combinazione con i `Timestamp` nativi di Firestore.
-
-### Standard di Esportazione PDF/Stampa
-
-Per garantire un'immagine coordinata e professionale, tutte le funzioni di esportazione (in PDF o per la stampa diretta) devono seguire uno standard preciso.
-
-- **Stile Generale:**
-  - Tutte le esportazioni devono essere generate in **bianco e nero (testo nero su sfondo bianco)**, senza colori, per garantire massima leggibilità e risparmio di stampa.
-  - **Intestazione:** In alto a sinistra, deve essere sempre presente il seguente logo testuale su due righe:
-    - **R.I.S.O. Master Office**
-    - Report Individuali Sincronizzati Online
-
-- **Layout per Elemento Singolo (es. un solo tecnico):**
-  - Il layout deve rispecchiare la struttura del **modulo di inserimento dati** dell'applicazione (es. `TecnicoForm`).
-  - I campi devono essere raggruppati logicamente per sezioni (es. "Anagrafica", "Dati Lavorativi", "Documenti", "Formazione e Sicurezza"), proprio come nel form, per una facile consultazione.
-
-- **Layout per Elenco di Elementi (es. lista tecnici):**
-  - I dati devono essere presentati in un formato a **due colonne asimmetriche**.
-  - **Colonna Sinistra (Fissa):** Contiene i campi identificativi principali (es. "Cognome" e "Nome").
-  - **Colonna Destra (Fluida):** Contiene tutti gli altri dati, che vanno a capo se necessario senza invadere lo spazio sotto la colonna sinistra.
-  - **Separatore:** Ogni elemento dell'elenco deve essere **separato dal successivo da una linea orizzontale netta** per distinguere chiaramente i record.
-
-### Funzionalità Core Implementate
-
-1.  **Gestione Anagrafica Tecnici:**
-    - **CRUD Completo:** Sistema completo per la Creazione, Lettura, Aggiornamento ed Eliminazione (CRUD) dei tecnici.
-    - **Lista Tecnici (`TecniciList.tsx`):** Tabella avanzata (`DataGrid` di MUI) con filtro, ricerca, e personalizzazione colonne. La tabella non eccede mai la larghezza dello schermo.
-    - **Modulo di Inserimento/Modifica (`TecnicoForm.tsx`):** Dialog modale con campi raggruppati per sezioni e una tendina per il tipo di contratto.
-
-2.  **Sincronizzazione Dati in Tempo Reale:**
-    - **Hook `useData.ts`:** Utilizza `onSnapshot` di Firestore per l'aggiornamento istantaneo dell'interfaccia utente.
-
-3.  **Gestione Scadenze:**
-    - **Pagina Scadenze (`ScadenzePage.tsx`):** Dashboard per le scadenze imminenti e passate.
-    - **Logica di Calcolo (`scadenze.ts`):** Utility per aggregare e calcolare lo stato delle scadenze.
-
-### Correzioni Strutturali e Debug (Cronistoria)
-- **Standardizzazione del Formato Data:** Uniformato l'uso di `Timestamp` di Firestore per il salvataggio delle date.
-- **Correzione del Modulo (`TecnicoForm.tsx`):** Corretta la conversione bi-direzionale tra `Timestamp` e `dayjs`.
-- **Correzione Visualizzazione Date (`TecniciList.tsx`):** Resa la tabella capace di leggere e formattare sia i `Timestamp` che le vecchie stringhe di testo.
+**Obiettivo:** Sviluppare un'app nativa basata sulla logica e le funzionalità del repository di riferimento `riso-app-tecnici`, garantendo stabilità, performance e un'esperienza utente ottimizzata per il mobile.
 
 ---
-### Indagine su Errore di Layout in `ReportMensili.tsx`
 
-Questa sezione documenta un grave problema di layout riscontrato nel componente `ReportMensili.tsx` e la serie di tentativi di risoluzione che si sono rivelati infruttuosi.
+## 2. Funzionalità Chiave (Basate sull'analisi del Repository)
 
-#### Problema Iniziale
-L'applicazione presentava due problemi concomitanti:
-1.  **Errore di Compilazione:** Il processo di build falliva a causa di un errore di sintassi (`Expected corresponding JSX closing tag for <TableBody>`) in un file obsoleto e non più utilizzato, `src/components/Reportistica/ConsuntiviMensili.tsx`.
-2.  **Errore di Layout (MUI DataGrid):** Una volta aggirato l'errore di compilazione, la griglia dati nel componente `ReportMensili.tsx` non veniva visualizzata, e la console mostrava l'errore: `MUI X: useResizeContainer - The parent DOM element of the Data Grid has an empty height`. Questo indica che il contenitore della griglia ha un'altezza calcolata di 0 pixel, impedendo alla griglia di renderizzarsi.
+L'applicazione sarà focalizzata sulle seguenti macro-funzionalità:
 
-#### Risoluzione Errore di Compilazione ("File Fantasma")
-L'errore di compilazione era causato da un riferimento a un file eliminato, mantenuto nella cache profonda di Vite.
-- **Indagine:** È stato verificato che nessun file del progetto (`ReportisticaPage.tsx`, `App.tsx`, e i componenti figli) importava il file corrotto.
-- **Soluzione:** Il problema è stato risolto forzando la pulizia della cache di Vite tramite il comando `rm -rf node_modules/.vite` e riavviando il server di sviluppo.
+*   **Autenticazione Sicura:**
+    *   Schermata di Login per l'identificazione del tecnico.
+*   **Dashboard e Riepilogo:**
+    *   Una schermata `Home` che presenta un riepilogo delle attività giornaliere o recenti.
+*   **Gestione Completa dei Rapportini:**
+    *   **Creazione:** Form dedicato per l'inserimento di un nuovo rapportino, specificando dettagli come ore, tipo di intervento, cliente, descrizione.
+    *   **Modifica:** Possibilità di correggere e aggiornare rapportini già inseriti.
+    *   **Visualizzazione:** Liste filtrate per visualizzare i rapportini odierni, giornalieri e passati.
+*   **Modalità Offline e Sincronizzazione:**
+    *   L'app deve poter funzionare senza una connessione internet attiva.
+    *   Una funzione di **Sincronizzazione** manuale o automatica per inviare i dati locali (nuovi rapportini) al server centrale (Firebase) e ricevere aggiornamenti sulle anagrafiche (clienti, luoghi, ecc.).
+*   **Impostazioni e Dati Locali:**
+    *   Un'area `Impostazioni` per configurare l'app e gestire i dati.
+    *   Visualizzazione delle anagrafiche salvate localmente (es. luoghi, navi, tariffe) per la compilazione offline dei rapportini.
+*   **Statistiche Personali:**
+    *   Una sezione per mostrare al tecnico le proprie statistiche di lavoro (es. ore lavorate, numero di interventi).
 
-#### Tentativi Falliti di Risoluzione del Problema di Layout
-Una volta risolto l'errore di compilazione, è riemerso il problema principale del layout. Sono state tentate, senza successo, le seguenti strategie sul file `ReportMensili.tsx` e sul suo genitore `ReportisticaPage.tsx`:
+### Funzionalità Escluse (come da indicazioni):
 
-1.  **Flexbox Standard (`flex-grow: 1`):** Tentativo di far espandere il contenitore della griglia per riempire lo spazio disponibile nel suo genitore flessibile. **Esito: Fallito.**
-2.  **Altezza Percentuale (`height: '100%`):** Applicazione esplicita di un'altezza del 100% alla griglia e a tutta la catena di contenitori. **Esito: Fallito.**
-3.  **Layout Assoluto in `ReportisticaPage`:** Modifica dei pannelli delle tab per usare `position: 'absolute'` e riempire il viewport. **Esito: Fallito.**
-4.  **Prop `autoHeight`:** Utilizzo della prop nativa della `DataGrid`, `autoHeight`, progettata per adattare l'altezza della griglia al suo contenuto, bypassando la necessità di un genitore con altezza definita. **Esito: Incredibilmente Fallito.**
-5.  **Altezza Fissa (`minHeight`):** Approccio "brutale" applicando un'altezza minima fissa (es. `minHeight: 650px`) direttamente alla `DataGrid`. **Esito: Fallito.**
-6.  **Pattern Ibrido (Relativo + Assoluto):** Configurazione del contenitore diretto della griglia con `position: 'relative'` e `flex-grow: 1`, e della `DataGrid` stessa con `position: 'absolute', height: '100%', width: '100%'`. Questo pattern, solitamente molto robusto, non ha prodotto risultati. **Esito: Fallito.**
+*   Gestione delle firme dei clienti.
+*   Accesso diretto all'anagrafica completa dei clienti (se non per selezione in un rapportino).
+*   Gestione documentale complessa.
+*   Gestione delle presenze generali dell'azienda.
+*   Gestione delle scadenze aziendali.
 
-#### Diagnosi Finale e Azione Raccomandata
-Tutti i tentativi di risolvere il problema tramite la modifica del codice dei componenti React sono falliti. Questo indica che il problema non risiede in una semplice errata configurazione degli stili, ma in un conflitto o in una regola CSS in un punto più alto della gerarchia del DOM che forza il contenitore della griglia ad avere un'altezza pari a zero in un modo che non può essere sovrascritto.
+---
 
-**Il problema non è risolvibile tramite ulteriori modifiche ai file di componenti.**
+## 3. Piano di Sviluppo (Originale)
 
-**Azione Raccomandata:** È necessario un **debug manuale tramite gli strumenti per sviluppatori del browser**:
-1.  Aprire la pagina "Reportistica" nel browser.
-2.  Usare lo strumento "Ispeziona Elemento" per selezionare il `<div>` della `DataGrid` (con classe `MuiDataGrid-root`).
-3.  Risalire l'albero del DOM, analizzando un genitore alla volta.
-4.  Per ogni elemento genitore, controllare il pannello "Stili Calcolati" (`Computed`) e trovare il primo elemento che ha un valore di `height` pari a `0px` o a un valore inaspettatamente basso.
-5.  **Quell'elemento è la causa del problema.** Analizzare le sue regole CSS per capire quale stile sta causando il collasso verticale.
+*Questa sezione rappresenta il piano iniziale, che è stato superato dagli sviluppi successivi.*
 
-*Nota: Il codice del componente `ReportMensili.tsx` è stato ripristinato a una configurazione flexbox pulita e standard, che rappresenta il punto di partenza ideale per questa indagine manuale.*
+### Stack Tecnologico Proposto:
 
-## 3. Piano d'Azione Prossimi Passi
+*   **Framework:** **React Native con Expo**.
+*   **Libreria UI:** **React Native Paper**.
+*   **Navigazione:** **React Navigation**.
+*   **Backend:** **Firebase** (Firestore e Authentication).
 
-1.  **RISOLVERE IL BUG DI LAYOUT:** Eseguire il debug manuale come descritto nella sezione precedente. Questa è la massima priorità.
-2.  **Implementare lo Standard di Esportazione:**
-    - Creare una utility di esportazione riutilizzabile (`src/utils/exportUtils.ts`) che generi l'HTML secondo le specifiche definite nello standard (gestendo sia il caso singolo che l'elenco).
-    - Aggiungere un'icona di esportazione nella riga di ogni tecnico nella tabella `TecniciList.tsx`.
-    - Collegare l'icona alla nuova funzione di esportazione per generare il report individuale del tecnico.
-3.  **Estendere lo Standard:** Applicare la stessa logica di esportazione alle altre sezioni dell'applicazione (es. Veicoli, Navi) per coerenza.
+### Passi Concreti:
+
+1.  **Setup del Progetto:** Inizializzare un nuovo progetto React Native con Expo.
+2.  **Copiare la Logica Esistente:** Migrare i file di logica.
+3.  **Sviluppo Schermata di Login:** Creare la UI e la logica per l'autenticazione.
+4.  **Sviluppo Core (Rapportini):** Implementare il flusso completo dei rapportini.
+5.  **Implementazione Sincronizzazione:** Sviluppare il meccanismo di sync.
+6.  **Sviluppo Funzionalità Secondarie:** Aggiungere Impostazioni e Statistiche.
+7.  **Test e Rifinitura:** Debug e ottimizzazione.
+
+---
+
+## 4. Aggiornamento e Piano Operativo
+
+*Stato attuale: Il progetto è già stato inizializzato nella cartella `riso-app-tecnici` ed esiste una schermata di Login. L'app tuttavia non è funzionante e presenta numerosi errori di build che impediscono la visualizzazione dell'anteprima.*
+
+**Problema Identificato:** La build fallisce a causa di una configurazione errata che mescola l'ambiente dell'app mobile con quello dell'app web "Master Office". L'errore principale è il tentativo di usare alias di percorso (`@/`) e contesti (`AuthContext`) appartenenti al progetto sbagliato.
+
+**Nuovo Piano d'Azione:**
+
+1.  **Stabilizzare l'Ambiente (Fix Immediato):**
+    *   **Creare un `AuthContext` dedicato:** Isolare la logica di autenticazione all'interno dell'app mobile. Creare `riso-app-tecnici/contexts/AuthContext.tsx`.
+    *   **Implementare il Layout di Root:** Creare il file `riso-app-tecnici/app/_layout.tsx`. Questo file sarà il cuore della navigazione e gestirà il flusso di autenticazione, decidendo se mostrare la schermata di login o la home page.
+    *   **Ristrutturare le Pagine (Routing):** Seguire le convenzioni di Expo Router.
+        *   Spostare la schermata di Login esistente in `riso-app-tecnici/app/(auth)/login.tsx`.
+        *   Creare un gruppo `(app)` per le schermate accessibili solo dopo il login.
+        *   Il file `index.tsx` principale diventerà un semplice file di "ingresso" che reindirizzerà l'utente.
+    *   **Correggere la Schermata di Login:** Aggiornare la schermata di login per usare il nuovo `AuthContext` dedicato e risolvere gli stili deprecati.
+
+2.  **Sviluppo della Home (Prossimo Obiettivo):**
+    *   Creare il file `riso-app-tecnici/app/(app)/home.tsx`.
+    *   Questa schermata sarà la destinazione dopo un login andato a buon fine.
+    *   Implementare una UI di base per la Dashboard/Home page, mostrando un messaggio di benvenuto e un pulsante di Logout per testare il flusso completo.
+
+3.  **Visualizzazione nell'Anteprima Android:**
+    *   Ogni passo verrà eseguito con l'obiettivo di risolvere gli errori di build e rendere l'app visibile e funzionante nell'anteprima Android.
+
+**Prossimo Passo Concreto:** Inizierò immediatamente con il **Punto 1** del nuovo piano: la creazione del file `_layout.tsx`, la ristrutturazione delle cartelle e la creazione del `AuthContext` dedicato. Questo sbloccherà la situazione e ci permetterà di procedere.

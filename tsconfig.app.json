@@ -7,8 +7,16 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "moduleResolution": "bundler"
   },
   "include": ["src"],
-  "exclude": ["dist", "vite.config.ts", "node_modules"]
+  "exclude": [
+    "dist",
+    "vite.config.ts",
+    "node_modules",
+    "riso-app-tecnici",
+    "riso-app-tecnici-repo",
+    "temp_repo_analysis"
+  ]
 }

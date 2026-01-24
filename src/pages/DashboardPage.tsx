@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Box, Typography, CircularProgress, Alert, Card, CardContent, Grid, Tabs, Tab, List, ListItem, ListItemText, ListItemAvatar, Avatar, Select, MenuItem, FormControl, InputLabel, SelectChangeEvent } from '@mui/material';
-import { useCollectionData } from '../hooks/useCollectionData';
-import { collection } from 'firebase/firestore';
+import { useFirestoreData } from '@/hooks/useFirestoreData';
+import { collection, Query } from 'firebase/firestore'; // Import Query type
 import { db } from '../firebase';
 import type { Rapportino, Tecnico, TipoGiornata, Nave, Luogo } from '../models/definitions'; 
 import dayjs from 'dayjs';
@@ -25,7 +25,7 @@ const CalendarDayCard: React.FC<CalendarDayCardProps> = ({ day, missingReports, 
     let textColor = 'text.primary';
 
     if (isFuture) {
-        cardColor = 'grey.600'; // Grigio ancora più scuro
+        cardColor = 'grey.600';
         textColor = 'white';
     } else {
         cardColor = missingReports > 0 ? 'error.light' : 'success.light';
@@ -92,11 +92,18 @@ const DashboardPage = () => {
     const [selectedMonth, setSelectedMonth] = useState(dayjs().month());
     const [selectedYear, setSelectedYear] = useState(dayjs().year());
 
-    const { data: rapportini, loading: lRapportini } = useCollectionData<Rapportino>(collection(db, 'rapportini'));
-    const { data: tecnici, loading: lTecnici } = useCollectionData<Tecnico>(collection(db, 'tecnici'));
-    const { data: tipiGiornata, loading: lTipiGiornata } = useCollectionData<TipoGiornata>(collection(db, 'tipiGiornata'));
-    const { data: navi, loading: lNavi } = useCollectionData<Nave>(collection(db, 'navi'));
-    const { data: luoghi, loading: lLuoghi } = useCollectionData<Luogo>(collection(db, 'luoghi'));
+    // CORREZIONE DEFINITIVA: Memoizzazione delle query per prevenire re-render infiniti
+    const rapportiniQuery = useMemo(() => collection(db, 'rapportini') as Query<Rapportino>, []);
+    const tecniciQuery = useMemo(() => collection(db, 'tecnici') as Query<Tecnico>, []);
+    const tipiGiornataQuery = useMemo(() => collection(db, 'tipiGiornata') as Query<TipoGiornata>, []);
+    const naviQuery = useMemo(() => collection(db, 'navi') as Query<Nave>, []);
+    const luoghiQuery = useMemo(() => collection(db, 'luoghi') as Query<Luogo>, []);
+
+    const { data: rapportini, loading: lRapportini } = useFirestoreData<Rapportino>(rapportiniQuery);
+    const { data: tecnici, loading: lTecnici } = useFirestoreData<Tecnico>(tecniciQuery);
+    const { data: tipiGiornata, loading: lTipiGiornata } = useFirestoreData<TipoGiornata>(tipiGiornataQuery);
+    const { data: navi, loading: lNavi } = useFirestoreData<Nave>(naviQuery);
+    const { data: luoghi, loading: lLuoghi } = useFirestoreData<Luogo>(luoghiQuery);
 
     const isLoading = lRapportini || lTecnici || lTipiGiornata || lNavi || lLuoghi;
 
@@ -105,7 +112,6 @@ const DashboardPage = () => {
         
         const today = dayjs();
 
-        // --- Logica Dashboard --- 
         const thirtyDaysAgo = today.subtract(30, 'day');
         const sevenDaysAgo = today.subtract(7, 'day');
         const tipiGiornataMap = new Map(tipiGiornata.map(tg => [tg.id, tg]));
@@ -144,7 +150,6 @@ const DashboardPage = () => {
             if (nomeTecnico) presenzeOggi.add(nomeTecnico);
         });
 
-        // --- Logica Calendario Sincronizzazioni ---
         const activeTechnicians = tecnici.filter(t => t.attivo).length;
         const daysInMonth = dayjs().year(selectedYear).month(selectedMonth).daysInMonth();
         const firstDayOfMonth = dayjs().year(selectedYear).month(selectedMonth).startOf('month').day();
@@ -201,7 +206,6 @@ const DashboardPage = () => {
                 </Tabs>
             </Box>
 
-            {/* Tab Riepilogo */}
             <CustomTabPanel value={tabValue} index={0}>
                  <Grid container spacing={3}>
                     <Grid item xs={12} sm={4}><StatCard title="Ore Lavorate (30gg)" value={oreTotali30} /></Grid>
@@ -227,7 +231,6 @@ const DashboardPage = () => {
                 </Grid>
             </CustomTabPanel>
 
-            {/* Tab Attività Recenti */}
             <CustomTabPanel value={tabValue} index={1}>
                 <Card><CardContent>
                     <Typography variant="h6" gutterBottom>Ultime 5 Attività</Typography>
@@ -239,7 +242,6 @@ const DashboardPage = () => {
                 </CardContent></Card>
             </CustomTabPanel>
 
-            {/* Tab Presenze di Oggi */}
             <CustomTabPanel value={tabValue} index={2}>
                 <Card><CardContent>
                     <Typography variant="h6" gutterBottom>Tecnici con attività registrata oggi</Typography>
@@ -251,7 +253,6 @@ const DashboardPage = () => {
                 </CardContent></Card>
             </CustomTabPanel>
             
-            {/* Tab Monitoraggio Sincronizzazioni */}
             <CustomTabPanel value={tabValue} index={3}>
                 <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
                     <FormControl>
