@@ -62,11 +62,11 @@ const ScadenzeGrid = () => {
     // CORREZIONE: Utilizza le proprietà corrette degli oggetti
     const rows: ScadenzaRow[] = [
         ...(veicoli || []).flatMap((v: Veicolo): ScadenzaRow[] => [
-            { id: `${v.id}-ass`, origine: `${v.veicolo} (${v.targa})`, tipoScadenza: 'Assicurazione', dataScadenza: v.scadenzaAssicurazione },
-            { id: `${v.id}-bollo`, origine: `${v.veicolo} (${v.targa})`, tipoScadenza: 'Bollo', dataScadenza: v.scadenzaBollo },
-            { id: `${v.id}-rev`, origine: `${v.veicolo} (${v.targa})`, tipoScadenza: 'Revisione', dataScadenza: v.scadenzaRevisione },
-            { id: `${v.id}-tagl`, origine: `${v.veicolo} (${v.targa})`, tipoScadenza: 'Tagliando', dataScadenza: v.scadenzaTagliando },
-            { id: `${v.id}-tachi`, origine: `${v.veicolo} (${v.targa})`, tipoScadenza: 'Tachigrafo', dataScadenza: v.scadenzaTachigrafo },
+            { id: `${v.id}-ass`, origine: `${v.targa}`, tipoScadenza: 'Assicurazione', dataScadenza: v.scadenzaAssicurazione },
+            { id: `${v.id}-bollo`, origine: `${v.targa}`, tipoScadenza: 'Bollo', dataScadenza: v.scadenzaBollo },
+            { id: `${v.id}-rev`, origine: `${v.targa}`, tipoScadenza: 'Revisione', dataScadenza: v.scadenzaRevisione },
+            { id: `${v.id}-tagl`, origine: `${v.targa}`, tipoScadenza: 'Tagliando', dataScadenza: v.scadenzaTagliando },
+            { id: `${v.id}-tachi`, origine: `${v.targa}`, tipoScadenza: 'Tachigrafo', dataScadenza: v.scadenzaTachigrafo },
         ].filter(item => item.dataScadenza)),
         ...(documenti || []).flatMap((d: Documento): ScadenzaRow[] => [
             { id: `${d.id}-scad`, origine: d.nome, tipoScadenza: 'Scadenza Documento', dataScadenza: d.dataScadenza },

@@ -155,21 +155,57 @@ const RapportiniList = () => {
         <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
             <Typography variant="h6" gutterBottom>Filtri</Typography>
             <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6,
+                    md: 3
+                  }}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6,
+                    md: 3
+                  }}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6,
+                    md: 3
+                  }}>
                     <Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, val) => handleFilterChange('tecnico', val)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                 <Grid item xs={12} sm={6} md={3}>
+                 <Grid
+                   size={{
+                     xs: 12,
+                     sm: 6,
+                     md: 3
+                   }}>
                     <Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, val) => handleFilterChange('nave', val)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                 <Grid item xs={12} sm={6} md={3}>
+                 <Grid
+                   size={{
+                     xs: 12,
+                     sm: 6,
+                     md: 3
+                   }}>
                     <Autocomplete options={options.luoghi} getOptionLabel={(o) => o.nome || ''} value={filters.luogo} onChange={(_, val) => handleFilterChange('luogo', val)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                 <Grid item xs={12} sm={6} md={3}>
+                 <Grid
+                   size={{
+                     xs: 12,
+                     sm: 6,
+                     md: 3
+                   }}>
                     <Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, val) => handleFilterChange('cliente', val)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                <Grid item xs={12} md={6} container justifyContent="flex-end">
+                <Grid
+                  container
+                  justifyContent="flex-end"
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                     <Button onClick={resetFilters} variant="outlined">Azzera Filtri</Button>
                 </Grid>
             </Grid>

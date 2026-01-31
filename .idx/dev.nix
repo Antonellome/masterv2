@@ -1,25 +1,23 @@
 {
   pkgs, ...
 }: {
+  # Nix packages to add to the environment
+  packages = [ pkgs.nodejs_20 ];
 
-  packages = [
-    pkgs.nodejs_20,
-    pkgs.bun
-  ];
+  # web server preview
+  idx.previews = {
+    enable = true;
+    previews = {
+      web = {
+        command = [ "npm" "run" "dev" "--" "--port" "$PORT" "--host" "0.0.0.0" ];
+        manager = "web";
+      };
+    };
+  };
 
-  idx.previews = [
-    {
-      name = "master-office";
-      command = "npm install && npm run dev -- --port $PORT --host 0.0.0.0";
-      manager = "web";
-      dir = "apps/master-office";
-    },
-    {
-      name = "app-tecnici";
-      command = "bun install && bun run start-web";
-      manager = "web";
-      dir = "riso-app-tecnici-repo";
-    }
-  ];
-
+  # command to run when the workspace starts
+  idx.workspace.onStart = {
+    # install dependencies
+    install = "npm install";
+  };
 }

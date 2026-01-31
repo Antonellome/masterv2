@@ -6,7 +6,7 @@ import type { BaseEntity } from '@/models/definitions';
 import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
 
 interface ListaGestibileProps<T extends BaseEntity> {
-    items: T[];
+    items?: T[]; // La prop è opzionale
     columns: GridColDef[];
     loading: boolean;
     error: { message: string } | null;
@@ -19,7 +19,7 @@ interface ListaGestibileProps<T extends BaseEntity> {
 }
 
 function ListaGestibile<T extends BaseEntity>({
-    items,
+    items = [], // Valore di default per la prop items
     columns,
     loading,
     error,
@@ -109,7 +109,7 @@ function ListaGestibile<T extends BaseEntity>({
                     // Passiamo tutti i dati necessari dal contesto al form
                     ditte={dataContext.ditte}
                     clienti={dataContext.clienti}
-                    categorie={dataContext.categorie}
+                    categorie={dataotec.categorie}
                 />
             )}
         </>

@@ -79,7 +79,11 @@ const DocumentoForm = ({ open, onClose, onSave, documento }: DocumentoFormProps)
     };
 
     const renderDatePicker = (name: keyof Documento, label: string) => (
-        <Grid item xs={12} sm={6}>
+        <Grid
+            size={{
+                xs: 12,
+                sm: 6
+            }}>
             <Controller
                 name={name}
                 control={control}
@@ -102,13 +106,21 @@ const DocumentoForm = ({ open, onClose, onSave, documento }: DocumentoFormProps)
                 <form onSubmit={handleSubmit(handleFormSubmit)}>
                     <DialogContent>
                         <Grid container spacing={2} sx={{ mt: 1 }}>
-                            <Grid item xs={12} sm={6}><Controller name="nome" control={control} rules={{ required: 'Il nome è obbligatorio' }} render={({ field }) => <TextField {...field} label="Nome" fullWidth />} /></Grid>
-                            <Grid item xs={12} sm={6}><Controller name="descrizione" control={control} render={({ field }) => <TextField {...field} label="Descrizione" fullWidth />} /></Grid>
-                            <Grid item xs={12}><hr /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 6
+                                }}><Controller name="nome" control={control} rules={{ required: 'Il nome è obbligatorio' }} render={({ field }) => <TextField {...field} label="Nome" fullWidth />} /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 6
+                                }}><Controller name="descrizione" control={control} render={({ field }) => <TextField {...field} label="Descrizione" fullWidth />} /></Grid>
+                            <Grid size={12}><hr /></Grid>
                             {renderDatePicker('scadenza1', 'Scadenza 1')}
                             {renderDatePicker('scadenza2', 'Scadenza 2')}
-                            <Grid item xs={12}><hr /></Grid>
-                            <Grid item xs={12}><Controller name="note" control={control} render={({ field }) => <TextField {...field} label="Note" multiline rows={4} fullWidth />} /></Grid>
+                            <Grid size={12}><hr /></Grid>
+                            <Grid size={12}><Controller name="note" control={control} render={({ field }) => <TextField {...field} label="Note" multiline rows={4} fullWidth />} /></Grid>
                         </Grid>
                     </DialogContent>
                     <DialogActions>

@@ -103,7 +103,7 @@ const SignupPage = () => {
             {loading ? <CircularProgress size={24} color="inherit" /> : 'Registrati'}
           </Button>
           <Grid container justifyContent="flex-end">
-            <Grid item>
+            <Grid>
                 <Link to="/login" style={{ textDecoration: 'none' }}>
                     <Typography variant="body2" color="primary">
                         Hai già un account? Accedi

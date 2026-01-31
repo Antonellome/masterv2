@@ -78,7 +78,7 @@ const TipoGiornataForm = ({ open, onClose, tipoGiornata }: TipoGiornataFormProps
             <form onSubmit={handleSubmit(handleFormSubmit)}>
                 <DialogContent>
                     <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                             <Controller
                                 name="nome"
                                 control={control}
@@ -93,7 +93,7 @@ const TipoGiornataForm = ({ open, onClose, tipoGiornata }: TipoGiornataFormProps
                                 )}
                             />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                             <FormControlLabel
                                 control={
                                     <Controller

@@ -120,9 +120,7 @@ const DocumentiList: React.FC<DocumentiListProps> = ({ documenti, onEdit, onDele
             <DataGrid
                 rows={documenti}
                 columns={columns}
-                autoHeight
                 getRowId={(row) => row.id}
-                getRowHeight={() => 'auto'}
                 localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
                 sx={{ '& .MuiDataGrid-cell': { py: 1.5 } }}
                 initialState={{

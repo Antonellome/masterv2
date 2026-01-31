@@ -1,12 +1,12 @@
 import GestioneAnagrafica from '@/components/Anagrafiche/GestioneAnagrafica';
-import type { FormField } from '@/models/definitions';
+import type { FormField, Nave } from '@/models/definitions';
 import type { GridColDef } from '@mui/x-data-grid';
 import { useData } from '@/hooks/useData';
 import { useMemo } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 
 const GestioneNavi = () => {
-    const { clienti, loading: loadingClienti } = useData();
+    const { clienti, navi, loading } = useData();
 
     const clientiMap = useMemo(() => {
         if (!clienti) return new Map();
@@ -37,22 +37,27 @@ const GestioneNavi = () => {
             flex: 1,
             minWidth: 150,
             editable: true,
+            valueGetter: (params) => clientiMap.get(params.value) || params.value,
         },
     ];
 
-    if (loadingClienti) {
+    if (loading) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
     }
 
     return (
-        <GestioneAnagrafica
-            collectionName="navi"
-            title="Gestione Navi"
-            fields={fields}
-            columns={columns}
-            anagraficaType="nave"
-            lookupMaps={{ clienteId: clientiMap }}
-        />
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <GestioneAnagrafica<Nave>
+                collectionName="navi"
+                title="Gestione Navi"
+                data={navi}
+                loading={loading}
+                fields={fields}
+                columns={columns}
+                anagraficaType="nave"
+                lookupMaps={{ clienteId: clientiMap }}
+            />
+        </Box>
     );
 };
 

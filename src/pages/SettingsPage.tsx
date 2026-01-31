@@ -28,21 +28,21 @@ function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`settings-tabpanel-${index}`}
-      aria-labelledby={`settings-tab-${index}`}
-      style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }} // Proprietà per la crescita
-      {...other}
-    >
-      {value === index && (
-        // Anche il contenitore interno deve passare le proprietà flex
-        <Box sx={{ pt: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
-          {children}
-        </Box>
-      )}
-    </div>
+      <div
+        role="tabpanel"
+        hidden={value !== index}
+        id={`settings-tabpanel-${index}`}
+        aria-labelledby={`settings-tab-${index}`}
+        style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }} // Proprietà per la crescita
+        {...other}
+      >
+          {value === index && (
+            // Anche il contenitore interno deve passare le proprietà flex
+            (<Box sx={{ pt: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {children}
+            </Box>)
+          )}
+      </div>
   );
 }
 
@@ -179,19 +179,16 @@ const SettingsPage = () => {
                     <Tab label="Dati" id="settings-tab-2" aria-controls="settings-tabpanel-2" />
                 </Tabs>
             </Box>
-
             {/* Pannello Aspetto */}
             <TabPanel value={currentTab} index={0}>
                 <StyledCard>
                   <ThemeSwitcher />
                 </StyledCard>
             </TabPanel>
-
             {/* Pannello Utenti */}
             <TabPanel value={currentTab} index={1}>
                 <GestioneUtentiTab />
             </TabPanel>
-
             {/* Pannello Dati (Backup/Restore, Orari) */}
             <TabPanel value={currentTab} index={2}>
                 <StyledCard sx={{ mb: 4 }}>
@@ -216,7 +213,6 @@ const SettingsPage = () => {
                     <OrariDefault />
                 </StyledCard>
             </TabPanel>
-
             <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar}>
                 <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
                     {snackbar.message}

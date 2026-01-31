@@ -23,7 +23,6 @@ const ReportisticaPage = () => {
   return (
     // Contenitore principale che definisce un layout a colonna e occupa l'altezza della viewport
     <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
-      
       {/* Barra delle Tab - non cresce, non si restringe */}
       <Box sx={{ flexShrink: 0, borderBottom: 1, borderColor: 'divider', p: 1, display: 'flex', alignItems: 'center' }}>
         <Tabs value={value} onChange={handleChange} variant="scrollable" scrollButtons="auto" sx={{ flexGrow: 1 }}>
@@ -37,7 +36,6 @@ const ReportisticaPage = () => {
           </IconButton>
         </Tooltip>
       </Box>
-
       {/* Contenitore del contenuto della Tab - CRESCE e ha il PADDING */}
       {/* Il Paper interno gestirà lo SCORRIMENTO */}
       <Box sx={{ flexGrow: 1, p: { xs: 1, sm: 2 }, overflow: 'hidden' }}>
@@ -54,7 +52,6 @@ const ReportisticaPage = () => {
             </CustomTabPanel>
         </Paper>
       </Box>
-
     </Box>
   );
 };

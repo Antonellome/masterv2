@@ -48,7 +48,7 @@ const DittaForm = ({ open, onClose, ditta, onSave }: DittaFormProps) => {
             <form onSubmit={handleSubmit(handleFormSubmit)}>
                 <DialogContent>
                     <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid xs={12}>
+                        <Grid size={12}>
                             <Controller
                                 // Correzione Proprietà: nome -> name
                                 name="name"
@@ -59,42 +59,66 @@ const DittaForm = ({ open, onClose, ditta, onSave }: DittaFormProps) => {
                                 )}
                             />
                         </Grid>
-                         <Grid xs={12} sm={8}>
+                         <Grid
+                             size={{
+                                 xs: 12,
+                                 sm: 8
+                             }}>
                             <Controller
                                 name="indirizzo"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Indirizzo" fullWidth />}
                             />
                         </Grid>
-                        <Grid xs={12} sm={4}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4
+                            }}>
                              <Controller
                                 name="cap"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="CAP" fullWidth />}
                             />
                         </Grid>
-                        <Grid xs={12} sm={4}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4
+                            }}>
                             <Controller
                                 name="piva"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Partita IVA" fullWidth />}
                             />
                         </Grid>
-                        <Grid xs={12} sm={4}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4
+                            }}>
                             <Controller
                                 name="cf"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Codice Fiscale" fullWidth />}
                             />
                         </Grid>
-                         <Grid xs={12} sm={6}>
+                         <Grid
+                             size={{
+                                 xs: 12,
+                                 sm: 6
+                             }}>
                             <Controller
                                 name="telefono"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Telefono" fullWidth />}
                             />
                         </Grid>
-                        <Grid xs={12} sm={6}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6
+                            }}>
                             <Controller
                                 name="email"
                                 control={control}

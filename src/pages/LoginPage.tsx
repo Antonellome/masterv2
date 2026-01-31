@@ -100,7 +100,7 @@ const LoginPage = () => {
             Accedi con Google
           </Button>
           <Grid container justifyContent="flex-end">
-            <Grid item>
+            <Grid>
                 <Link to="/signup" style={{ textDecoration: 'none' }}>
                     <Typography variant="body2" color="primary">
                         Non hai un account? Registrati

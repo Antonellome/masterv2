@@ -220,107 +220,155 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
   if (loading) return <Box sx={{display: 'flex', justifyContent: 'center', p: 5}}><CircularProgress /></Box>;
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-      <Paper sx={{ p: { xs: 2, md: 4 }, m: { xs: 1, md: 2 }, '@media print': { boxShadow: 'none', margin: 0, padding: 0 } }}>
-         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, '@media print': { display: 'none' } }}>
-            {!isReadOnly && (
-                <Box sx={{display: 'flex', alignItems: 'center'}}>
-                    <IconButton onClick={() => navigate(-1)}>
-                        <ArrowBackIcon />
-                    </IconButton>
-                    <Typography variant="h4" component="h1">
-                    {isNew ? 'Nuovo Rapportino' : 'Modifica Rapportino'}
-                    </Typography>
-                </Box>
-            )}
-             {isReadOnly && (
-                 <Typography variant="h4" component="h1">
-                    Dettaglio Rapportino
-                </Typography>
-             )}
-        </Box>
-        
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <Grid container spacing={3}>
-            {/* ... sezioni del form con campi readOnly ... */}
-            <Grid item xs={12}><Divider>Dettagli Principali</Divider></Grid>
-
-            <Grid item xs={12} sm={6} md={4}><Controller name="data" control={control} render={({ field }) => <DatePicker {...field} label="Data" sx={{ width: '100%' }} readOnly={isReadOnly} />} /></Grid>
-            <Grid item xs={12} sm={6} md={8}>
-              <Controller
-                name="tecnicoScriventeId"
-                control={control}
-                render={({ field, fieldState }) => (
-                    <Autocomplete<Tecnico>
-                        options={options.tecnici}
-                        getOptionLabel={(option) => option ? `${option.cognome} ${option.nome}` : ''}
-                        value={getValueFromId(field.value, options.tecnici)}
-                        onChange={(_, data: Tecnico | null) => field.onChange(data?.id || null)}
-                        isOptionEqualToValue={(option, value) => option.id === value.id}
-                        readOnly={isReadOnly}
-                        renderInput={(params) => <TextField {...params} label="Tecnico Scrivente" required error={!!fieldState.error} helperText={fieldState.error?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />}
-                    />
+      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
+          <Paper sx={{ p: { xs: 2, md: 4 }, m: { xs: 1, md: 2 }, '@media print': { boxShadow: 'none', margin: 0, padding: 0 } }}>
+             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, '@media print': { display: 'none' } }}>
+                {!isReadOnly && (
+                    <Box sx={{display: 'flex', alignItems: 'center'}}>
+                        <IconButton onClick={() => navigate(-1)}>
+                            <ArrowBackIcon />
+                        </IconButton>
+                        <Typography variant="h4" component="h1">
+                        {isNew ? 'Nuovo Rapportino' : 'Modifica Rapportino'}
+                        </Typography>
+                    </Box>
                 )}
-              />
-            </Grid>
-
-            <Grid item xs={12}><Divider>Tempo Lavorato</Divider></Grid>
-
-            <Grid item xs={12}>
-                <Controller name="inserimentoManualeOre" control={control} render={({ field }) => <FormControlLabel control={<Switch {...field} checked={field.value} disabled={isReadOnly} />} label="Inserisci ore manuali" />} />
-            </Grid>
+                 {isReadOnly && (
+                     <Typography variant="h4" component="h1">
+                        Dettaglio Rapportino
+                    </Typography>
+                 )}
+            </Box>
             
-            <Grid item xs={6} sm={3} md={3}><Controller name="oraInizio" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Inizio" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} readOnly={isReadOnly} slotProps={{ textField: { error: !!fieldState.error, helperText: fieldState.error?.message, InputProps: { readOnly: isReadOnly } } }} />} /></Grid>
-            <Grid item xs={6} sm={3} md={3}><Controller name="oraFine" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Fine" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} readOnly={isReadOnly} slotProps={{ textField: { error: !!fieldState.error, helperText: fieldState.error?.message, InputProps: { readOnly: isReadOnly } } }} />} /></Grid>
-            <Grid item xs={12} sm={3} md={3}><Controller name="pausa" control={control} render={({ field }) => <TextField {...field} type="number" label="Pausa (minuti)" fullWidth disabled={watchInserimentoManuale || isReadOnly} InputProps={{ readOnly: isReadOnly }} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}/>} /></Grid>
-            <Grid item xs={12} sm={3} md={3}><Controller name="oreLavorate" control={control} render={({ field, fieldState }) => <TextField {...field} type="number" label="Ore Lavorate" fullWidth disabled={!watchInserimentoManuale || isReadOnly} InputProps={{ readOnly: isReadOnly }} error={!!fieldState.error} helperText={fieldState.error?.message} onChange={e => field.onChange(parseFloat(e.target.value) || 0)}/>} /></Grid>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <Grid container spacing={3}>
+                {/* ... sezioni del form con campi readOnly ... */}
+                <Grid size={12}><Divider>Dettagli Principali</Divider></Grid>
 
-            <Grid item xs={12}><Divider>Riferimenti</Divider></Grid>
-            
-            <Grid item xs={12} md={6}><Controller name="naveId" control={control} render={({ field, fieldState }) => <Autocomplete<Nave> options={options.navi} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.navi)} onChange={(_,data: Nave | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Nave" required={isGiornataLavorativa} error={!!errors.naveId} helperText={errors.naveId?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
-            <Grid item xs={12} md={6}><Controller name="luogoId" control={control} render={({ field, fieldState }) => <Autocomplete<Luogo> options={options.luoghi} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.luoghi)} onChange={(_,data: Luogo | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Luogo" required={isGiornataLavorativa} error={!!errors.luogoId} helperText={errors.luogoId?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
-            <Grid item xs={12} md={6}><Controller name="giornataId" control={control} render={({ field, fieldState }) => <Autocomplete<TipoGiornata> options={options.tipiGiornata} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.tipiGiornata)} onChange={(_,data: TipoGiornata | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Tipo Giornata" required error={!!fieldState.error} helperText={fieldState.error?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
-            <Grid item xs={12} md={6}><Controller name="veicoloId" control={control} render={({ field }) => <Autocomplete<Veicolo> options={options.veicoli} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.veicoli)} onChange={(_,data: Veicolo | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Veicolo" InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
-            
-            <Grid item xs={12}><Divider>Dettagli Intervento</Divider></Grid>
-
-            <Grid item xs={12}><Controller name="breveDescrizione" control={control} render={({ field, fieldState }) => <TextField {...field} label="Breve Descrizione Intervento" fullWidth required={isGiornataLavorativa} error={!!errors.breveDescrizione} helperText={errors.breveDescrizione?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
-            <Grid item xs={12}><Controller name="lavoroEseguito" control={control} render={({ field, fieldState }) => <TextField {...field} label="Lavoro Eseguito" multiline rows={5} fullWidth required={isGiornataLavorativa} error={!!errors.lavoroEseguito} helperText={errors.lavoroEseguito?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
-            <Grid item xs={12}><Controller name="materialiImpiegati" control={control} render={({ field }) => <TextField {...field} label="Materiali Impiegati" multiline rows={3} fullWidth InputProps={{ readOnly: isReadOnly }} />} /></Grid>
-
-            <Grid item xs={12}><Divider>Altri Tecnici Presenti</Divider></Grid>
-             <Grid item xs={12}>
-                 <Controller
-                    name="tecniciAggiuntiIds"
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 4
+                    }}><Controller name="data" control={control} render={({ field }) => <DatePicker {...field} label="Data" sx={{ width: '100%' }} readOnly={isReadOnly} />} /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 8
+                    }}>
+                  <Controller
+                    name="tecnicoScriventeId"
                     control={control}
-                    render={({ field }) => (
-                        <Autocomplete<Tecnico, true>
-                            multiple
-                            options={options.tecnici.filter(t => t.id !== watch('tecnicoScriventeId'))}
-                            getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
-                            value={(field.value || []).map(id => getValueFromId(id, options.tecnici)).filter(Boolean) as Tecnico[]}
-                            onChange={(_, data: Tecnico[]) => field.onChange(data.map(d => d.id))}
+                    render={({ field, fieldState }) => (
+                        <Autocomplete<Tecnico>
+                            options={options.tecnici}
+                            getOptionLabel={(option) => option ? `${option.cognome} ${option.nome}` : ''}
+                            value={getValueFromId(field.value, options.tecnici)}
+                            onChange={(_, data: Tecnico | null) => field.onChange(data?.id || null)}
                             isOptionEqualToValue={(option, value) => option.id === value.id}
                             readOnly={isReadOnly}
-                             renderInput={(params) => <TextField {...params} label="Aggiungi colleghi presenti all'intervento" InputProps={{...params.InputProps, readOnly: isReadOnly}} />}
+                            renderInput={(params) => <TextField {...params} label="Tecnico Scrivente" required error={!!fieldState.error} helperText={fieldState.error?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />}
                         />
                     )}
-                />
-            </Grid>
-
-            {!isReadOnly && (
-                 <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-                    <Button variant="outlined" color="secondary" onClick={() => navigate('/reportistica')}>Annulla</Button>
-                    <Box>
-                        {!isNew && <Button variant="outlined" color="error" onClick={handleDelete} startIcon={<DeleteIcon />} sx={{ mr: 2}}>Elimina</Button>}
-                        <Button type="submit" variant="contained" color="primary" startIcon={<SaveIcon />}>Salva Rapportino</Button>
-                    </Box>
+                  />
                 </Grid>
-            )}
-          </Grid>
-        </form>
-      </Paper>
-    </LocalizationProvider>
+
+                <Grid size={12}><Divider>Tempo Lavorato</Divider></Grid>
+
+                <Grid size={12}>
+                    <Controller name="inserimentoManualeOre" control={control} render={({ field }) => <FormControlLabel control={<Switch {...field} checked={field.value} disabled={isReadOnly} />} label="Inserisci ore manuali" />} />
+                </Grid>
+                
+                <Grid
+                    size={{
+                        xs: 6,
+                        sm: 3,
+                        md: 3
+                    }}><Controller name="oraInizio" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Inizio" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} readOnly={isReadOnly} slotProps={{ textField: { error: !!fieldState.error, helperText: fieldState.error?.message, InputProps: { readOnly: isReadOnly } } }} />} /></Grid>
+                <Grid
+                    size={{
+                        xs: 6,
+                        sm: 3,
+                        md: 3
+                    }}><Controller name="oraFine" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Fine" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} readOnly={isReadOnly} slotProps={{ textField: { error: !!fieldState.error, helperText: fieldState.error?.message, InputProps: { readOnly: isReadOnly } } }} />} /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 3,
+                        md: 3
+                    }}><Controller name="pausa" control={control} render={({ field }) => <TextField {...field} type="number" label="Pausa (minuti)" fullWidth disabled={watchInserimentoManuale || isReadOnly} InputProps={{ readOnly: isReadOnly }} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}/>} /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 3,
+                        md: 3
+                    }}><Controller name="oreLavorate" control={control} render={({ field, fieldState }) => <TextField {...field} type="number" label="Ore Lavorate" fullWidth disabled={!watchInserimentoManuale || isReadOnly} InputProps={{ readOnly: isReadOnly }} error={!!fieldState.error} helperText={fieldState.error?.message} onChange={e => field.onChange(parseFloat(e.target.value) || 0)}/>} /></Grid>
+
+                <Grid size={12}><Divider>Riferimenti</Divider></Grid>
+                
+                <Grid
+                    size={{
+                        xs: 12,
+                        md: 6
+                    }}><Controller name="naveId" control={control} render={({ field, fieldState }) => <Autocomplete<Nave> options={options.navi} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.navi)} onChange={(_,data: Nave | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Nave" required={isGiornataLavorativa} error={!!errors.naveId} helperText={errors.naveId?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        md: 6
+                    }}><Controller name="luogoId" control={control} render={({ field, fieldState }) => <Autocomplete<Luogo> options={options.luoghi} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.luoghi)} onChange={(_,data: Luogo | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Luogo" required={isGiornataLavorativa} error={!!errors.luogoId} helperText={errors.luogoId?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        md: 6
+                    }}><Controller name="giornataId" control={control} render={({ field, fieldState }) => <Autocomplete<TipoGiornata> options={options.tipiGiornata} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.tipiGiornata)} onChange={(_,data: TipoGiornata | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Tipo Giornata" required error={!!fieldState.error} helperText={fieldState.error?.message} InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        md: 6
+                    }}><Controller name="veicoloId" control={control} render={({ field }) => <Autocomplete<Veicolo> options={options.veicoli} getOptionLabel={(o) => o.nome || ''} value={getValueFromId(field.value, options.veicoli)} onChange={(_,data: Veicolo | null) => field.onChange(data?.id || null)} isOptionEqualToValue={(o,v) => o.id === v.id} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Veicolo" InputProps={{...params.InputProps, readOnly: isReadOnly}} />} />} /></Grid>
+                
+                <Grid size={12}><Divider>Dettagli Intervento</Divider></Grid>
+
+                <Grid size={12}><Controller name="breveDescrizione" control={control} render={({ field, fieldState }) => <TextField {...field} label="Breve Descrizione Intervento" fullWidth required={isGiornataLavorativa} error={!!errors.breveDescrizione} helperText={errors.breveDescrizione?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
+                <Grid size={12}><Controller name="lavoroEseguito" control={control} render={({ field, fieldState }) => <TextField {...field} label="Lavoro Eseguito" multiline rows={5} fullWidth required={isGiornataLavorativa} error={!!errors.lavoroEseguito} helperText={errors.lavoroEseguito?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
+                <Grid size={12}><Controller name="materialiImpiegati" control={control} render={({ field }) => <TextField {...field} label="Materiali Impiegati" multiline rows={3} fullWidth InputProps={{ readOnly: isReadOnly }} />} /></Grid>
+
+                <Grid size={12}><Divider>Altri Tecnici Presenti</Divider></Grid>
+                 <Grid size={12}>
+                     <Controller
+                        name="tecniciAggiuntiIds"
+                        control={control}
+                        render={({ field }) => (
+                            <Autocomplete<Tecnico, true>
+                                multiple
+                                options={options.tecnici.filter(t => t.id !== watch('tecnicoScriventeId'))}
+                                getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
+                                value={(field.value || []).map(id => getValueFromId(id, options.tecnici)).filter(Boolean) as Tecnico[]}
+                                onChange={(_, data: Tecnico[]) => field.onChange(data.map(d => d.id))}
+                                isOptionEqualToValue={(option, value) => option.id === value.id}
+                                readOnly={isReadOnly}
+                                 renderInput={(params) => <TextField {...params} label="Aggiungi colleghi presenti all'intervento" InputProps={{...params.InputProps, readOnly: isReadOnly}} />}
+                            />
+                        )}
+                    />
+                </Grid>
+
+                {!isReadOnly && (
+                     <Grid
+                         sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}
+                         size={12}>
+                        <Button variant="outlined" color="secondary" onClick={() => navigate('/reportistica')}>Annulla</Button>
+                        <Box>
+                            {!isNew && <Button variant="outlined" color="error" onClick={handleDelete} startIcon={<DeleteIcon />} sx={{ mr: 2}}>Elimina</Button>}
+                            <Button type="submit" variant="contained" color="primary" startIcon={<SaveIcon />}>Salva Rapportino</Button>
+                        </Box>
+                    </Grid>
+                )}
+              </Grid>
+            </form>
+          </Paper>
+      </LocalizationProvider>
   );
 };
 

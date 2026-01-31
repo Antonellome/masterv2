@@ -84,14 +84,18 @@ const DitteList = () => {
                     Nuova Ditta
                 </Button>
             </Box>
-
             {loading && <CircularProgress />}
             {dataError && <Alert severity="error">{dataError.message}</Alert>}
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
             <Grid container spacing={3}>
                 {ditte && ditte.map((ditta) => (
-                    <Grid xs={12} sm={6} md={4} key={ditta.id}>
+                    <Grid
+                        key={ditta.id}
+                        size={{
+                            xs: 12,
+                            sm: 6,
+                            md: 4
+                        }}>
                         <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                             <CardContent sx={{ flexGrow: 1 }}>
                                 <Typography variant="h6" component="h2">
@@ -117,7 +121,6 @@ const DitteList = () => {
                     </Grid>
                 ))}
             </Grid>
-
             <DittaForm
                 open={formOpen}
                 onClose={handleCloseForm}

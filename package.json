@@ -1,29 +1,27 @@
 {
-  "name": "riso-m-o-v3",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
-    "@typescript-eslint/eslint-plugin": "^7.2.0",
-    "@typescript-eslint/parser": "^7.2.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "eslint": "^8.57.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.6",
-    "typescript": "^5.2.2",
-    "vite": "^5.2.0",
-    "vite-tsconfig-paths": "^4.3.2"
-  }
+        "name": "riso-monorepo",
+        "private": true,
+        "workspaces": [
+                "apps/*"
+        ],
+        "scripts": {
+                "dev": "vite"
+        },
+        "overrides": {
+                "@types/react": "18.2.66",
+                "@types/react-dom": "18.2.22"
+        },
+        "dependencies": {
+                "@mui/x-date-pickers": "^8.26.0",
+                "dayjs": "^1.11.19",
+                "firebase": "^12.8.0",
+                "react": "^19.2.4",
+                "react-dom": "^19.2.4",
+                "react-firebase-hooks": "^5.1.1"
+        },
+        "devDependencies": {
+                "@vitejs/plugin-react": "^5.1.2",
+                "vite": "^7.3.1",
+                "vite-tsconfig-paths": "^6.0.5"
+        }
 }

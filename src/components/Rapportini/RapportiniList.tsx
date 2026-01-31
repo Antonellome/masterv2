@@ -95,7 +95,7 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
     return (
         <Paper sx={{ height: '75vh', width: '100%' }}>
             <DataGrid
-                rows={rapportini}
+                rows={rapportini || []}
                 columns={columns}
                 loading={loading}
                 slots={{ toolbar: CustomToolbar }}

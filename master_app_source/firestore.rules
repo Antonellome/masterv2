@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions to check the user's role, stored in a 'users' collection.
+    function getUserRole() {
+      // Access the user's document in the 'users' collection using their UID.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return getUserRole() == 'admin';
+    }
+
+    function isUser() {
+      return getUserRole() == 'user';
+    }
+
+    function isTecnico() {
+      return getUserRole() == 'tecnico';
+    }
+
+    // Rules for the 'users' collection where roles are stored.
+    match /users/{userId} {
+      // Admins have full access to manage user roles.
+      allow read, write: if isAdmin();
+      // Authenticated users can read their own user profile/role.
+      allow read: if request.auth.uid == userId;
+    }
+
+    // Rules for general data collections.
+    // Admins can manage this data.
+    // Users (read-only role in master app) and Technicians can read it.
+    match /(anagrafiche|tipiGiornata|categorie|clienti|ditte|luoghi|navi|qualifiche|veicoli|documenti)/{docId} {
+      allow read: if request.auth != null && (isAdmin() || isUser() || isTecnico());
+      allow write: if request.auth != null && isAdmin();
+    }
+
+    // Rules for the 'tecnici' collection.
+    match /tecnici/{tecnicoId} {
+      // Admins and Users of the master app can read technician data.
+      allow read: if request.auth != null && (isAdmin() || isUser());
+      // Only Admins can modify technician data.
+      allow write: if request.auth != null && isAdmin();
+      // A technician can read their own specific document.
+      allow read: if request.auth != null && isTecnico() && request.auth.uid == tecnicoId;
+    }
+
+    // Rules for the 'rapportini' (work reports) collection.
+    match /rapportini/{rapportinoId} {
+      // Admins and Users of the master app can read all reports.
+      allow read: if request.auth != null && (isAdmin() || isUser());
+      // Only Admins can write/edit any report.
+      allow write: if request.auth != null && isAdmin();
+
+      // Technicians have more granular access to their own reports.
+      // They can read their own reports.
+      allow read: if request.auth != null && isTecnico() && resource.data.tecnicoId == request.auth.uid;
+      // They can create new reports for themselves.
+      allow create: if request.auth != null && isTecnico() && request.resource.data.tecnicoId == request.auth.uid;
+      // They can update their own reports, but not delete them.
+      allow update: if request.auth != null && isTecnico() && resource.data.tecnicoId == request.auth.uid;
+    }
+
+    // Fallback rule for any other collection.
+    // This ensures that any collection not explicitly defined above is only accessible by admins.
+    // This is a security best practice.
+    match /{path=**}/{docId} {
+        allow read, write: if isAdmin();
+    }
+  }
+}

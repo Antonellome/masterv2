@@ -51,7 +51,12 @@ interface FilterState {
 
 // --- COMPONENTE DIALOGO DI VISUALIZZAZIONE ---
 const ViewInfoRow = ({ label, value }: { label: string, value: React.ReactNode }) => (
-    <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
+    <Grid
+        sx={{ mb: 2 }}
+        size={{
+            xs: 12,
+            sm: 6
+        }}>
         <Typography variant="caption" color="text.secondary" component="div">{label}</Typography>
         <Typography variant="body1">{value || '--'}</Typography>
     </Grid>
@@ -110,7 +115,7 @@ const RapportinoViewDialog = ({ open, onClose, rapportinoId }: { open: boolean, 
                         <ViewInfoRow label="Cliente" value={rapportino.clienteNome} />
                         <ViewInfoRow label="Orario" value={`Dalle ${formatTimestamp(rapportino.oraInizio)} alle ${formatTimestamp(rapportino.oraFine)}`} />
                         <ViewInfoRow label="Ore Lavorate" value={rapportino.oreLavorate ? `${rapportino.oreLavorate}h` : 'N/D'} />
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                             <Typography variant="caption" color="text.secondary" component="div">Descrizione Lavori Svolti</Typography>
                             <Paper variant="outlined" sx={{ p: 2, mt: 0.5, whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto'}}>
                                 {rapportino.descrizione || 'Nessuna descrizione fornita.'}
@@ -289,59 +294,89 @@ const RicercaAvanzata: React.FC = () => {
   }
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <Paper elevation={2} sx={{ p: 2, mb: 3, flexShrink: 0 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6" component="h2">Filtri di Ricerca</Typography>
-            </Box>
-            <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, val) => handleFilterChange('tecnico', val)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
+      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
+          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Paper elevation={2} sx={{ p: 2, mb: 3, flexShrink: 0 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6" component="h2">Filtri di Ricerca</Typography>
+                </Box>
+                <Grid container spacing={2} alignItems="center">
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 6,
+                            md: 3
+                        }}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 6,
+                            md: 3
+                        }}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 6,
+                            md: 3
+                        }}>
+                        <Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, val) => handleFilterChange('tecnico', val)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
+                    </Grid>
+                     <Grid
+                         size={{
+                             xs: 12,
+                             sm: 6,
+                             md: 3
+                         }}>
+                        <Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, val) => handleFilterChange('nave', val)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
+                    </Grid>
+                     <Grid
+                         size={{
+                             xs: 12,
+                             sm: 6,
+                             md: 3
+                         }}>
+                        <Autocomplete options={options.luoghi} getOptionLabel={(o) => o.nome || ''} value={filters.luogo} onChange={(_, val) => handleFilterChange('luogo', val)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
+                    </Grid>
+                     <Grid
+                         size={{
+                             xs: 12,
+                             sm: 6,
+                             md: 3
+                         }}>
+                        <Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, val) => handleFilterChange('cliente', val)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
+                    </Grid>
+                    <Grid container justifyContent="flex-end" size={12}>
+                        <Button onClick={resetFilters} variant="outlined">Azzera Filtri</Button>
+                    </Grid>
                 </Grid>
-                 <Grid item xs={12} sm={6} md={3}>
-                    <Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, val) => handleFilterChange('nave', val)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
-                </Grid>
-                 <Grid item xs={12} sm={6} md={3}>
-                    <Autocomplete options={options.luoghi} getOptionLabel={(o) => o.nome || ''} value={filters.luogo} onChange={(_, val) => handleFilterChange('luogo', val)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
-                </Grid>
-                 <Grid item xs={12} sm={6} md={3}>
-                    <Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, val) => handleFilterChange('cliente', val)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
-                </Grid>
-                <Grid item xs={12} container justifyContent="flex-end">
-                    <Button onClick={resetFilters} variant="outlined">Azzera Filtri</Button>
-                </Grid>
-            </Grid>
-        </Paper>
+            </Paper>
 
-        <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-            <DataGrid
-                rows={filteredRapportini}
-                columns={columns}
-                getRowId={(row) => row.id}
-                localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-                slots={{ toolbar: GridToolbar }}
-                initialState={{
-                    pagination: { paginationModel: { pageSize: 25 } },
-                    sorting: {
-                        sortModel: [{ field: 'dataFormatted', sort: 'desc' }],
-                    },
-                }}
-                pageSizeOptions={[10, 25, 50, 100]}
-                disableRowSelectionOnClick
+            <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                <DataGrid
+                    rows={filteredRapportini || []}
+                    columns={columns}
+                    getRowId={(row) => row.id}
+                    localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
+                    slots={{ toolbar: GridToolbar }}
+                    initialState={{
+                        pagination: { paginationModel: { pageSize: 25 } },
+                        sorting: {
+                            sortModel: [{ field: 'dataFormatted', sort: 'desc' }],
+                        },
+                    }}
+                    pageSizeOptions={[10, 25, 50, 100]}
+                    disableRowSelectionOnClick
+                />
+            </Paper>
+
+            <RapportinoViewDialog 
+                open={viewDialogOpen} 
+                onClose={handleCloseViewDialog} 
+                rapportinoId={selectedRapportinoId} 
             />
-        </Paper>
 
-        <RapportinoViewDialog 
-            open={viewDialogOpen} 
-            onClose={handleCloseViewDialog} 
-            rapportinoId={selectedRapportinoId} 
-        />
-
-      </Box>
-    </LocalizationProvider>
+          </Box>
+      </LocalizationProvider>
   );
 };
 

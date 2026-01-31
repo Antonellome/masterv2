@@ -1,0 +1,8 @@
+# Ignora le dipendenze
+node_modules
+
+# Ignora la cartella di output della build
+dist
+
+# Ignora i file di context complessi che possono rallentare ESLint
+src/contexts/

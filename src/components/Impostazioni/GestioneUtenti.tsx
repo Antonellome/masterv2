@@ -124,7 +124,7 @@ const GestioneUtenti: React.FC = () => {
             {!loading && 
                 <Box sx={{ height: 'auto', width: '100%' }}>
                     <DataGrid
-                        rows={utenti}
+                        rows={utenti || []}
                         columns={columns}
                         autoHeight
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText}

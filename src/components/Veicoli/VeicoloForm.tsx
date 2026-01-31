@@ -119,7 +119,11 @@ const VeicoloForm = ({ open, onClose, onSave, veicolo }: VeicoloFormProps) => {
     };
     
     const renderDatePicker = (name: keyof VeicoloFormValues, label: string) => (
-        <Grid item xs={12} sm={6}>
+        <Grid
+            size={{
+                xs: 12,
+                sm: 6
+            }}>
             <Controller
                 name={name}
                 control={control}
@@ -142,21 +146,45 @@ const VeicoloForm = ({ open, onClose, onSave, veicolo }: VeicoloFormProps) => {
                 <form onSubmit={handleSubmit(handleFormSubmit)}>
                     <DialogContent>
                         <Grid container spacing={2} sx={{ mt: 1 }}>
-                            <Grid item xs={12} sm={4}><Controller name="targa" control={control} rules={{ required: 'La targa è obbligatoria' }} render={({ field }) => <TextField {...field} label="Targa" fullWidth error={!!errors.targa} helperText={errors.targa?.message} />} /></Grid>
-                            <Grid item xs={12} sm={4}><Controller name="tipo" control={control} render={({ field }) => <TextField {...field} label="Tipo" select fullWidth>{tipiVeicolo.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}</TextField>} /></Grid>
-                            <Grid item xs={12} sm={4}><Controller name="marca" control={control} render={({ field }) => <TextField {...field} label="Marca" fullWidth />} /></Grid>
-                            <Grid item xs={12} sm={4}><Controller name="modello" control={control} render={({ field }) => <TextField {...field} label="Modello" fullWidth />} /></Grid>
-                            <Grid item xs={12} sm={4}><Controller name="anno" control={control} render={({ field }) => <TextField {...field} label="Anno" type="number" fullWidth />} /></Grid>
-                            <Grid item xs={12} sm={4}><Controller name="kmAttuali" control={control} render={({ field }) => <TextField {...field} label="Km Attuali" type="number" fullWidth />} /></Grid>
-                            <Grid item xs={12}><hr /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 4
+                                }}><Controller name="targa" control={control} rules={{ required: 'La targa è obbligatoria' }} render={({ field }) => <TextField {...field} label="Targa" fullWidth error={!!errors.targa} helperText={errors.targa?.message} />} /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 4
+                                }}><Controller name="tipo" control={control} render={({ field }) => <TextField {...field} label="Tipo" select fullWidth>{tipiVeicolo.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}</TextField>} /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 4
+                                }}><Controller name="marca" control={control} render={({ field }) => <TextField {...field} label="Marca" fullWidth />} /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 4
+                                }}><Controller name="modello" control={control} render={({ field }) => <TextField {...field} label="Modello" fullWidth />} /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 4
+                                }}><Controller name="anno" control={control} render={({ field }) => <TextField {...field} label="Anno" type="number" fullWidth />} /></Grid>
+                            <Grid
+                                size={{
+                                    xs: 12,
+                                    sm: 4
+                                }}><Controller name="kmAttuali" control={control} render={({ field }) => <TextField {...field} label="Km Attuali" type="number" fullWidth />} /></Grid>
+                            <Grid size={12}><hr /></Grid>
                             {renderDatePicker('scadenzaAssicurazione', 'Scadenza Assicurazione')}
                             {renderDatePicker('scadenzaBollo', 'Scadenza Bollo')}
                             {renderDatePicker('scadenzaRevisione', 'Scadenza Revisione')}
                             {renderDatePicker('scadenzaTagliando', 'Scadenza Tagliando')}
                             {renderDatePicker('scadenzaTachigrafo', 'Scadenza Tachigrafo')}
-                            <Grid item xs={12}><hr /></Grid>
-                            <Grid item xs={12}><Controller name="note" control={control} render={({ field }) => <TextField {...field} label="Note" multiline rows={4} fullWidth />} /></Grid>
-                            <Grid item xs={12}><FormControlLabel control={<Controller name="attivo" control={control} render={({ field }) => <Switch {...field} checked={!!field.value} />} />} label="Veicolo attivo" /></Grid>
+                            <Grid size={12}><hr /></Grid>
+                            <Grid size={12}><Controller name="note" control={control} render={({ field }) => <TextField {...field} label="Note" multiline rows={4} fullWidth />} /></Grid>
+                            <Grid size={12}><FormControlLabel control={<Controller name="attivo" control={control} render={({ field }) => <Switch {...field} checked={!!field.value} />} />} label="Veicolo attivo" /></Grid>
                         </Grid>
                     </DialogContent>
                     <DialogActions>

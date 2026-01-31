@@ -1,8 +1,11 @@
 import GestioneAnagrafica from '@/components/Anagrafiche/GestioneAnagrafica';
 import type { FormField, Cliente, Nave, Luogo } from '@/models/definitions';
 import type { GridColDef } from '@mui/x-data-grid';
+import { useData } from '@/hooks/useData';
+import { Box, CircularProgress } from '@mui/material';
 
 const GestioneClienti = () => {
+    const { clienti, navi, luoghi, loading } = useData();
 
     const fields: FormField[] = [
         { name: 'nome', label: 'Nome', type: 'text', required: true, gridProps: { xs: 12 } },
@@ -17,7 +20,7 @@ const GestioneClienti = () => {
     ];
 
     const columns: GridColDef[] = [
-        { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 150 },
+        { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 150, editable: true },
         {
             field: 'numNavi',
             headerName: 'N. Navi',
@@ -34,37 +37,39 @@ const GestioneClienti = () => {
             align: 'center',
             headerAlign: 'center'
         },
-        { field: 'citta', headerName: 'Città', flex: 1, minWidth: 120 },
-        { field: 'partitaIva', headerName: 'Partita IVA', flex: 1, minWidth: 120 },
-    ];
-
-    const secondaryCollections = [
-        { name: 'navi', foreignKey: 'clienteId' },
-        { name: 'luoghi', foreignKey: 'clienteId' },
+        { field: 'citta', headerName: 'Città', flex: 1, minWidth: 120, editable: true },
+        { field: 'partitaIva', headerName: 'Partita IVA', flex: 1, minWidth: 120, editable: true },
     ];
 
     const dataAggregator = (clienti: Cliente[], secondaryData: { navi?: Nave[], luoghi?: Luogo[] }) => {
-        const navi = secondaryData.navi || [];
-        const luoghi = secondaryData.luoghi || [];
+        const naviData = secondaryData.navi || [];
+        const luoghiData = secondaryData.luoghi || [];
 
         return clienti.map(cliente => ({
             ...cliente,
-            numNavi: navi.filter(nave => nave.clienteId === cliente.id).length,
-            numLuoghi: luoghi.filter(luogo => luogo.clienteId === cliente.id).length,
+            numNavi: naviData.filter(nave => nave.clienteId === cliente.id).length,
+            numLuoghi: luoghiData.filter(luogo => luogo.clienteId === cliente.id).length,
         }));
     };
 
+    if (loading) {
+        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
+    }
 
     return (
-        <GestioneAnagrafica
-            collectionName="clienti"
-            title="Gestione Clienti"
-            fields={fields}
-            columns={columns}
-            secondaryCollections={secondaryCollections}
-            dataAggregator={dataAggregator}
-            anagraficaType="cliente"
-        />
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <GestioneAnagrafica<Cliente>
+                collectionName="clienti"
+                title="Gestione Clienti"
+                data={clienti}
+                loading={loading}
+                secondaryData={{ navi, luoghi }}
+                fields={fields}
+                columns={columns}
+                dataAggregator={dataAggregator}
+                anagraficaType="cliente"
+            />
+        </Box>
     );
 };
 

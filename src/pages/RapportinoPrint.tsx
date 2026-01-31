@@ -169,21 +169,21 @@ const RapportinoPrint = () => {
 
                 <main>
                     <Grid container spacing={3} sx={{ mb: 2 }}>
-                        <Grid item xs={6}><InfoRow label="Data Intervento" value={rapportino.data} bold /></Grid>
-                        <Grid item xs={6}><InfoRow label="Tecnico Scrivente" value={rapportino.tecnicoScrivente} /></Grid>
-                        <Grid item xs={6}><InfoRow label="Tipo Giornata" value={rapportino.tipoGiornata} /></Grid>
-                        <Grid item xs={6}><InfoRow label="Cliente" value={rapportino.cliente} /></Grid>
-                        <Grid item xs={6}><InfoRow label="Nave" value={rapportino.nave} /></Grid>
-                        <Grid item xs={6}><InfoRow label="Luogo Intervento" value={rapportino.luogo} /></Grid>
-                        <Grid item xs={6}><InfoRow label="Veicolo Utilizzato" value={rapportino.veicolo} /></Grid>
+                        <Grid size={6}><InfoRow label="Data Intervento" value={rapportino.data} bold /></Grid>
+                        <Grid size={6}><InfoRow label="Tecnico Scrivente" value={rapportino.tecnicoScrivente} /></Grid>
+                        <Grid size={6}><InfoRow label="Tipo Giornata" value={rapportino.tipoGiornata} /></Grid>
+                        <Grid size={6}><InfoRow label="Cliente" value={rapportino.cliente} /></Grid>
+                        <Grid size={6}><InfoRow label="Nave" value={rapportino.nave} /></Grid>
+                        <Grid size={6}><InfoRow label="Luogo Intervento" value={rapportino.luogo} /></Grid>
+                        <Grid size={6}><InfoRow label="Veicolo Utilizzato" value={rapportino.veicolo} /></Grid>
                     </Grid>
 
                     <Divider sx={{ my: 2 }}>Dettagli Orari</Divider>
 
                     <Grid container spacing={3} sx={{ mb: 2 }}>
-                        <Grid item xs={4}><InfoRow label="Orario Svolto" value={rapportino.orario} /></Grid>
-                        <Grid item xs={4}><InfoRow label="Pausa" value={rapportino.pausa} /></Grid>
-                        <Grid item xs={4}><InfoRow label="Totale Ore Lavorate" value={rapportino.oreLavorate} bold /></Grid>
+                        <Grid size={4}><InfoRow label="Orario Svolto" value={rapportino.orario} /></Grid>
+                        <Grid size={4}><InfoRow label="Pausa" value={rapportino.pausa} /></Grid>
+                        <Grid size={4}><InfoRow label="Totale Ore Lavorate" value={rapportino.oreLavorate} bold /></Grid>
                     </Grid>
 
                     <Divider sx={{ my: 2 }}>Descrizione</Divider>

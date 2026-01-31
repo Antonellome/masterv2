@@ -205,13 +205,24 @@ const DashboardPage = () => {
                     <Tab label="Monitoraggio Sincronizzazioni" />
                 </Tabs>
             </Box>
-
             <CustomTabPanel value={tabValue} index={0}>
                  <Grid container spacing={3}>
-                    <Grid item xs={12} sm={4}><StatCard title="Ore Lavorate (30gg)" value={oreTotali30} /></Grid>
-                    <Grid item xs={12} sm={4}><StatCard title="Costo Personale (30gg)" value={costoTotale30} /></Grid>
-                    <Grid item xs={12} sm={4}><StatCard title="Rapportini Creati (30gg)" value={rapportiniCreati30} /></Grid>
-                    <Grid item xs={12}>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 4
+                        }}><StatCard title="Ore Lavorate (30gg)" value={oreTotali30} /></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 4
+                        }}><StatCard title="Costo Personale (30gg)" value={costoTotale30} /></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 4
+                        }}><StatCard title="Rapportini Creati (30gg)" value={rapportiniCreati30} /></Grid>
+                    <Grid size={12}>
                         <Card>
                             <CardContent>
                                 <Typography variant="h6" gutterBottom>Attività ultima settimana (ore)</Typography>
@@ -230,7 +241,6 @@ const DashboardPage = () => {
                     </Grid>
                 </Grid>
             </CustomTabPanel>
-
             <CustomTabPanel value={tabValue} index={1}>
                 <Card><CardContent>
                     <Typography variant="h6" gutterBottom>Ultime 5 Attività</Typography>
@@ -241,7 +251,6 @@ const DashboardPage = () => {
                     </List>
                 </CardContent></Card>
             </CustomTabPanel>
-
             <CustomTabPanel value={tabValue} index={2}>
                 <Card><CardContent>
                     <Typography variant="h6" gutterBottom>Tecnici con attività registrata oggi</Typography>
@@ -252,7 +261,6 @@ const DashboardPage = () => {
                     </List>
                 </CardContent></Card>
             </CustomTabPanel>
-            
             <CustomTabPanel value={tabValue} index={3}>
                 <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
                     <FormControl>
@@ -269,9 +277,9 @@ const DashboardPage = () => {
                     </FormControl>
                 </Box>
                 <Grid container spacing={1}>
-                    {Array.from({ length: calendarData.offset }).map((_, index) => <Grid item xs={12/7} key={`offset-${index}`} />)}
+                    {Array.from({ length: calendarData.offset }).map((_, index) => <Grid key={`offset-${index}`} size={12/7} />)}
                     {calendarData.days.map((dayData) => (
-                        <Grid item xs={12/7} key={dayData.day}>
+                        <Grid key={dayData.day} size={12/7}>
                            <CalendarDayCard day={dayData.day} missingReports={dayData.missingReports} isFuture={dayData.isFuture} />
                         </Grid>
                     ))}

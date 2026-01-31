@@ -158,7 +158,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                         {knownInfoFields.length > 0 && <Typography variant="h6" gutterBottom>Informazioni Personali</Typography>}
                         <Grid container spacing={2}>
                             {knownInfoFields.map((field) => (
-                                <Grid item {...field.gridProps} key={field.name}>{renderField(field)}</Grid>
+                                <Grid key={field.name}>{renderField(field)}</Grid>
                             ))}
                         </Grid>
                         
@@ -167,7 +167,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                         {knownContractFields.length > 0 && <Typography variant="h6" gutterBottom>Dettagli Contrattuali e Scadenze</Typography>}
                         <Grid container spacing={2}>
                             {knownContractFields.map((field) => (
-                                <Grid item {...field.gridProps} key={field.name}>{renderField(field)}</Grid>
+                                <Grid key={field.name}>{renderField(field)}</Grid>
                             ))}
                         </Grid>
                         
@@ -176,14 +176,14 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                         {otherFields.length > 0 && <Typography variant="h6" gutterBottom>Altro</Typography>}
                         <Grid container spacing={2}>
                             {otherFields.map((field) => (
-                                <Grid item {...field.gridProps} key={field.name}>{renderField(field)}</Grid>
+                                <Grid key={field.name}>{renderField(field)}</Grid>
                             ))}
                         </Grid>
                         
                         {noteField && (
                             <Box sx={{mt: 2}}>
                                 <Grid container spacing={2}>
-                                    <Grid item xs={12} key={noteField.name}>{renderField(noteField)}</Grid>
+                                    <Grid key={noteField.name} size={12}>{renderField(noteField)}</Grid>
                                 </Grid>
                             </Box>
                         )}

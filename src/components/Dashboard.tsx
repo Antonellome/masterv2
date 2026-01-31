@@ -10,30 +10,60 @@ const Dashboard = () => {
     <Box sx={{ p: 3 }}>
       <Grid container spacing={3}>
         {/* Prima Card: Grafico Rapportini Settimanali */}
-        <Grid item xs={12} sm={6} md={3} sx={{ height: '400px' }}>
+        <Grid
+          sx={{ height: '400px' }}
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <RapportiniChartWidget />
         </Grid>
 
         {/* Seconda Card: Assenze di Oggi */}
-        <Grid item xs={12} sm={6} md={3} sx={{ height: '400px' }}>
+        <Grid
+          sx={{ height: '400px' }}
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <AssenzeWidget />
         </Grid>
 
         {/* Altre Cards */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <StyledCard>
             <Typography variant="h6" align="center">3</Typography>
           </StyledCard>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <StyledCard>
             <Typography variant="h6" align="center">4</Typography>
           </StyledCard>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <ScadenzeWidget />
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <NotificheWidget />
         </Grid>
       </Grid>

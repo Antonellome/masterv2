@@ -87,7 +87,11 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino, cu
                         <DialogTitle>{rapportino ? 'Modifica Rapportino' : 'Nuovo Rapportino'}</DialogTitle>
                         <DialogContent>
                                 <Grid container spacing={2} sx={{pt: 1}}>
-                                    <Grid item xs={12} sm={4}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            sm: 4
+                                        }}>
                                          <DatePicker
                                             label="Data"
                                             value={values.data}
@@ -95,7 +99,11 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino, cu
                                             sx={{width: '100%'}}
                                         />
                                     </Grid>
-                                    <Grid item xs={12} sm={8}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            sm: 8
+                                        }}>
                                         <Field
                                             name="tecnicoId" component={FormikTextField} select
                                             label="Tecnico Scrivente" fullWidth required
@@ -107,7 +115,11 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino, cu
                                             ))}
                                         </Field>
                                     </Grid>
-                                    <Grid item xs={12} sm={6}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            sm: 6
+                                        }}>
                                         <Field
                                             name="giornataId" component={FormikTextField} select
                                             label="Tipo Giornata" fullWidth required
@@ -117,10 +129,18 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino, cu
                                             ))}
                                         </Field>
                                     </Grid>
-                                    <Grid item xs={12} sm={6}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            sm: 6
+                                        }}>
                                         <Field name="oreLavorate" component={FormikTextField} type="number" label="Ore Lavorate" fullWidth />
                                     </Grid>
-                                    <Grid item xs={12} sm={6}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            sm: 6
+                                        }}>
                                         <Autocomplete
                                             options={navi || []}
                                             getOptionLabel={(option) => option.nome}
@@ -130,7 +150,11 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino, cu
                                             isOptionEqualToValue={(option, value) => option.id === value.id}
                                         />
                                     </Grid>
-                                    <Grid item xs={12} sm={6}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            sm: 6
+                                        }}>
                                         <Autocomplete
                                             options={luoghi || []}
                                             getOptionLabel={(option) => option.nome}
@@ -140,13 +164,13 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino, cu
                                             isOptionEqualToValue={(option, value) => option.id === value.id}
                                         />
                                     </Grid>
-                                    <Grid item xs={12}>
+                                    <Grid size={12}>
                                         <Field 
                                             name="breveDescrizione" component={FormikTextField} 
                                             label="Breve Descrizione Intervento" multiline rows={3} fullWidth 
                                         />
                                     </Grid>
-                                     <Grid item xs={12}>
+                                     <Grid size={12}>
                                         <Field 
                                             name="lavoroEseguito" component={FormikTextField} 
                                             label="Lavoro Eseguito" multiline rows={5} fullWidth 

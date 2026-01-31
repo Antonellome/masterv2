@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, getDocs, doc, writeBatch, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { Box, Typography, IconButton, Button, CircularProgress, Snackbar, Alert } from '@mui/material';
-import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbar, GridRenderCellParams, GridRowModel } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbar, GridRenderCellParams, GridRowModel, GridPaginationModel } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import FormDialog from './FormDialog';
@@ -31,12 +31,28 @@ function GestioneAnagrafica<T extends Anagrafica>({
     const [itemToDelete, setItemToDelete] = useState<string | null>(null);
     const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
+    const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ pageSize: 25, page: 0 });
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
             const mainSnapshot = await getDocs(collection(db, collectionName));
-            let items = mainSnapshot.docs.map(doc => ({ ...doc.data() as T, id: doc.id }));
+            const items = mainSnapshot.docs.map(doc => {
+                const docData = doc.data() as T;
+                const sanitizedData: T = { id: doc.id, ...docData };
+
+                fields.forEach(field => {
+                    if (sanitizedData[field.name as keyof T] === undefined || sanitizedData[field.name as keyof T] === null) {
+                        if (field.type === 'number') {
+                            (sanitizedData as any)[field.name] = 0;
+                        } else {
+                            (sanitizedData as any)[field.name] = '';
+                        }
+                    }
+                });
+
+                return sanitizedData;
+            });
             setData(items);
         } catch (error) {
             console.error(`Errore durante il caricamento della collezione '${collectionName}':`, error);
@@ -45,7 +61,7 @@ function GestioneAnagrafica<T extends Anagrafica>({
         } finally {
             setLoading(false);
         }
-    }, [collectionName]);
+    }, [collectionName, fields]);
 
     useEffect(() => {
         fetchData();
@@ -157,27 +173,29 @@ function GestioneAnagrafica<T extends Anagrafica>({
                 <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddNew}>Nuovo</Button>
             </Box>
 
-            <DataGrid
-                sx={{ flexGrow: 1, border: 0 }}
-                rows={data}
-                columns={memoizedColumns}
-                localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-                slots={{ toolbar: GridToolbar }}
-                processRowUpdate={processRowUpdate}
-                onProcessRowUpdateError={(error) => console.error(error)}
-                initialState={{
-                    pagination: { paginationModel: { pageSize: 25 } },
-                    sorting: {
-                        sortModel: initialSortModel,
-                    },
-                }}
-                pageSizeOptions={[10, 25, 50, 100]}
-                checkboxSelection
-                disableRowSelectionOnClick
-                onRowSelectionModelChange={(newSelectionModel) => setSelectionModel(newSelectionModel)}
-                rowSelectionModel={selectionModel}
-                editMode="row"
-            />
+            <Box sx={{ flex: 1, width: '100%' }}>
+                <DataGrid
+                    sx={{ border: 0 }}
+                    rows={data || []}
+                    columns={memoizedColumns}
+                    localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
+                    slots={{ toolbar: GridToolbar }}
+                    processRowUpdate={processRowUpdate}
+                    onProcessRowUpdateError={(error) => console.error(error)}
+                    initialState={{
+                        sorting: {
+                            sortModel: initialSortModel,
+                        },
+                    }}
+                    paginationModel={paginationModel}
+                    onPaginationModelChange={setPaginationModel}
+                    checkboxSelection
+                    disableRowSelectionOnClick
+                    onRowSelectionModelChange={(newSelectionModel) => setSelectionModel(newSelectionModel)}
+                    rowSelectionModel={selectionModel}
+                    editMode="row"
+                />
+            </Box>
 
             <FormDialog
                 open={isFormOpen}

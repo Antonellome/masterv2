@@ -20,7 +20,12 @@ const dateFields: (keyof Tecnico)[] = [
 
 // Funzione per creare un campo data riutilizzabile
 const renderDatePicker = (label: string, name: keyof Tecnico, value: any, handleChange: (name: keyof Tecnico, date: dayjs.Dayjs | null) => void) => (
-    <Grid item xs={12} sm={6} md={4}>
+    <Grid
+        size={{
+            xs: 12,
+            sm: 6,
+            md: 4
+        }}>
         <DatePicker
             label={label}
             value={value ? dayjs(value) : null}
@@ -93,41 +98,129 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                     <Grid container spacing={2.5}>
 
                         {/* --- SEZIONE ANAGRAFICA --- */}
-                        <Grid item xs={12}><Divider textAlign="left"><Typography variant="h6" sx={{ color: 'text.secondary' }}>Anagrafica</Typography></Divider></Grid>
-                        <Grid item xs={12} sm={6}><TextField name="cognome" label="Cognome" value={formData.cognome || ''} onChange={handleChange} fullWidth required /></Grid>
-                        <Grid item xs={12} sm={6}><TextField name="nome" label="Nome" value={formData.nome || ''} onChange={handleChange} fullWidth required /></Grid>
-                        <Grid item xs={12} sm={4}><TextField name="codiceFiscale" label="Codice Fiscale" value={formData.codiceFiscale || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid item xs={12} sm={4}><TextField name="email" label="Email" value={formData.email || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid item xs={12} sm={4}><TextField name="telefono" label="Telefono" value={formData.telefono || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid item xs={12} sm={6}><TextField name="indirizzo" label="Indirizzo" value={formData.indirizzo || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid item xs={12} sm={3}><TextField name="citta" label="Città" value={formData.citta || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid item xs={6} sm={1.5}><TextField name="cap" label="CAP" value={formData.cap || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid item xs={6} sm={1.5}><TextField name="provincia" label="Provincia" value={formData.provincia || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid size={12}><Divider textAlign="left"><Typography variant="h6" sx={{ color: 'text.secondary' }}>Anagrafica</Typography></Divider></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6
+                            }}><TextField name="cognome" label="Cognome" value={formData.cognome || ''} onChange={handleChange} fullWidth required /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6
+                            }}><TextField name="nome" label="Nome" value={formData.nome || ''} onChange={handleChange} fullWidth required /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4
+                            }}><TextField name="codiceFiscale" label="Codice Fiscale" value={formData.codiceFiscale || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4
+                            }}><TextField name="email" label="Email" value={formData.email || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4
+                            }}><TextField name="telefono" label="Telefono" value={formData.telefono || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6
+                            }}><TextField name="indirizzo" label="Indirizzo" value={formData.indirizzo || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 3
+                            }}><TextField name="citta" label="Città" value={formData.citta || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 6,
+                                sm: 1.5
+                            }}><TextField name="cap" label="CAP" value={formData.cap || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 6,
+                                sm: 1.5
+                            }}><TextField name="provincia" label="Provincia" value={formData.provincia || ''} onChange={handleChange} fullWidth /></Grid>
                         
 
                         {/* --- SEZIONE DOCUMENTI --- */}
-                        <Grid item xs={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Documenti</Typography></Divider></Grid>
-                        <Grid item xs={12} sm={6} md={4}><TextField name="numeroCartaIdentita" label="Numero Carta Identità" value={formData.numeroCartaIdentita || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid size={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Documenti</Typography></Divider></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 4
+                            }}><TextField name="numeroCartaIdentita" label="Numero Carta Identità" value={formData.numeroCartaIdentita || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza Carta Identità", 'scadenzaCartaIdentita', formData.scadenzaCartaIdentita, handleDateChange)}
-                        <Grid item xs={12} md={4}></Grid> {/* Spacer */}
-                        <Grid item xs={12} sm={6} md={4}><TextField name="numeroPassaporto" label="Numero Passaporto" value={formData.numeroPassaporto || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                md: 4
+                            }}></Grid> {/* Spacer */}
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 4
+                            }}><TextField name="numeroPassaporto" label="Numero Passaporto" value={formData.numeroPassaporto || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza Passaporto", 'scadenzaPassaporto', formData.scadenzaPassaporto, handleDateChange)}
-                        <Grid item xs={12} md={4}></Grid> {/* Spacer */}
-                        <Grid item xs={12} sm={4} md={3}><TextField name="numeroPatente" label="Numero Patente" value={formData.numeroPatente || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid item xs={12} sm={4} md={2}><TextField name="categoriaPatente" label="Cat. Patente" value={formData.categoriaPatente || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                md: 4
+                            }}></Grid> {/* Spacer */}
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 3
+                            }}><TextField name="numeroPatente" label="Numero Patente" value={formData.numeroPatente || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 2
+                            }}><TextField name="categoriaPatente" label="Cat. Patente" value={formData.categoriaPatente || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza Patente", 'scadenzaPatente', formData.scadenzaPatente, handleDateChange)}
-                        <Grid item xs={12} md={3}></Grid> {/* Spacer */}
-                        <Grid item xs={12} sm={6} md={4}><TextField name="numeroCQC" label="Numero CQC" value={formData.numeroCQC || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                md: 3
+                            }}></Grid> {/* Spacer */}
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 4
+                            }}><TextField name="numeroCQC" label="Numero CQC" value={formData.numeroCQC || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza CQC", 'scadenzaCQC', formData.scadenzaCQC, handleDateChange)}
                         
 
                         {/* --- SEZIONE DATI LAVORATIVI E NOTE --- */}
-                        <Grid item xs={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Dati Lavorativi</Typography></Divider></Grid>
-                        <Grid item xs={12} sm={6} md={4}><TextField select name="dittaId" label="Ditta" value={formData.dittaId || ''} onChange={handleChange} fullWidth>{ditte.map(d => <MenuItem key={d.id} value={d.id}>{d.nome}</MenuItem>)}</TextField></Grid>
-                        <Grid item xs={12} sm={6} md={4}><TextField select name="categoriaId" label="Categoria" value={formData.categoriaId || ''} onChange={handleChange} fullWidth>{categorie.map(c => <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>)}</TextField></Grid>
+                        <Grid size={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Dati Lavorativi</Typography></Divider></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 4
+                            }}><TextField select name="dittaId" label="Ditta" value={formData.dittaId || ''} onChange={handleChange} fullWidth>{ditte.map(d => <MenuItem key={d.id} value={d.id}>{d.nome}</MenuItem>)}</TextField></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 4
+                            }}><TextField select name="categoriaId" label="Categoria" value={formData.categoriaId || ''} onChange={handleChange} fullWidth>{categorie.map(c => <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>)}</TextField></Grid>
                         
                         {/* CAMPO MODIFICATO: TENDINA CONTRATTI */}
-                        <Grid item xs={12} sm={6} md={4}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 4
+                            }}>
                             <TextField select name="tipoContratto" label="Tipo Contratto" value={formData.tipoContratto || ''} onChange={handleChange} fullWidth>
                                 {TIPI_CONTRATTO.map(option => (
                                     <MenuItem key={option.value} value={option.value}>
@@ -142,21 +235,26 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                         {renderDatePicker("Scadenza UNILAV", 'scadenzaUnilav', formData.scadenzaUnilav, handleDateChange)}
                         
                         {/* CAMPO SPOSTATO: NOTE */}
-                        <Grid item xs={12}><TextField name="note" label="Note su Contratto e Altro" value={formData.note || ''} onChange={handleChange} fullWidth multiline rows={3} /></Grid>
+                        <Grid size={12}><TextField name="note" label="Note su Contratto e Altro" value={formData.note || ''} onChange={handleChange} fullWidth multiline rows={3} /></Grid>
 
 
                         {/* --- SEZIONE SICUREZZA --- */}
-                        <Grid item xs={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Formazione e Sicurezza</Typography></Divider></Grid>
+                        <Grid size={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Formazione e Sicurezza</Typography></Divider></Grid>
                         {renderDatePicker("Scadenza Visita Medica", 'scadenzaVisita', formData.scadenzaVisita, handleDateChange)}
                         {renderDatePicker("Scadenza Corso Sicurezza", 'scadenzaCorsoSicurezza', formData.scadenzaCorsoSicurezza, handleDateChange)}
                         {renderDatePicker("Scadenza Primo Soccorso", 'scadenzaPrimoSoccorso', formData.scadenzaPrimoSoccorso, handleDateChange)}
                         {renderDatePicker("Scadenza Antincendio", 'scadenzaAntincendio', formData.scadenzaAntincendio, handleDateChange)}
 
                         {/* --- IMPOSTAZIONI --- */}
-                        <Grid item xs={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Impostazioni</Typography></Divider></Grid>
-                        <Grid item xs={12} container spacing={1} alignItems="center" justifyContent="center">
-                            <Grid item><FormControlLabel control={<Switch name="attivo" checked={formData.attivo ?? true} onChange={handleChange} />} label="Tecnico Attivo" /></Grid>
-                            <Grid item><FormControlLabel control={<Switch name="sincronizzazioneAttiva" checked={formData.sincronizzazioneAttiva || false} onChange={handleChange} />} label="Sincronizzazione App" /></Grid>
+                        <Grid size={12}><Divider textAlign="left" sx={{ mt: 2 }}><Typography variant="h6" sx={{ color: 'text.secondary' }}>Impostazioni</Typography></Divider></Grid>
+                        <Grid
+                            container
+                            spacing={1}
+                            alignItems="center"
+                            justifyContent="center"
+                            size={12}>
+                            <Grid><FormControlLabel control={<Switch name="attivo" checked={formData.attivo ?? true} onChange={handleChange} />} label="Tecnico Attivo" /></Grid>
+                            <Grid><FormControlLabel control={<Switch name="sincronizzazioneAttiva" checked={formData.sincronizzazioneAttiva || false} onChange={handleChange} />} label="Sincronizzazione App" /></Grid>
                         </Grid>
                     </Grid>
                 </LocalizationProvider>

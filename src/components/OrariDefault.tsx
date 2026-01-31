@@ -64,16 +64,32 @@ const OrariDefault = () => {
                 Orari di Lavoro Standard
             </Typography>
             <Grid container spacing={2} alignItems="center">
-                <Grid xs={6} sm={3}>
+                <Grid
+                    size={{
+                        xs: 6,
+                        sm: 3
+                    }}>
                     <TextField label="Inizio Mattina" name="inizioMattina" type="time" value={orari.inizioMattina} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
-                <Grid xs={6} sm={3}>
+                <Grid
+                    size={{
+                        xs: 6,
+                        sm: 3
+                    }}>
                     <TextField label="Fine Mattina" name="fineMattina" type="time" value={orari.fineMattina} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
-                <Grid xs={6} sm={3}>
+                <Grid
+                    size={{
+                        xs: 6,
+                        sm: 3
+                    }}>
                     <TextField label="Inizio Pomeriggio" name="inizioPomeriggio" type="time" value={orari.inizioPomeriggio} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
-                <Grid xs={6} sm={3}>
+                <Grid
+                    size={{
+                        xs: 6,
+                        sm: 3
+                    }}>
                     <TextField label="Fine Pomeriggio" name="finePomeriggio" type="time" value={orari.finePomeriggio} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
             </Grid>

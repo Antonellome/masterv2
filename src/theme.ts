@@ -1,4 +1,6 @@
 import { createTheme, responsiveFontSizes } from '@mui/material/styles';
+import { itIT } from '@mui/material/locale';
+import { itIT as dataGridItIT } from '@mui/x-data-grid/locales';
 
 const getInitialMode = () => {
   if (typeof window !== 'undefined') {
@@ -94,7 +96,10 @@ const getTheme = (mode: 'light' | 'dark') => {
             }
         }
     }
-  });
+  },
+  itIT,
+  dataGridItIT
+  );
 
   theme = responsiveFontSizes(theme);
   return theme;

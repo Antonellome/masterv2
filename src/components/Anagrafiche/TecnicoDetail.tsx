@@ -32,7 +32,12 @@ const formatDate = (dateString: string | null | undefined) => {
 };
 
 const DetailItem: React.FC<{ icon: React.ReactNode; label: string; value: React.ReactNode;}> = ({ icon, label, value }) => (
-    <Grid xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+    <Grid
+        sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}
+        size={{
+            xs: 12,
+            sm: 6
+        }}>
         <Box sx={{ mr: 1.5, color: 'text.secondary' }}>{icon}</Box>
         <Box>
             <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>

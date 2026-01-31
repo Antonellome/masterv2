@@ -1,73 +1,29 @@
-import globals from 'globals';
-import tseslint from 'typescript-eslint';
-import pluginReact from 'eslint-plugin-react';
-import pluginJsxA11y from 'eslint-plugin-jsx-a11y';
-import reactRefresh from 'eslint-plugin-react-refresh';
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import { defineConfig, globalIgnores } from 'eslint/config'
 
-export default tseslint.config(
+export default defineConfig([
+  globalIgnores(['dist']),
   {
-    // File da ignorare globalmente
-    ignores: [
-      'dist',
-      'node_modules',
-      'backup_v*',
-      'functions/lib',
-      '.vite',
-      'firebase-debug.log',
-      'eslint.config.js', // Ignora il file di configurazione stesso
+    files: ['**/*.{js,jsx}'],
+    extends: [
+      js.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
     ],
-  },
-
-  // Configurazione di base per tutti i file (ereditata da tutti)
-  {
     languageOptions: {
-      globals: {
-        ...globals.browser,
-        ...globals.node,
-      },
-    },
-  },
-
-  // Configurazione per i file TypeScript
-  ...tseslint.configs.recommended,
-
-  // Configurazione specifica per i file React (TSX/JSX)
-  {
-    files: ['src/**/*.{jsx,tsx}'],
-    plugins: {
-      'react': pluginReact,
-      'react-refresh': reactRefresh,
-      'jsx-a11y': pluginJsxA11y,
-    },
-    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
       parserOptions: {
+        ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },
+        sourceType: 'module',
       },
-    },
-    settings: {
-        react: { version: 'detect' },
     },
     rules: {
-      ...pluginReact.configs.recommended.rules,
-      ...pluginJsxA11y.configs.recommended.rules,
-      'react/react-in-jsx-scope': 'off',
-      'react/jsx-uses-react': 'off',
-      'react/prop-types': 'off', // Disabilitato perché usiamo TypeScript
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
-      // Puoi aggiungere qui altre regole specifiche per React
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
-  
-  // Regole aggiuntive per le Cloud Functions (ambiente Node.js)
-   {
-    files: ['functions/src/**/*.ts'],
-    languageOptions: {
-        globals: {
-            ...globals.node,
-        }
-    }
-   }
-);
+])

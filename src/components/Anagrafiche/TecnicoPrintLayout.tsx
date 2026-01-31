@@ -13,7 +13,7 @@ interface TecnicoPrintLayoutProps {
 
 // Componente per mostrare un dettaglio di stampa
 const PrintDetailItem: React.FC<{label: string, value: React.ReactNode, xs?: number}> = ({ label, value, xs = 6 }) => (
-    <Grid item xs={xs} sx={{ padding: '8px 0' }}>
+    <Grid sx={{ padding: '8px 0' }} size={xs}>
         <Typography variant="subtitle2" component="div" sx={{ color: '#555', fontSize: '0.8rem' }}>{label}</Typography>
         <Typography variant="body1" component="div" sx={{ fontWeight: 500, fontSize: '1rem' }}>{value || 'N/D'}</Typography>
     </Grid>

@@ -57,7 +57,6 @@ const PrintableTechnicianList = ({ data, fields }: PrintableTechnicianListProps)
                     <Typography variant="caption">R.I.S.O. Masre Office - Report Individuali Sincronizzati Online</Typography>
                 </Box>
             </Box>
-
             {data.map((tecnico, index) => {
                 const fullName = `${tecnico.cognome || ''}, ${tecnico.nome || ''}`.replace(/^,|,$/g, '').trim();
                 const noteValue = tecnico.note;

@@ -116,7 +116,7 @@ const VeicoliList: React.FC<VeicoliListProps> = ({ veicoli, onEdit, onDelete, on
     return (
         <Box sx={{ height: 'calc(100vh - 220px)', width: '100%' }}>
             <DataGrid
-                rows={veicoli}
+                rows={veicoli || []}
                 columns={columns}
                 autoHeight
                 getRowId={(row) => row.id}

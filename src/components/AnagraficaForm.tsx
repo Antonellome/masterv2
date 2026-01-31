@@ -85,7 +85,7 @@ const AnagraficaForm = <T extends BaseAnagrafica>({
             <DialogContent>
                 <Grid container spacing={2}>
                     {fields.map(field => (
-                        <Grid item {...(field.gridProps || { xs: 12 })} key={field.name}>
+                        <Grid key={field.name}>
                             {renderField(field)}
                         </Grid>
                     ))}

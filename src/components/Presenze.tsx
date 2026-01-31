@@ -99,101 +99,121 @@ const Presenze = () => {
   };
 
   return (
-    <Box>
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <DatePicker
-          label="Seleziona Data"
-          value={selectedDate}
-          onChange={setSelectedDate}
-          sx={{ width: '100%' }}
-        />
-      </Paper>
-      
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <>
-            <Grid container spacing={2} sx={{ mb: 4 }}>
-                <KPIBox title="Operativi" count={operativi.length} icon={<CheckCircleOutlineIcon color="success" sx={{ fontSize: 40 }} />} />
-                <KPIBox title="Assenti Giustificati" count={assentiGiustificati.length} icon={<HelpOutlineIcon color="info" sx={{ fontSize: 40 }} />} />
-                <KPIBox title="Mancanti (Attivi)" count={mancantiAttivi.length} icon={<ErrorOutlineIcon color="error" sx={{ fontSize: 40 }} />} />
-                <KPIBox title="Assenti (Non Attivi)" count={assentiNonAttivi.length} icon={<NoAccountsIcon color="disabled" sx={{ fontSize: 40 }} />} />
-            </Grid>
-
-            <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom>Mancanti (Attivi) ({mancantiAttivi.length})</Typography>
-                    <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
-                        <List dense>
-                            {mancantiAttivi.map(tecnico => (
-                                <ListItem key={tecnico.id}>
-                                    <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><PersonIcon /></Avatar></ListItemAvatar>
-                                    <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} />
-                                    <Button size="small" variant="outlined" onClick={() => handleCreaRapportino(tecnico)}>Crea R.</Button>
-                                </ListItem>
-                            ))}
-                            {mancantiAttivi.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Tutti gli attivi sono presenti.</Typography>}
-                        </List>
-                    </Paper>
+      <Box>
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <DatePicker
+              label="Seleziona Data"
+              value={selectedDate}
+              onChange={setSelectedDate}
+              sx={{ width: '100%' }}
+            />
+          </Paper>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+                <Grid container spacing={2} sx={{ mb: 4 }}>
+                    <KPIBox title="Operativi" count={operativi.length} icon={<CheckCircleOutlineIcon color="success" sx={{ fontSize: 40 }} />} />
+                    <KPIBox title="Assenti Giustificati" count={assentiGiustificati.length} icon={<HelpOutlineIcon color="info" sx={{ fontSize: 40 }} />} />
+                    <KPIBox title="Mancanti (Attivi)" count={mancantiAttivi.length} icon={<ErrorOutlineIcon color="error" sx={{ fontSize: 40 }} />} />
+                    <KPIBox title="Assenti (Non Attivi)" count={assentiNonAttivi.length} icon={<NoAccountsIcon color="disabled" sx={{ fontSize: 40 }} />} />
                 </Grid>
 
-                <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom>Assenti (Non Attivi) ({assentiNonAttivi.length})</Typography>
-                     <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
-                        <List dense>
-                            {assentiNonAttivi.map(tecnico => (
-                                <ListItem key={tecnico.id}>
-                                     <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><NoAccountsIcon /></Avatar></ListItemAvatar>
-                                    <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} secondary="Non attivo"/>
-                                </ListItem>
-                            ))}
-                             {assentiNonAttivi.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Nessun tecnico non attivo.</Typography>}
-                        </List>
-                    </Paper>
-                </Grid>
+                <Grid container spacing={3}>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 6
+                        }}>
+                        <Typography variant="h6" gutterBottom>Mancanti (Attivi) ({mancantiAttivi.length})</Typography>
+                        <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
+                            <List dense>
+                                {mancantiAttivi.map(tecnico => (
+                                    <ListItem key={tecnico.id}>
+                                        <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><PersonIcon /></Avatar></ListItemAvatar>
+                                        <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} />
+                                        <Button size="small" variant="outlined" onClick={() => handleCreaRapportino(tecnico)}>Crea R.</Button>
+                                    </ListItem>
+                                ))}
+                                {mancantiAttivi.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Tutti gli attivi sono presenti.</Typography>}
+                            </List>
+                        </Paper>
+                    </Grid>
 
-                 <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom>Operativi ({operativi.length})</Typography>
-                     <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
-                        <List dense>
-                            {operativi.map(({ tecnico, giornata }) => (
-                                <ListItem key={tecnico.id}>
-                                     <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><CheckCircleOutlineIcon color="success"/></Avatar></ListItemAvatar>
-                                    <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} />
-                                    <Chip label={giornata} color="success" size="small" variant="outlined"/>
-                                </ListItem>
-                            ))}
-                             {operativi.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Nessun tecnico operativo.</Typography>}
-                        </List>
-                    </Paper>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 6
+                        }}>
+                        <Typography variant="h6" gutterBottom>Assenti (Non Attivi) ({assentiNonAttivi.length})</Typography>
+                         <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
+                            <List dense>
+                                {assentiNonAttivi.map(tecnico => (
+                                    <ListItem key={tecnico.id}>
+                                         <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><NoAccountsIcon /></Avatar></ListItemAvatar>
+                                        <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} secondary="Non attivo"/>
+                                    </ListItem>
+                                ))}
+                                 {assentiNonAttivi.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Nessun tecnico non attivo.</Typography>}
+                            </List>
+                        </Paper>
+                    </Grid>
+
+                     <Grid
+                         size={{
+                             xs: 12,
+                             md: 6
+                         }}>
+                        <Typography variant="h6" gutterBottom>Operativi ({operativi.length})</Typography>
+                         <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
+                            <List dense>
+                                {operativi.map(({ tecnico, giornata }) => (
+                                    <ListItem key={tecnico.id}>
+                                         <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><CheckCircleOutlineIcon color="success"/></Avatar></ListItemAvatar>
+                                        <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} />
+                                        <Chip label={giornata} color="success" size="small" variant="outlined"/>
+                                    </ListItem>
+                                ))}
+                                 {operativi.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Nessun tecnico operativo.</Typography>}
+                            </List>
+                        </Paper>
+                    </Grid>
+                    
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 6
+                        }}>
+                        <Typography variant="h6" gutterBottom>Assenti Giustificati ({assentiGiustificati.length})</Typography>
+                         <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
+                            <List dense>
+                                {assentiGiustificati.map(({ tecnico, giornata }) => (
+                                    <ListItem key={tecnico.id}>
+                                        <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><HelpOutlineIcon color="info"/></Avatar></ListItemAvatar>
+                                        <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} />
+                                        <Chip label={giornata} color="info" size="small" variant="outlined"/>
+                                    </ListItem>
+                                ))}
+                                {assentiGiustificati.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Nessuna assenza giustificata.</Typography>}
+                            </List>
+                        </Paper>
+                    </Grid>
                 </Grid>
-                
-                <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom>Assenti Giustificati ({assentiGiustificati.length})</Typography>
-                     <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
-                        <List dense>
-                            {assentiGiustificati.map(({ tecnico, giornata }) => (
-                                <ListItem key={tecnico.id}>
-                                    <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><HelpOutlineIcon color="info"/></Avatar></ListItemAvatar>
-                                    <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} />
-                                    <Chip label={giornata} color="info" size="small" variant="outlined"/>
-                                </ListItem>
-                            ))}
-                            {assentiGiustificati.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Nessuna assenza giustificata.</Typography>}
-                        </List>
-                    </Paper>
-                </Grid>
-            </Grid>
-        </>
-      )}
-    </Box>
+            </>
+          )}
+      </Box>
   );
 };
 
 const KPIBox = ({ title, count, icon }: { title: string, count: number, icon: React.ReactNode }) => (
-    <Grid item xs={12} sm={6} md={3}>
+    <Grid
+        size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+        }}>
         <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
             {icon}
             <Typography variant="h4">{count}</Typography>

@@ -104,7 +104,7 @@ const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieM
         telefono: false,
         ...TECNICI_SCADENZE_FIELDS.reduce((acc, field) => ({
             ...acc, 
-           [field.key]: [
+           [field.key]: ![
                'scadenzaContratto', 
                'scadenzaVisita', 
                'scadenzaPatente',
@@ -115,7 +115,7 @@ const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieM
     return (
         <Box sx={{ height: '75vh', width: '100%' }}>
             <DataGrid
-                rows={tecnici}
+                rows={tecnici || []}
                 columns={allColumns}
                 sx={{ width: '100%', '& .MuiDataGrid-cell': { py: 0.5 }, '& .MuiDataGrid-columnHeaderTitle': { fontWeight: 'bold' } }}
                 localeText={itIT.components.MuiDataGrid.defaultProps.localeText}

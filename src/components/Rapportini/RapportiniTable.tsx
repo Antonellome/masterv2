@@ -82,7 +82,7 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
   ];
 
   const sortedRapportini = useMemo(() => {
-      return [...rapportini].sort((a, b) => (b.data as Timestamp).toMillis() - (a.data as Timestamp).toMillis());
+      return [...(rapportini || [])].sort((a, b) => (b.data as Timestamp).toMillis() - (a.data as Timestamp).toMillis());
   }, [rapportini]);
 
   if (error) {

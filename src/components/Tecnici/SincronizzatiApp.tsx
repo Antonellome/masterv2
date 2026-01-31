@@ -35,7 +35,7 @@ interface Tecnico {
     nome: string;
     email?: string;
     attivo: boolean;
-    sincronizzazioneAttiva: boolean;
+    accessoApp?: boolean; // Corretto da sincronizzazioneAttiva
 }
 
 interface SincronizzatiAppProps {
@@ -75,12 +75,12 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
         fetchTecniciAttivi();
     }, [fetchTecniciAttivi]);
 
-    const handleToggleSincronizzazione = async (id: string, currentValue: boolean) => {
+    const handleToggleAccessoApp = async (id: string, currentValue: boolean) => {
         const tecnicoRef = doc(db, 'tecnici', id);
         try {
-            await updateDoc(tecnicoRef, { sincronizzazioneAttiva: !currentValue });
-            setTecnici(prev => prev.map(t => t.id === id ? { ...t, sincronizzazioneAttiva: !currentValue } : t));
-            setFeedback({ type: 'success', message: `Sincronizzazione ${!currentValue ? 'attivata' : 'disattivata'}.` });
+            await updateDoc(tecnicoRef, { accessoApp: !currentValue }); // Corretto
+            setTecnici(prev => prev.map(t => t.id === id ? { ...t, accessoApp: !currentValue } : t)); // Corretto
+            setFeedback({ type: 'success', message: `Accesso App ${!currentValue ? 'abilitato' : 'disabilitato'}.` });
             onDataChange();
         } catch {
             setFeedback({ type: 'error', message: "Errore durante l'aggiornamento." });
@@ -103,7 +103,8 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
         if (!selectedTecnico) return;
         const tecnicoRef = doc(db, 'tecnici', selectedTecnico.id);
         try {
-            await updateDoc(tecnicoRef, { email: currentEmail });
+            // Quando si salva un'email, ha senso inizializzare accessoApp a false se non è già definito
+            await updateDoc(tecnicoRef, { email: currentEmail, accessoApp: selectedTecnico.accessoApp || false }); 
             setFeedback({ type: 'success', message: 'Email aggiornata con successo.' });
             fetchTecniciAttivi();
             onDataChange();
@@ -119,13 +120,14 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
             setFeedback({ type: 'warning', message: 'Nessuna email associata per inviare il reset.' });
             return;
         }
+        // Qui andrebbe la logica per Firebase Auth per inviare la mail di reset
         console.log(`Reset password per: ${email}`);
         setFeedback({ type: 'success', message: `Richiesta di reset password inviata a ${email}.` });
     };
 
     const columns: GridColDef[] = [
         {
-            field: 'sincronizzazioneAttiva',
+            field: 'accessoApp', // Corretto
             headerName: 'Accesso App',
             width: 120,
             align: 'center',
@@ -138,7 +140,7 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
                         <span>
                             <Switch
                                 checked={Boolean(params.value)}
-                                onChange={() => handleToggleSincronizzazione(params.row.id, params.row.sincronizzazioneAttiva)}
+                                onChange={() => handleToggleAccessoApp(params.row.id, params.row.accessoApp)} // Corretto
                                 disabled={!hasEmail}
                             />
                         </span>
@@ -176,7 +178,7 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
                     icon={<Tooltip title="Invia/Reset Password"><VpnKey /></Tooltip>}
                     label="Reset Password"
                     onClick={() => handlePasswordReset(row.email)}
-                    disabled={!row.email}
+                    disabled={!row.email || !row.accessoApp} // Disabilitato se non ha accesso
                 />,
             ],
         },
@@ -193,7 +195,7 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
             {loading ? <CircularProgress /> : 
                 <Box sx={{ height: 'auto', width: '100%' }}>
                     <DataGrid
-                        rows={tecnici}
+                        rows={tecnici || []}
                         columns={columns}
                         autoHeight
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText}

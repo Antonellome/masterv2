@@ -49,7 +49,7 @@ const RapportiniChartWidget = () => {
               {error && <Alert severity="error">{error.message}</Alert>}
               {!loading && !error && (
                   // Using fixed width and height to prevent rendering errors.
-                  <BarChart width={700} height={200} data={chartData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
+                  (<BarChart width={700} height={200} data={chartData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} dy={5}/>
                       <YAxis tick={{ fontSize: 10 }} allowDecimals={false}/>
@@ -58,7 +58,7 @@ const RapportiniChartWidget = () => {
                           wrapperStyle={{ fontSize: '12px' }}
                       />
                       <Bar dataKey="ore" fill={theme.palette.primary.main} />
-                  </BarChart>
+                  </BarChart>)
               )}
           </Box>
       </StyledCard>

@@ -147,7 +147,12 @@ const ConsuntivoMensile = () => {
                  <Typography variant="h6" gutterBottom>Riepilogo Ore</Typography>
                  <Grid container spacing={2}>
                     {Object.entries(totaliPerTipoGiornata).map(([tipo, ore]) => (
-                        <Grid item xs={6} sm={4} md={3} key={tipo}>
+                        <Grid
+                            item
+                            key={tipo}
+                            xs={6}
+                            sm={4}
+                            md={3}>
                             <Typography variant="body2"><strong>{tipo}:</strong> {ore} ore</Typography>
                         </Grid>
                     ))}
@@ -163,7 +168,11 @@ const ConsuntivoMensile = () => {
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Paper sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Grid container spacing={2} alignItems="center" sx={{ mb: 3, flexShrink: 0 }}>
-                    <Grid item xs={12} sm={6} md={4}>
+                    <Grid
+                        item
+                        xs={12}
+                        sm={6}
+                        md={4}>
                         <Autocomplete
                             options={tecnici}
                             getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
@@ -173,7 +182,11 @@ const ConsuntivoMensile = () => {
                             isOptionEqualToValue={(option, value) => option.id === value.id}
                         />
                     </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
+                    <Grid
+                        item
+                        xs={12}
+                        sm={6}
+                        md={4}>
                         <DatePicker
                             label="Seleziona Mese"
                             views={['month', 'year']}
@@ -181,7 +194,10 @@ const ConsuntivoMensile = () => {
                             onChange={(newValue) => setSelectedMonth(newValue)}
                         />
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid
+                        item
+                        xs={12}
+                        md={4}>
                         <Button 
                             variant="contained" 
                             onClick={handleGenerateReport} 
@@ -198,7 +214,7 @@ const ConsuntivoMensile = () => {
                 {reportGenerated && (
                     <Box sx={{ flexGrow: 1, width: '100%' }}>
                          <DataGrid
-                            rows={presenze}
+                            rows={presenze || []}
                             columns={columns}
                             slots={{
                                 toolbar: GridToolbar,

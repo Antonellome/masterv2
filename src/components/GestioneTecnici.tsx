@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect, useMemo } from 'react';
 import { doc, addDoc, updateDoc, deleteDoc, serverTimestamp, collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
@@ -81,7 +82,19 @@ const GestioneTecnici = () => {
 
     const handleStatusChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
         if (!tecnico.id) return;
-        await updateDoc(doc(db, 'tecnici', tecnico.id), { attivo: event.target.checked });
+        const nuovoStato = event.target.checked;
+        // Aggiornamento ottimistico dell'UI
+        setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, attivo: nuovoStato } : t));
+        try {
+            await updateDoc(doc(db, 'tecnici', tecnico.id), { attivo: nuovoStato });
+            // Il listener onSnapshot aggiornerà lo stato definitivo,
+            // ma l'aggiornamento ottimistico rende l'UI più reattiva.
+        } catch (error) {
+            console.error("Errore aggiornamento stato:", error);
+            setSnackbar({ open: true, message: 'Errore: impossibile aggiornare lo stato.', severity: 'error' });
+            // Ripristino in caso di errore
+            setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, attivo: !nuovoStato } : t));
+        }
     };
 
     const handleSyncChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
