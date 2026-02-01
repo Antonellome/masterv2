@@ -9,7 +9,9 @@ import {
     GridToolbarContainer, GridToolbarColumnsButton, GridToolbarFilterButton, GridToolbarDensitySelector, GridToolbarExport, GridToolbarQuickFilter
 } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
-import { VpnKey, Edit, NoAccounts } from '@mui/icons-material';
+import VpnKey from '@mui/icons-material/VpnKey';
+import Edit from '@mui/icons-material/Edit';
+import NoAccounts from '@mui/icons-material/NoAccounts';
 
 function CustomToolbar() {
     return (
@@ -35,7 +37,7 @@ interface Tecnico {
     nome: string;
     email?: string;
     attivo: boolean;
-    accessoApp?: boolean; // Corretto da sincronizzazioneAttiva
+    accessoApp?: boolean;
 }
 
 interface SincronizzatiAppProps {
@@ -78,8 +80,8 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
     const handleToggleAccessoApp = async (id: string, currentValue: boolean) => {
         const tecnicoRef = doc(db, 'tecnici', id);
         try {
-            await updateDoc(tecnicoRef, { accessoApp: !currentValue }); // Corretto
-            setTecnici(prev => prev.map(t => t.id === id ? { ...t, accessoApp: !currentValue } : t)); // Corretto
+            await updateDoc(tecnicoRef, { accessoApp: !currentValue });
+            setTecnici(prev => prev.map(t => t.id === id ? { ...t, accessoApp: !currentValue } : t));
             setFeedback({ type: 'success', message: `Accesso App ${!currentValue ? 'abilitato' : 'disabilitato'}.` });
             onDataChange();
         } catch {
@@ -103,8 +105,7 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
         if (!selectedTecnico) return;
         const tecnicoRef = doc(db, 'tecnici', selectedTecnico.id);
         try {
-            // Quando si salva un'email, ha senso inizializzare accessoApp a false se non è già definito
-            await updateDoc(tecnicoRef, { email: currentEmail, accessoApp: selectedTecnico.accessoApp || false }); 
+            await updateDoc(tecnicoRef, { email: currentEmail, accessoApp: selectedTecnico.accessoApp || false });
             setFeedback({ type: 'success', message: 'Email aggiornata con successo.' });
             fetchTecniciAttivi();
             onDataChange();
@@ -120,14 +121,13 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
             setFeedback({ type: 'warning', message: 'Nessuna email associata per inviare il reset.' });
             return;
         }
-        // Qui andrebbe la logica per Firebase Auth per inviare la mail di reset
         console.log(`Reset password per: ${email}`);
         setFeedback({ type: 'success', message: `Richiesta di reset password inviata a ${email}.` });
     };
 
     const columns: GridColDef[] = [
         {
-            field: 'accessoApp', // Corretto
+            field: 'accessoApp',
             headerName: 'Accesso App',
             width: 120,
             align: 'center',
@@ -140,7 +140,7 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
                         <span>
                             <Switch
                                 checked={Boolean(params.value)}
-                                onChange={() => handleToggleAccessoApp(params.row.id, params.row.accessoApp)} // Corretto
+                                onChange={() => handleToggleAccessoApp(params.row.id, params.row.accessoApp)}
                                 disabled={!hasEmail}
                             />
                         </span>
@@ -178,26 +178,25 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
                     icon={<Tooltip title="Invia/Reset Password"><VpnKey /></Tooltip>}
                     label="Reset Password"
                     onClick={() => handlePasswordReset(row.email)}
-                    disabled={!row.email || !row.accessoApp} // Disabilitato se non ha accesso
+                    disabled={!row.email || !row.accessoApp}
                 />,
             ],
         },
     ];
 
     return (
-        <Box>
-            <Typography variant="caption" display="block" sx={{ mb: 2, color: 'text.secondary' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <Typography variant="caption" display="block" sx={{ mb: 2, color: 'text.secondary', px: 2, pt: 2 }}>
                 In questa sezione puoi gestire quali tecnici (con contratto attivo) possono accedere all&apos;applicazione mobile. L&apos;accesso è consentito solo ai tecnici con un&apos;email associata.
             </Typography>
-            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            {feedback && <Alert severity={feedback.type} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
+            {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
+            {feedback && <Alert severity={feedback.type} sx={{ m: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
             
-            {loading ? <CircularProgress /> : 
-                <Box sx={{ height: 'auto', width: '100%' }}>
+            {loading ? <CircularProgress sx={{ mx: 'auto', mt: 4 }} /> : 
+                <Box sx={{ flexGrow: 1, width: '100%' }}>
                     <DataGrid
                         rows={tecnici || []}
                         columns={columns}
-                        autoHeight
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
                         initialState={{
                             pagination: { paginationModel: { page: 0, pageSize: 25 } },

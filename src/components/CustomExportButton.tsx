@@ -1,7 +1,9 @@
 import { useState, MouseEvent } from 'react';
 import { Button, Menu, MenuItem } from '@mui/material';
 import { useGridApiContext } from '@mui/x-data-grid';
-import { GetApp as ExportIcon } from '@mui/icons-material';
+import GetApp from '@mui/icons-material/GetApp';
+
+const ExportIcon = GetApp;
 
 interface CustomExportButtonProps {
     onOpenPrintModal: () => void;

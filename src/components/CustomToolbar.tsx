@@ -6,7 +6,11 @@ import {
     GridToolbarFilterButton, 
     GridToolbarDensitySelector 
 } from '@mui/x-data-grid';
-import { Add as AddIcon, GetApp as ExportIcon } from '@mui/icons-material';
+import Add from '@mui/icons-material/Add';
+import GetApp from '@mui/icons-material/GetApp';
+
+const AddIcon = Add;
+const ExportIcon = GetApp;
 
 interface CustomToolbarProps {
     onAdd: () => void;

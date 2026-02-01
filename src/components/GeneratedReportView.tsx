@@ -3,7 +3,8 @@ import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, 
   TableHead, TableRow, Button, Divider, Icon
 } from '@mui/material';
-import { Print, Summarize } from '@mui/icons-material';
+import Print from '@mui/icons-material/Print';
+import Summarize from '@mui/icons-material/Summarize';
 import { useReactToPrint } from 'react-to-print';
 import type { Rapportino, Tecnico } from '@/models/definitions'; // Corretto
 import dayjs from 'dayjs';

@@ -21,7 +21,9 @@ import {
     IconButton,
     Tooltip
 } from '@mui/material';
-import { Edit, Delete, Add } from '@mui/icons-material';
+import Edit from '@mui/icons-material/Edit';
+import Delete from '@mui/icons-material/Delete';
+import Add from '@mui/icons-material/Add';
 import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
 import TipoGiornataForm from '@/components/TipiGiornata/TipoGiornataForm';
 import type { TipoGiornata } from '@/models/definitions';

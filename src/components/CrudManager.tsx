@@ -5,7 +5,9 @@ import {
     DialogTitle, DialogContent, DialogActions, useTheme, useMediaQuery,
     DialogContentText
 } from '@mui/material';
-import { Edit, Delete, Add } from '@mui/icons-material';
+import Edit from '@mui/icons-material/Edit';
+import Delete from '@mui/icons-material/Delete';
+import Add from '@mui/icons-material/Add';
 // Importa 'query' e 'orderBy' da firestore
 import { collection, query, orderBy, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';

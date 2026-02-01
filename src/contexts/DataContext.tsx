@@ -1,14 +1,15 @@
-import { ReactNode, useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, type Unsubscribe, Timestamp } from 'firebase/firestore';
+
+import { ReactNode, useEffect, useMemo, useCallback, useReducer } from 'react';
+import { collection, onSnapshot, type Unsubscribe, Timestamp, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type {
-    Tecnico, Veicolo, Nave, Luogo, Ditta, Categoria, TipoGiornata, Rapportino, Cliente, Documento, WebAppUser, CollectionName
+    Tecnico, Veicolo, Nave, Luogo, Ditta, Categoria, TipoGiornata, Rapportino, Cliente, Documento, WebAppUser, CollectionName, BaseEntity
 } from '@/models/definitions';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from './AuthContext';
 import { DataContext } from './DataContext.types';
 import type { IDataContext } from './DataContext.types';
-import { BaseEntity } from '@/models/definitions';
 
+// --- Helper Functions (invariate) ---
 const SORTABLE_COLLECTIONS: Set<CollectionName> = new Set([
     'clienti', 'navi', 'luoghi', 'ditte', 'categorie', 'tipiGiornata', 'tecnici', 'users'
 ]);
@@ -20,113 +21,151 @@ const sortData = <T extends { nome?: string }>(data: T[], collectionName: Collec
     return data;
 };
 
-interface DataProviderProps {
-    children: ReactNode;
-}
+const createMap = <T extends BaseEntity>(data: T[]): { [key: string]: T } => {
+    return data.reduce((acc, item) => {
+        acc[item.id] = item;
+        return acc;
+    }, {} as { [key: string]: T });
+};
 
+const parseDates = (data: any): any => {
+  if (!data || typeof data !== 'object') return data;
+  if (Array.isArray(data)) return data.map(parseDates);
+  if (data.seconds !== undefined && data.nanoseconds !== undefined) {
+    return new Timestamp(data.seconds, data.nanoseconds);
+  }
+  const newObj: { [key: string]: any } = {};
+  for (const key in data) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      newObj[key] = parseDates(data[key]);
+    }
+  }
+  return newObj;
+};
+
+// --- Reducer Logic (invariato) ---
 const ALL_COLLECTIONS: CollectionName[] = [
     'tecnici', 'veicoli', 'navi', 'luoghi', 'ditte', 'categorie', 
     'tipiGiornata', 'rapportini', 'clienti', 'documenti', 'users'
 ];
 
-const createMap = <T extends BaseEntity>(data: T[]): Map<string, T> => {
-    return new Map(data.map(item => [item.id, item]));
+interface DataState {
+    loading: boolean;
+    error: string | null;
+    tecnici: Tecnico[];
+    veicoli: Veicolo[];
+    navi: Nave[];
+    luoghi: Luogo[];
+    ditte: Ditta[];
+    categorie: Categoria[];
+    tipiGiornata: TipoGiornata[];
+    rapportini: Rapportino[];
+    clienti: Cliente[];
+    documenti: Documento[];
+    webAppUsers: WebAppUser[];
+}
+
+const initialState: DataState = {
+    loading: true, error: null,
+    tecnici: [], veicoli: [], navi: [], luoghi: [], ditte: [], categorie: [],
+    tipiGiornata: [], rapportini: [], clienti: [], documenti: [], webAppUsers: []
 };
 
-// Funzione per ricreare le date dai timestamp serializzati
-const parseDates = (data: any) => {
-  if (data && typeof data === 'object') {
-    for (const key in data) {
-      if (data.hasOwnProperty(key)) {
-        const value = data[key];
-        if (value && typeof value === 'object' && value.seconds !== undefined && value.nanoseconds !== undefined) {
-          data[key] = new Timestamp(value.seconds, value.nanoseconds);
-        } else {
-          parseDates(value);
-        }
-      }
+type Action =
+  | { type: 'START_LOADING' }
+  | { type: 'STOP_LOADING' }
+  | { type: 'SET_ERROR', payload: string | null }
+  | { type: 'SET_DATA', payload: Partial<DataState> }
+  | { type: 'RESET_STATE' };
+
+const dataReducer = (state: DataState, action: Action): DataState => {
+    switch (action.type) {
+        case 'START_LOADING':
+            return { ...state, loading: true };
+        case 'STOP_LOADING':
+            return { ...state, loading: false };
+        case 'SET_ERROR':
+            return { ...state, error: action.payload };
+        case 'SET_DATA':
+            return { ...state, ...action.payload };
+        case 'RESET_STATE':
+            return { ...initialState, loading: false };
+        default:
+            return state;
     }
-  }
-  return data;
 };
 
-export const DataProvider = ({ children }: DataProviderProps) => {
-    const { currentUser } = useAuth();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    const [tecnici, setTecnici] = useState<Tecnico[]>([]);
-    const [veicoli, setVeicoli] = useState<Veicolo[]>([]);
-    const [navi, setNavi] = useState<Nave[]>([]);
-    const [luoghi, setLuoghi] = useState<Luogo[]>([]);
-    const [ditte, setDitte] = useState<Ditta[]>([]);
-    const [categorie, setCategorie] = useState<Categoria[]>([]);
-    const [tipiGiornata, setTipiGiornata] = useState<TipoGiornata[]>([]);
-    const [rapportini, setRapportini] = useState<Rapportino[]>([]);
-    const [clienti, setClienti] = useState<Cliente[]>([]);
-    const [documenti, setDocumenti] = useState<Documento[]>([]);
-    const [webAppUsers, setWebAppUsers] = useState<WebAppUser[]>([]);
-
-    const stateSetters = {
-        tecnici: setTecnici,
-        veicoli: setVeicoli,
-        navi: setNavi,
-        luoghi: setLuoghi,
-        ditte: setDitte,
-        categorie: setCategorie,
-        tipiGiornata: setTipiGiornata,
-        rapportini: setRapportini,
-        clienti: setClienti,
-        documenti: setDocumenti,
-        users: setWebAppUsers,
-    };
+// --- Data Provider Component ---
+export const DataProvider = ({ children }: { children: ReactNode }) => {
+    const { currentUser, loading: authLoading } = useAuth();
+    const [state, dispatch] = useReducer(dataReducer, initialState);
 
     useEffect(() => {
-        if (!currentUser) {
-            ALL_COLLECTIONS.forEach(collectionName => {
-                const setter = stateSetters[collectionName as keyof typeof stateSetters];
-                if (setter) {
-                    // @ts-expect-error This is a safe override
-                    setter([]);
-                }
-            });
-            setLoading(false);
+        // Se l'autenticazione è ancora in corso, mostra lo stato di caricamento e attendi.
+        if (authLoading) {
+            dispatch({ type: 'START_LOADING' });
             return;
         }
 
-        setLoading(true);
-        const unsubscribes: Unsubscribe[] = [];
+        // Se l'autenticazione è terminata e non c'è nessun utente,
+        // resetta lo stato a quello iniziale e assicurati che non ci siano listener attivi.
+        if (!currentUser) {
+            dispatch({ type: 'RESET_STATE' });
+            return;
+        }
 
-        ALL_COLLECTIONS.forEach(collectionName => {
+        // Se l'utente è autenticato, inizia a caricare i dati.
+        dispatch({ type: 'START_LOADING' });
+        const initialLoads = new Set<CollectionName>();
+
+        const unsubscribes: Unsubscribe[] = ALL_COLLECTIONS.map(collectionName => {
             const collRef = collection(db, collectionName);
-            const unsubscribe = onSnapshot(collRef, 
+            return onSnapshot(collRef, 
                 (snapshot) => {
-                    const rawData = snapshot.docs.map(doc => ({ id: doc.id, ...parseDates(doc.data()) })) as BaseEntity[];
-                    const sortedData = sortData(rawData, collectionName);
-                    const setter = stateSetters[collectionName as keyof typeof stateSetters];
-                    if (setter) {
-                         // @ts-expect-error This is a safe override
-                        setter(sortedData);
+                    const rawData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const processedData = parseDates(rawData);
+                    const sortedData = sortData(processedData, collectionName);
+                    
+                    dispatch({ type: 'SET_DATA', payload: { [collectionName]: sortedData } });
+
+                    // Logica di caricamento corretta
+                    if (!initialLoads.has(collectionName)) {
+                        initialLoads.add(collectionName);
+                        if (initialLoads.size === ALL_COLLECTIONS.length) {
+                            dispatch({ type: 'STOP_LOADING' });
+                        }
                     }
-                    setError(null);
                 }, 
                 (err) => {
-                    console.error(`Errore nel caricamento di ${collectionName}:`, err);
-                    setError(`Impossibile caricare ${collectionName}.`);
+                    console.error(`Errore durante il caricamento di ${collectionName}:`, err);
+                    dispatch({ type: 'SET_ERROR', payload: `Impossibile caricare ${collectionName}. Permessi insufficienti.` });
+                    dispatch({ type: 'STOP_LOADING' }); // Ferma il caricamento anche in caso di errore
                 }
             );
-            unsubscribes.push(unsubscribe);
         });
 
-        const timer = setTimeout(() => setLoading(false), 1500);
-
+        // La funzione di pulizia viene eseguita quando l'utente si disconnette o il componente viene smontato.
+        // Annulla tutte le sottoscrizioni per prevenire errori di permesso.
         return () => {
             unsubscribes.forEach(unsub => unsub());
-            clearTimeout(timer);
         };
+    }, [currentUser, authLoading]);
 
-    }, [currentUser]);
+    // Funzioni di modifica dati (invariate)
+    const addData = useCallback(async (collectionName: CollectionName, data: any) => {
+        await addDoc(collection(db, collectionName), data);
+    }, []);
 
+    const updateData = useCallback(async (collectionName: CollectionName, id: string, data: any) => {
+        await updateDoc(doc(db, collectionName, id), data);
+    }, []);
+
+    const deleteData = useCallback(async (collectionName: CollectionName, id: string) => {
+        await deleteDoc(doc(db, collectionName, id));
+    }, []);
+
+    // Memoizzazione (invariata)
+    const { tecnici, veicoli, navi, luoghi, ditte, categorie, tipiGiornata, webAppUsers } = state;
     const tecniciMap = useMemo(() => createMap(tecnici), [tecnici]);
     const veicoliMap = useMemo(() => createMap(veicoli), [veicoli]);
     const naviMap = useMemo(() => createMap(navi), [navi]);
@@ -136,12 +175,11 @@ export const DataProvider = ({ children }: DataProviderProps) => {
     const tipiGiornataMap = useMemo(() => createMap(tipiGiornata), [tipiGiornata]);
     const webAppUsersMap = useMemo(() => createMap(webAppUsers), [webAppUsers]);
 
-    const value: IDataContext = {
-        loading, 
-        error, 
-        tecnici, veicoli, navi, luoghi, ditte, categorie, tipiGiornata, rapportini, clienti, documenti, webAppUsers,
-        tecniciMap, veicoliMap, naviMap, luoghiMap, ditteMap, categorieMap, tipiGiornataMap, webAppUsersMap
-    };
+    const value = useMemo<IDataContext>(() => ({
+        ...state,
+        tecniciMap, veicoliMap, naviMap, luoghiMap, ditteMap, categorieMap, tipiGiornataMap, webAppUsersMap,
+        addData, updateData, deleteData
+    }), [state, tecniciMap, veicoliMap, naviMap, luoghiMap, ditteMap, categorieMap, tipiGiornataMap, webAppUsersMap, addData, updateData, deleteData]);
 
     return (
         <DataContext.Provider value={value}>

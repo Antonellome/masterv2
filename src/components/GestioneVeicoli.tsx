@@ -11,7 +11,7 @@ import {
     CircularProgress, 
     Alert,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import Add from '@mui/icons-material/Add';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import DettaglioItemDialog from '@/components/common/DettaglioItemDialog';
 import { useRefresh } from '@/hooks/useRefresh';

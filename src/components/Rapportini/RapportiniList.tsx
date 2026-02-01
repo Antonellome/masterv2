@@ -1,7 +1,8 @@
 import React from 'react';
 import { DataGrid, GridColDef, GridValueGetterParams } from '@mui/x-data-grid';
 import { Box, Paper, IconButton, Tooltip } from '@mui/material';
-import { Edit, Delete } from '@mui/icons-material';
+import Edit from '@mui/icons-material/Edit';
+import Delete from '@mui/icons-material/Delete';
 import type { Rapportino, Tecnico } from '@/models/definitions';
 import { format } from 'date-fns';
 import it from 'date-fns/locale/it';

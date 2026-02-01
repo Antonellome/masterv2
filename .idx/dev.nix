@@ -1,23 +1,34 @@
-{
-  pkgs, ...
-}: {
-  # Nix packages to add to the environment
-  packages = [ pkgs.nodejs_20 ];
+{ pkgs, ... }: {
+  # CAMBIA DA "stable-24.05" A "stable-24.11"
+  # Questo è il cuore del problema. Senza questo, resterai sempre alla v22.10.
+  channel = "stable-24.11";
 
-  # web server preview
-  idx.previews = {
-    enable = true;
+  packages = [
+    pkgs.nodejs_22
+  ];
+
+  idx = {
+    extensions = [
+      "astro-build.astro-vscode"
+      "csstools.postcss"
+      "bradlc.vscode-tailwindcss"
+    ];
+
     previews = {
-      web = {
-        command = [ "npm" "run" "dev" "--" "--port" "$PORT" "--host" "0.0.0.0" ];
-        manager = "web";
+      enable = true;
+      previews = {
+        web = {
+          command = [ "npm" "run" "dev" "--" "--port" "$PORT" "--host" "0.0.0.0" ];
+          manager = "web";
+        };
       };
     };
-  };
 
-  # command to run when the workspace starts
-  idx.workspace.onStart = {
-    # install dependencies
-    install = "npm install";
+    workspace = {
+      onCreate = {
+        # Rimuoviamo i vecchi moduli per sicurezza
+        install-dependencies = "rm -rf node_modules && npm install";
+      };
+    };
   };
 }

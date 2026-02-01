@@ -6,7 +6,10 @@ import {
 import { itIT } from '@mui/x-data-grid/locales';
 import type { Tecnico } from '@/models/definitions';
 import { Switch, Tooltip, IconButton, Link, Box, Button, Divider } from '@mui/material';
-import { Edit, Delete, Add, Print } from '@mui/icons-material';
+import Edit from '@mui/icons-material/Edit';
+import Delete from '@mui/icons-material/Delete';
+import Add from '@mui/icons-material/Add';
+import Print from '@mui/icons-material/Print';
 import { TECNICI_SCADENZE_FIELDS } from '@/utils/scadenze';
 import dayjs from 'dayjs';
 import { useState } from 'react';

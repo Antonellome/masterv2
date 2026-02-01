@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { NotificationContext, NotificationContextType } from './NotificationContext';
 import type { Notifica } from '@/models/definitions';
+import { useAuth } from './AuthContext'; // <-- 1. IMPORTATO useAuth
 
 interface NotificationProviderProps {
   children: React.ReactNode;
@@ -12,8 +13,26 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const [notifications, setNotifications] = useState<Notifica[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
+  
+  // <-- 2. OTTENGO LO STATO DI AUTENTICAZIONE
+  const { currentUser, loading: authLoading } = useAuth();
 
   useEffect(() => {
+    // <-- 3. CONDIZIONI DI GUARDIA FERREE
+    // Se l'autenticazione è in corso, non fare nulla.
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
+    // Se l'autenticazione è terminata e non c'è utente, resetta lo stato.
+    if (!currentUser) {
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
+
+    // Se l'utente è autenticato, procedi.
     const q = query(collection(db, 'notifiche'), orderBy('data', 'desc'));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -29,9 +48,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       setLoading(false);
     });
 
-    // Pulizia dell'observer quando il componente si smonta
+    // La funzione di pulizia viene eseguita quando l'utente si disconnette.
     return () => unsubscribe();
-  }, []);
+    
+  // <-- 4. ESEGUI L'EFFETTO QUANDO CAMBIA LO STATO DELL'UTENTE
+  }, [currentUser, authLoading]);
 
   const value: NotificationContextType = {
     notifications,

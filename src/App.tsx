@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import { AuthProvider } from '@/contexts/AuthProvider';
+import { AuthProvider } from '@/contexts/AuthContext'; // CORRETTO
 import { DataProvider } from '@/contexts/DataContext';
 import { NotificationProvider } from '@/contexts/NotificationProvider';
 import { RefreshProvider } from '@/contexts/RefreshContext';

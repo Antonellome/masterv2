@@ -17,7 +17,9 @@ import {
     GridActionsCellItem
 } from '@mui/x-data-grid';
 import type { GridColDef } from '@mui/x-data-grid';
-import { Edit, Delete, Add } from '@mui/icons-material';
+import Edit from '@mui/icons-material/Edit';
+import Delete from '@mui/icons-material/Delete';
+import Add from '@mui/icons-material/Add';
 import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
 import CategoriaForm from '@/components/Categorie/CategoriaForm';
 import DettaglioItemDialog from '@/components/common/DettaglioItemDialog';

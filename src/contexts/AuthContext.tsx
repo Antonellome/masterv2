@@ -1,33 +1,44 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
+import {
+  onAuthStateChanged,
+  User,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebase';
 
 export type UserRole = 'admin' | 'user';
 
-// Definizione di un tipo specifico per i dati dell'utente
 interface UserData {
   nome: string;
   cognome: string;
   ruolo: UserRole;
-  // Aggiungi altri campi se necessario
 }
 
 interface AuthContextType {
   currentUser: User | null;
-  userData: UserData | null; // Usa il tipo specifico
+  userData: UserData | null;
   userRole: UserRole | null;
   loading: boolean;
   isAdmin: boolean;
+  login: (email: string, pass: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  signup: (email: string, pass: string, nome: string, cognome: string) => Promise<void>;
+  logout: () => Promise<void>;
+  error: string | null;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [userData, setUserData] = useState<UserData | null>(null); // Stato con tipo specifico
-    const [userRole, setUserRole] = useState<UserRole | null>(null);
+    const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -36,36 +47,100 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const userDocRef = doc(db, 'utenti_master', user.uid);
                 const userDoc = await getDoc(userDocRef);
                 if (userDoc.exists()) {
-                    const data = userDoc.data() as UserData; // Esegui il cast al tipo specifico
-                    setUserData(data);
-                    setUserRole(data.ruolo || 'user');
+                    setUserData(userDoc.data() as UserData);
                 } else {
-                    setUserData(null);
-                    setUserRole('user'); 
+                    const defaultData: UserData = {
+                      nome: user.displayName?.split(' ')[0] || 'Utente',
+                      cognome: user.displayName?.split(' ')[1] || 'Nuovo',
+                      ruolo: 'user',
+                    };
+                    await setDoc(userDocRef, defaultData);
+                    setUserData(defaultData);
                 }
             } else {
                 setUserData(null);
-                setUserRole(null);
             }
             setLoading(false);
         });
-
         return () => unsubscribe();
     }, []);
 
-    const isAdmin = userRole === 'admin';
+    const login = useCallback(async (email: string, pass: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+    
+    const loginWithGoogle = useCallback(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }, []);
 
-    const value = {
-        currentUser,
-        userData,
-        userRole,
-        loading,
-        isAdmin,
-    };
+    const signup = useCallback(async (email: string, pass: string, nome: string, cognome: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        const user = userCredential.user;
+        await setDoc(doc(db, 'utenti_master', user.uid), {
+          nome,
+          cognome,
+          ruolo: 'user' as UserRole
+        });
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+    
+    const logout = useCallback(async () => {
+      // Non c'è bisogno di setLoading(true) qui, la logica onAuthStateChanged gestirà tutto
+      setError(null);
+      try {
+        await signOut(auth);
+      } catch (e: any) {
+        setError(e.message);
+      }
+    }, []);
+
+    // Creiamo il valore del contesto in modo STABILE con useMemo
+    // L'oggetto `value` viene ricreato SOLO se una delle dipendenze (dati reali) cambia.
+    const value = useMemo(() => {
+        const userRole = userData?.ruolo || null;
+        const isAdmin = userRole === 'admin';
+
+        return {
+            currentUser,
+            userData,
+            userRole,
+            loading,
+            isAdmin,
+            login,
+            loginWithGoogle,
+            signup,
+            logout,
+            error
+        };
+    }, [currentUser, userData, loading, error, login, loginWithGoogle, signup, logout]);
 
     return (
         <AuthContext.Provider value={value}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 };
@@ -73,7 +148,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 export const useAuth = () => {
     const context = useContext(AuthContext);
     if (context === undefined) {
-        throw new Error('useAuth deve essere utilizzato all\'interno di un AuthProvider');
+        throw new Error("useAuth deve essere utilizzato all'interno di un AuthProvider");
     }
     return context;
 };

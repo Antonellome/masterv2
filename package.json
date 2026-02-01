@@ -1,9 +1,6 @@
 {
-        "name": "riso-monorepo",
+        "name": "riso-app",
         "private": true,
-        "workspaces": [
-                "apps/*"
-        ],
         "scripts": {
                 "dev": "vite"
         },
@@ -12,14 +9,27 @@
                 "@types/react-dom": "18.2.22"
         },
         "dependencies": {
+                "@emotion/react": "^11.14.0",
+                "@emotion/styled": "^11.14.1",
+                "@hookform/resolvers": "^5.2.2",
+                "@mui/icons-material": "^7.3.7",
+                "@mui/material": "^7.3.7",
+                "@mui/x-data-grid": "^8.26.0",
                 "@mui/x-date-pickers": "^8.26.0",
                 "dayjs": "^1.11.19",
                 "firebase": "^12.8.0",
                 "react": "^19.2.4",
                 "react-dom": "^19.2.4",
-                "react-firebase-hooks": "^5.1.1"
+                "react-firebase-hooks": "^5.1.1",
+                "react-hook-form": "^7.71.1",
+                "react-icons": "^5.5.0",
+                "react-router-dom": "^7.13.0",
+                "recharts": "^3.7.0",
+                "zod": "^4.3.6",
+                "zustand": "^5.0.10"
         },
         "devDependencies": {
+                "@types/recharts": "^1.8.29",
                 "@vitejs/plugin-react": "^5.1.2",
                 "vite": "^7.3.1",
                 "vite-tsconfig-paths": "^6.0.5"
