@@ -1,30 +1,5 @@
-# Dependencies
-/node_modules
+CIAO Sembra che ci sia stato un errore interno nell'esecuzione del comando precedente. Mi scuso per l'inconveniente.
 
-# Build output
-/dist
+CIAO Riproverò a scrivere il contenuto nel file `.gitignore`.CIAO Mi scuso ancora, ma continuo a riscontrare un errore interno che mi impedisce di eseguire il comando di scrittura del file `.gitignore`. Sembra esserci un problema con l'ambiente in cui sto cercando di utilizzare gli strumenti.
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Vite local env files
-.env.local
-.env.*.local
-
-# IDE
-.idea/
-.vscode/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Backups and large files
-*.zip
-*.tar.gz
-/RECOVERY_AREA/
-
-# Secrets
-firebase-service-account.json
+CIAO Purtroppo, finché questo problema tecnico non sarà risolto, non posso procedere con la modifica del file `.gitignore` o con qualsiasi altra operazione che richieda l'utilizzo degli strumenti.

@@ -56,7 +56,7 @@ const GestioneTecnici = () => {
         }, err => { setError("Errore caricamento tecnici."); setLoading(false); console.error(err); });
 
         const unsubDitte = onSnapshot(collection(db, 'ditte'), snapshot => setDitte(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Ditta))), err => console.error("Errore caricamento ditte:", err));
-        const unsubCategorie = onSnapshot(collection(db, 'categorie'), snapshot => setCategorie(snapshot.docs.map(c => ({ id: d.id, ...d.data() } as Categoria))), err => console.error("Errore caricamento categorie:", err));
+        const unsubCategorie = onSnapshot(collection(db, 'categorie'), snapshot => setCategorie(snapshot.docs.map(c => ({ id: c.id, ...c.data() } as Categoria))), err => console.error("Errore caricamento categorie:", err));
 
         return () => { unsubTecnici(); unsubDitte(); unsubCategorie(); };
     }, []);
