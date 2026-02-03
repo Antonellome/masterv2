@@ -1,48 +1,44 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Grid, TextField, Switch, FormControlLabel, Autocomplete, CircularProgress, Typography, Box, Divider } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Autocomplete, CircularProgress } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { FormField, Anagrafica, SelectOptions } from '@/models/definitions';
-import { useData } from '@/hooks/useData';
+import type { FormField, Anagrafica } from '@/models/definitions';
 import { safeGetDayjs } from '@/utils/dateUtils';
 
-// Hook per caricare le opzioni del select
-const useSelectOptions = (fieldOptions: SelectOptions | undefined) => {
+interface SelectFieldProps {
+    field: FormField;
+    value: any;
+    onChange: (name: string, value: any) => void;
+}
+
+const SelectField: React.FC<SelectFieldProps> = ({ field, value, onChange }) => {
     const [options, setOptions] = useState<{ label: string; value: string; }[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        if (typeof fieldOptions === 'object' && !Array.isArray(fieldOptions) && fieldOptions !== null) {
+        if (field.options && 'collectionName' in field.options) {
             const fetchOptions = async () => {
                 setLoading(true);
                 try {
-                    const snapshot = await getDocs(collection(db, fieldOptions.collectionName));
+                    const snapshot = await getDocs(collection(db, field.options.collectionName));
                     const fetchedOptions = snapshot.docs.map(doc => ({
-                        label: doc.data()[fieldOptions.labelField] || 'Label non trovato',
+                        label: doc.data()[field.options.labelField] || 'Label non trovato',
                         value: doc.id,
                     }));
                     setOptions(fetchedOptions);
                 } catch (error) {
-                    console.error("Errore nel caricamento delle opzioni per il select:", error);
+                    console.error(`Errore caricamento opzioni per ${field.options.collectionName}:`, error);
                     setOptions([]);
                 }
                 setLoading(false);
             };
             fetchOptions();
-        } else if (Array.isArray(fieldOptions)) {
-            setOptions(fieldOptions);
         }
-    }, [fieldOptions]);
-
-    return { options, loading };
-};
-
-// Componente SelectField che utilizza l'hook
-const SelectField = ({ field, value, onChange }: { field: FormField, value: any, onChange: (name: string, value: any) => void }) => {
-    const { options, loading } = useSelectOptions(field.options);
+    }, [field.options]);
 
     return (
         <Autocomplete
@@ -55,6 +51,7 @@ const SelectField = ({ field, value, onChange }: { field: FormField, value: any,
                 <TextField
                     {...params}
                     label={field.label}
+                    required={field.required}
                     InputProps={{
                         ...params.InputProps,
                         endAdornment: (
@@ -71,6 +68,7 @@ const SelectField = ({ field, value, onChange }: { field: FormField, value: any,
     );
 };
 
+
 interface FormDialogProps<T extends Anagrafica> {
     open: boolean;
     onClose: () => void;
@@ -78,14 +76,10 @@ interface FormDialogProps<T extends Anagrafica> {
     fields: FormField[];
     initialData: Partial<T> | null;
     title: string;
-    anagraficaType?: string;
 }
-
-type FieldValue = T[keyof T];
 
 const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initialData, title }: FormDialogProps<T>) => {
     const [formData, setFormData] = useState<Partial<T>>(initialData || {});
-    const { ditte, categorie } = useData();
 
     useEffect(() => {
         setFormData(initialData || {});
@@ -96,99 +90,61 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
         onClose();
     };
 
-    const handleChange = useCallback((name: keyof T, value: FieldValue | string | boolean | null) => {
+    const handleChange = useCallback((name: keyof T, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
     }, []);
 
     const renderField = (field: FormField) => {
-        const value = formData[field.name as keyof T] as FieldValue;
+        const value = formData[field.name as keyof T];
 
         switch (field.type) {
             case 'text':
+            case 'number':
             case 'email':
-            case 'tel':
-                // --- BUG CORRETTO: Rimosso `name` dal TextField per evitare conflitti ---
-                return <TextField fullWidth label={field.label} value={String(value || '')} onChange={(e) => handleChange(field.name as keyof T, e.target.value)} required={field.required} />;
+                return <TextField 
+                            fullWidth 
+                            type={field.type} 
+                            label={field.label} 
+                            value={value || ''} 
+                            onChange={(e) => handleChange(field.name as keyof T, e.target.value)} 
+                            required={field.required} 
+                        />;
             case 'textarea':
-                return <TextField fullWidth label={field.label} value={String(value || '')} onChange={(e) => handleChange(field.name as keyof T, e.target.value)} multiline rows={3} required={field.required} />;
-            case 'switch':
-                return <FormControlLabel control={<Switch checked={!!value} onChange={(e) => handleChange(field.name as keyof T, e.target.checked)} />} label={field.label} />;
+                return <TextField 
+                            fullWidth 
+                            label={field.label} 
+                            value={value || ''} 
+                            onChange={(e) => handleChange(field.name as keyof T, e.target.value)} 
+                            required={field.required}
+                            multiline 
+                            rows={field.rows || 3} 
+                        />;
             case 'date':
-                return <DatePicker label={field.label} value={safeGetDayjs(value as string)} onChange={(date) => handleChange(field.name as keyof T, date?.toISOString() ?? null)} sx={{ width: '100%' }} />;
+                return <DatePicker 
+                            label={field.label} 
+                            value={safeGetDayjs(value as string)} 
+                            onChange={(date) => handleChange(field.name as keyof T, date?.toISOString() ?? null)} 
+                            sx={{ width: '100%' }} 
+                        />;
             case 'select':
                 return <SelectField field={field} value={value} onChange={handleChange as any} />;
-            case 'custom-select':
-                 const options = field.name === 'dittaId' ? ditte : categorie;
-                 return (
-                     <Autocomplete
-                         options={options || []}
-                         getOptionLabel={(option) => option.nome}
-                         value={options?.find(opt => opt.id === value) || null}
-                         onChange={(_, newValue) => handleChange(field.name as keyof T, newValue?.id ?? null)}
-                         renderInput={(params) => <TextField {...params} label={field.label} />}
-                         isOptionEqualToValue={(option, val) => option.id === val.id}
-                     />
-                 );
             default:
                 return null;
         }
     };
     
-    const getFieldsBySection = (sectionFields: (string | undefined)[]) => {
-      return fields.filter(f => sectionFields.includes(f.name));
-    }
-
-    const knownInfoFields = getFieldsBySection(['cognome', 'nome', 'email', 'telefono', 'indirizzo', 'citta', 'cap', 'provincia', 'partitaIva', 'codiceFiscale']);
-    const knownContractFields = getFieldsBySection(['dittaId', 'categoriaId', 'tipoContratto', 'dataAssunzione', 'dataLicenziamento', 'scadenzaContratto', 'scadenzaVisitaMedica']);
-    const noteField = fields.find(f => f.name === 'note');
-    
-    const otherFields = fields.filter(f => 
-        !knownInfoFields.map(f => f.name).includes(f.name) && 
-        !knownContractFields.map(f => f.name).includes(f.name) && 
-        f.name !== noteField?.name
-    );
-
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
             <DialogTitle>{title}</DialogTitle>
             <DialogContent>
                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <Box component="form" sx={{ mt: 2 }}>
-                       
-                        {knownInfoFields.length > 0 && <Typography variant="h6" gutterBottom>Informazioni Personali</Typography>}
-                        <Grid container spacing={2}>
-                            {knownInfoFields.map((field) => (
-                                <Grid key={field.name}>{renderField(field)}</Grid>
-                            ))}
-                        </Grid>
-                        
-                        {knownContractFields.length > 0 && <Divider sx={{ my: 3 }} />}
-
-                        {knownContractFields.length > 0 && <Typography variant="h6" gutterBottom>Dettagli Contrattuali e Scadenze</Typography>}
-                        <Grid container spacing={2}>
-                            {knownContractFields.map((field) => (
-                                <Grid key={field.name}>{renderField(field)}</Grid>
-                            ))}
-                        </Grid>
-                        
-                        {otherFields.length > 0 && <Divider sx={{ my: 3 }} />}
-
-                        {otherFields.length > 0 && <Typography variant="h6" gutterBottom>Altro</Typography>}
-                        <Grid container spacing={2}>
-                            {otherFields.map((field) => (
-                                <Grid key={field.name}>{renderField(field)}</Grid>
-                            ))}
-                        </Grid>
-                        
-                        {noteField && (
-                            <Box sx={{mt: 2}}>
-                                <Grid container spacing={2}>
-                                    <Grid key={noteField.name} size={12}>{renderField(noteField)}</Grid>
-                                </Grid>
-                            </Box>
-                        )}
-
-                    </Box>
+                    <Grid container spacing={2} sx={{ mt: 1 }}>
+                        {fields.map((field) => (
+                            <Grid item key={field.name} {...field.gridProps}>
+                                {renderField(field)}
+                            </Grid>
+                        ))}
+                    </Grid>
                 </LocalizationProvider>
             </DialogContent>
             <DialogActions>

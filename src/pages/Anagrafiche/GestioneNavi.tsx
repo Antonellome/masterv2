@@ -3,7 +3,6 @@ import type { FormField, Nave } from '@/models/definitions';
 import type { GridColDef } from '@mui/x-data-grid';
 import { useData } from '@/hooks/useData';
 import { useMemo } from 'react';
-import { Box, CircularProgress } from '@mui/material';
 
 const GestioneNavi = () => {
     const { clienti, navi, loading } = useData();
@@ -14,13 +13,13 @@ const GestioneNavi = () => {
     }, [clienti]);
 
     const fields: FormField[] = [
-        { name: 'nome', label: 'Nome', type: 'text', required: true, gridProps: { xs: 12 } },
+        { name: 'nome', label: 'Nome', type: 'text', required: true, gridProps: { size: { xs: 12 } } },
         {
             name: 'clienteId',
             label: 'Cliente',
             type: 'select',
             required: true,
-            gridProps: { xs: 12 },
+            gridProps: { size: { xs: 12 } },
             options: {
                 collectionName: 'clienti',
                 labelField: 'nome',
@@ -37,27 +36,20 @@ const GestioneNavi = () => {
             flex: 1,
             minWidth: 150,
             editable: true,
-            valueGetter: (params) => clientiMap.get(params.value) || params.value,
+            type: 'singleSelect',
+            valueOptions: Array.from(clientiMap.entries()).map(([value, label]) => ({ value, label }))
         },
     ];
 
-    if (loading) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
-    }
-
     return (
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <GestioneAnagrafica<Nave>
-                collectionName="navi"
-                title="Gestione Navi"
-                data={navi}
-                loading={loading}
-                fields={fields}
-                columns={columns}
-                anagraficaType="nave"
-                lookupMaps={{ clienteId: clientiMap }}
-            />
-        </Box>
+        <GestioneAnagrafica<Nave>
+            collectionName="navi"
+            title="Gestione Navi"
+            fields={fields}
+            columns={columns}
+            anagraficaType="nave"
+            lookupMaps={{ clienteId: clientiMap }}
+        />
     );
 };
 

@@ -1,95 +1,97 @@
-
-import { useState } from 'react';
-import { Button, TextField, Box, Typography, Container, CircularProgress, Alert } from '@mui/material';
-import { useAuth } from '@/contexts/AuthContext';
+// src/pages/LoginPage.tsx
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Box, TextField, Button, Typography, Container, Grid, CircularProgress } from '@mui/material';
 
 const LoginPage = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    // --- CORREZIONE: Utilizza il nome corretto della funzione: `login` invece di `signIn` ---
-    const { login } = useAuth();
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  // L'errore e lo stato di caricamento vengono dal contesto, così come la funzione di login
+  const { login, user, error, setError, loading } = useAuth();
+  const navigate = useNavigate();
 
-    const handleSubmit = async (event: React.FormEvent) => {
-        event.preventDefault();
-        setLoading(true);
-        setError(null);
-        try {
-            // --- CORREZIONE: Chiama la funzione corretta `login` ---
-            await login(email, password);
-            navigate('/');
-        } catch (err: any) {
-            // Questo blocco ora catturerà errori reali dal contesto se l'accesso fallisce
-            setError('Credenziali non valide. Riprova.');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+  // Questo Effect gestisce il reindirizzamento DOPO che il contesto è stato aggiornato
+  useEffect(() => {
+    // Se l'oggetto utente esiste, il login è confermato a livello di app
+    if (user) {
+      navigate('/'); // Ora possiamo navigare in sicurezza
+    }
+  }, [user, navigate]); // Si attiva solo quando `user` o `navigate` cambiano
 
-    return (
-        <Container component="main" maxWidth="xs">
-            <Box
-                sx={{
-                    marginTop: 8,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                }}
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Chiama la funzione di login centralizzata del contesto
+    await login(email, password);
+  };
+
+  // Pulisce il messaggio di errore quando l'utente inizia a digitare di nuovo
+  useEffect(() => {
+    if (error) {
+      setError('');
+    }
+  }, [email, password]);
+
+  return (
+    <Container maxWidth="xs">
+      <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Typography component="h1" variant="h5">Accedi</Typography>
+        <Box component="form" onSubmit={handleLogin} sx={{ mt: 1 }}>
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            label="Indirizzo Email"
+            autoComplete="email"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+          />
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+          />
+          {error && <Typography color="error" align="center" sx={{ mt: 2 }}>{error}</Typography>}
+          <Box sx={{ position: 'relative' }}>
+            <Button 
+              type="submit" 
+              fullWidth 
+              variant="contained" 
+              sx={{ mt: 3, mb: 2 }} 
+              disabled={loading}
             >
-                <Typography component="h1" variant="h3" sx={{ fontWeight: 'bold' }}>
-                    R.I.S.O.
-                </Typography>
-                <Typography component="h2" variant="h5">
-                    Master Office
-                </Typography>
-                <Typography variant="caption" sx={{ mb: 3 }}>
-                    Report Individuali Sincronizzati Online
-                </Typography>
-                <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-                    <TextField
-                        margin="normal"
-                        required
-                        fullWidth
-                        id="email"
-                        label="Indirizzo Email"
-                        name="email"
-                        autoComplete="email"
-                        autoFocus
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        disabled={loading}
-                    />
-                    <TextField
-                        margin="normal"
-                        required
-                        fullWidth
-                        name="password"
-                        label="Password"
-                        type="password"
-                        id="password"
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        disabled={loading}
-                    />
-                    {error && <Alert severity="error" sx={{ mt: 2, width: '100%' }}>{error}</Alert>}
-                    <Button
-                        type="submit"
-                        fullWidth
-                        variant="contained"
-                        sx={{ mt: 3, mb: 2 }}
-                        disabled={loading}
-                    >
-                        {loading ? <CircularProgress size={24} color="inherit" /> : 'Accedi'}
-                    </Button>
-                </Box>
-            </Box>
-        </Container>
-    );
+              Accedi
+            </Button>
+            {loading && (
+              <CircularProgress
+                size={24}
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  marginTop: '-12px',
+                  marginLeft: '-12px',
+                }}
+              />
+            )}
+          </Box>
+          <Grid container justifyContent="flex-end">
+            <Grid>
+                <Typography variant="body2">Non hai un account? Contatta l'amministratore.</Typography>
+            </Grid>
+          </Grid>
+        </Box>
+      </Box>
+    </Container>
+  );
 };
 
 export default LoginPage;

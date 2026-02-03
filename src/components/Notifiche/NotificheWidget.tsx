@@ -1,6 +1,6 @@
 import { Box, Typography, List, ListItem, ListItemText, Badge } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import StyledCard from '../StyledCard';
 
 const NotificheWidget = () => {

@@ -20,7 +20,7 @@ interface UserData {
 }
 
 interface AuthContextType {
-  currentUser: User | null;
+  user: User | null;
   userData: UserData | null;
   userRole: UserRole | null;
   loading: boolean;
@@ -30,25 +30,27 @@ interface AuthContextType {
   signup: (email: string, pass: string, nome: string, cognome: string) => Promise<void>;
   logout: () => Promise<void>;
   error: string | null;
+  setError: (error: string | null) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [user, setUser] = useState<User | null>(null);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            setCurrentUser(user);
+            setUser(user);
             if (user) {
                 const userDocRef = doc(db, 'utenti_master', user.uid);
                 const userDoc = await getDoc(userDocRef);
                 if (userDoc.exists()) {
                     setUserData(userDoc.data() as UserData);
                 } else {
+                    // Se l'utente non ha un documento, ne creiamo uno di default
                     const defaultData: UserData = {
                       nome: user.displayName?.split(' ')[0] || 'Utente',
                       cognome: user.displayName?.split(' ')[1] || 'Nuovo',
@@ -96,6 +98,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         const user = userCredential.user;
+        // Crea il documento utente con ruolo 'user' di default
         await setDoc(doc(db, 'utenti_master', user.uid), {
           nome,
           cognome,
@@ -113,19 +116,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       try {
         await signOut(auth);
-      } catch (e: any) {
+      } catch (e: any) { 
         setError(e.message);
       }
     }, []);
 
-    // Creiamo il valore del contesto in modo STABILE con useMemo
-    // L'oggetto `value` viene ricreato SOLO se una delle dipendenze (dati reali) cambia.
+    // Valori memoizzati per evitare re-render non necessari
     const value = useMemo(() => {
         const userRole = userData?.ruolo || null;
         const isAdmin = userRole === 'admin';
 
         return {
-            currentUser,
+            user,
             userData,
             userRole,
             loading,
@@ -134,9 +136,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             loginWithGoogle,
             signup,
             logout,
-            error
+            error,
+            setError
         };
-    }, [currentUser, userData, loading, error, login, loginWithGoogle, signup, logout]);
+    }, [user, userData, loading, error, login, loginWithGoogle, signup, logout]);
 
     return (
         <AuthContext.Provider value={value}>

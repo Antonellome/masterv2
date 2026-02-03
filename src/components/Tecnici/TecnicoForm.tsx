@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Grid, FormControlLabel, Switch, MenuItem, Divider, Typography
+    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Grid, FormControlLabel, Switch, MenuItem, Divider, Typography, CircularProgress
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -42,9 +42,10 @@ interface TecnicoFormProps {
     tecnico: Tecnico | null;
     ditte: Ditta[];
     categorie: Categoria[];
+    isSaving?: boolean; // Nuova prop
 }
 
-const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnico, ditte, categorie }) => {
+const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnico, ditte, categorie, isSaving = false }) => {
 
     const [formData, setFormData] = useState<Partial<Tecnico>>({});
 
@@ -118,7 +119,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                             size={{
                                 xs: 12,
                                 sm: 4
-                            }}><TextField name="email" label="Email" value={formData.email || ''} onChange={handleChange} fullWidth /></Grid>
+                            }}><TextField name="email" label="Email" value={formData.email || ''} onChange={handleChange} fullWidth required/></Grid>
                         <Grid
                             size={{
                                 xs: 12,
@@ -260,8 +261,10 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                 </LocalizationProvider>
             </DialogContent>
             <DialogActions sx={{ p: '16px 24px' }}>
-                <Button onClick={onClose}>Annulla</Button>
-                <Button onClick={handleSave} variant="contained" color="primary">Salva</Button>
+                <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
+                <Button onClick={handleSave} variant="contained" color="primary" disabled={isSaving} startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : null}>
+                    {isSaving ? 'Salvataggio...' : 'Salva'}
+                </Button>
             </DialogActions>
         </Dialog>
     );

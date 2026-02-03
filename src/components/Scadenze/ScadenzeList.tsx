@@ -107,7 +107,6 @@ const ScadenzeList = ({ scadenze, filter }: ScadenzeListProps) => {
             paginationModel: { pageSize: 50 }
           }
         }}
-        pageSizeOptions={[25, 50, 100]}
       />
     </Box>
   );

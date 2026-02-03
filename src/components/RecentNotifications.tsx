@@ -1,6 +1,6 @@
 import { Typography, Box, List, ListItem, ListItemText, Button, Badge } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { useNotifications } from '@/hooks/useNotifications.tsx';
+import { useNotifications } from '@/contexts/NotificationContext';
 import StyledCard from './StyledCard';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 

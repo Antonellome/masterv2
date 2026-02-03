@@ -5,6 +5,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 const AnagrafichePage: React.FC = () => {
     const location = useLocation();
 
+    // Determina la tab corrente basandosi sul percorso. Default a 'clienti'
     const currentTab = location.pathname.split('/')[2] || 'clienti';
 
     const tabs = [
@@ -18,7 +19,7 @@ const AnagrafichePage: React.FC = () => {
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', backgroundColor: 'background.paper', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', backgroundColor: 'background.paper', flexShrink: 0 }}>
                 <Tabs 
                     value={currentTab}
                     aria-label="schede anagrafiche"
@@ -40,6 +41,7 @@ const AnagrafichePage: React.FC = () => {
                 </Tabs>
             </Box>
             <Box sx={{ flexGrow: 1, pt: 3, display: 'flex', flexDirection: 'column' }}>
+                {/* Il contenuto della tab selezionata (es. GestioneClienti) viene renderizzato qui */}
                 <Outlet />
             </Box>
         </Box>

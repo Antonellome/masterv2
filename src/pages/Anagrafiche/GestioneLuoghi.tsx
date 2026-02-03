@@ -3,10 +3,9 @@ import type { FormField, Luogo } from '@/models/definitions';
 import type { GridColDef } from '@mui/x-data-grid';
 import { useData } from '@/hooks/useData';
 import { useMemo } from 'react';
-import { Box, CircularProgress } from '@mui/material';
 
 const GestioneLuoghi = () => {
-    const { clienti, luoghi, loading } = useData();
+    const { clienti } = useData();
 
     const clientiMap = useMemo(() => {
         if (!clienti) return new Map();
@@ -36,27 +35,20 @@ const GestioneLuoghi = () => {
             flex: 1,
             minWidth: 150,
             editable: true,
-            valueGetter: (params) => clientiMap.get(params.value) || params.value,
+            type: 'singleSelect',
+            valueOptions: Array.from(clientiMap.entries()).map(([value, label]) => ({ value, label }))
         },
     ];
 
-    if (loading) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
-    }
-
     return (
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <GestioneAnagrafica<Luogo>
-                collectionName="luoghi"
-                title="Gestione Luoghi"
-                data={luoghi} // Passaggio dei dati mancante
-                loading={loading}
-                fields={fields}
-                columns={columns}
-                anagraficaType="luogo"
-                lookupMaps={{ clienteId: clientiMap }}
-            />
-        </Box>
+        <GestioneAnagrafica<Luogo>
+            collectionName="luoghi"
+            title="Gestione Luoghi"
+            fields={fields}
+            columns={columns}
+            anagraficaType="luogo"
+            lookupMaps={{ clienteId: clientiMap }}
+        />
     );
 };
 

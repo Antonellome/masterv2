@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, getDocs, doc, getDoc, DocumentData } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, deleteDoc, DocumentData } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { Paper, Typography, Button, CircularProgress, Box, Grid, TextField, Autocomplete, IconButton, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Paper, Typography, Button, CircularProgress, Box, TextField, Autocomplete, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert } from '@mui/material';
+import Grid from '@mui/material/Grid'; // <-- IMPORTAZIONE CORRETTA
 import { DataGrid, GridToolbar, GridColDef } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -12,8 +13,10 @@ import 'dayjs/locale/it';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Tecnico, Cliente, Nave, Luogo } from '@/models/definitions';
 import { useNavigate } from 'react-router-dom';
+import ConfirmationDialog from '@/components/ConfirmationDialog';
 
 dayjs.locale('it');
 
@@ -51,12 +54,7 @@ interface FilterState {
 
 // --- COMPONENTE DIALOGO DI VISUALIZZAZIONE ---
 const ViewInfoRow = ({ label, value }: { label: string, value: React.ReactNode }) => (
-    <Grid
-        sx={{ mb: 2 }}
-        size={{
-            xs: 12,
-            sm: 6
-        }}>
+    <Grid xs={12} sm={6} sx={{ mb: 2 }}>
         <Typography variant="caption" color="text.secondary" component="div">{label}</Typography>
         <Typography variant="body1">{value || '--'}</Typography>
     </Grid>
@@ -115,7 +113,7 @@ const RapportinoViewDialog = ({ open, onClose, rapportinoId }: { open: boolean, 
                         <ViewInfoRow label="Cliente" value={rapportino.clienteNome} />
                         <ViewInfoRow label="Orario" value={`Dalle ${formatTimestamp(rapportino.oraInizio)} alle ${formatTimestamp(rapportino.oraFine)}`} />
                         <ViewInfoRow label="Ore Lavorate" value={rapportino.oreLavorate ? `${rapportino.oreLavorate}h` : 'N/D'} />
-                        <Grid size={12}>
+                        <Grid xs={12}>
                             <Typography variant="caption" color="text.secondary" component="div">Descrizione Lavori Svolti</Typography>
                             <Paper variant="outlined" sx={{ p: 2, mt: 0.5, whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto'}}>
                                 {rapportino.descrizione || 'Nessuna descrizione fornita.'}
@@ -146,6 +144,11 @@ const RicercaAvanzata: React.FC = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedRapportinoId, setSelectedRapportinoId] = useState<string | null>(null);
 
+  // --- STATO PER ELIMINAZIONE ---
+  const [isConfirmOpen, setConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
+
   const handleOpenViewDialog = (id: string) => {
     setSelectedRapportinoId(id);
     setViewDialogOpen(true);
@@ -156,10 +159,29 @@ const RicercaAvanzata: React.FC = () => {
     setSelectedRapportinoId(null);
   };
   
-  // ** NUOVA AZIONE DI STAMPA **
   const handlePrint = (id: string) => {
-      // Apre una nuova scheda del browser puntando direttamente alla pagina di stampa dedicata.
       window.open(`/rapportini/stampa/${id}`, '_blank');
+  };
+
+  // --- FUNZIONI DI ELIMINAZIONE ---
+  const handleDeleteRequest = (id: string) => {
+      setItemToDelete(id);
+      setConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+      if (itemToDelete) {
+          try {
+              await deleteDoc(doc(db, 'rapportini', itemToDelete));
+              setSnackbar({ open: true, message: 'Rapportino eliminato con successo!', severity: 'success' });
+              fetchData(); // Ricarica i dati per aggiornare la tabella
+          } catch (error) {
+              console.error("Errore durante l'eliminazione del rapportino:", error);
+              setSnackbar({ open: true, message: "Errore durante l'eliminazione.", severity: 'error' });
+          }
+      }
+      setConfirmOpen(false);
+      setItemToDelete(null);
   };
 
   const fetchData = useCallback(async () => {
@@ -284,10 +306,13 @@ const RicercaAvanzata: React.FC = () => {
                 <IconButton color="default" onClick={() => handleOpenViewDialog(params.row.id)} title="Visualizza Dettagli"><VisibilityIcon /></IconButton>
                 <IconButton color="primary" onClick={() => navigate(`/rapportini/${params.row.id}`)} title="Modifica Rapportino"><EditIcon /></IconButton>
                 <IconButton color="secondary" onClick={() => handlePrint(params.row.id)} title="Stampa Rapportino"><PrintIcon /></IconButton>
+                <IconButton color="error" onClick={() => handleDeleteRequest(params.row.id)} title="Elimina Rapportino"><DeleteIcon /></IconButton>
             </Box>
         ),
     },
   ];
+  
+  const handleCloseSnackbar = () => setSnackbar(null);
 
   if (loading) {
       return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
@@ -301,63 +326,38 @@ const RicercaAvanzata: React.FC = () => {
                     <Typography variant="h6" component="h2">Filtri di Ricerca</Typography>
                 </Box>
                 <Grid container spacing={2} alignItems="center">
-                    <Grid
-                        size={{
-                            xs: 12,
-                            sm: 6,
-                            md: 3
-                        }}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                    <Grid
-                        size={{
-                            xs: 12,
-                            sm: 6,
-                            md: 3
-                        }}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                    <Grid
-                        size={{
-                            xs: 12,
-                            sm: 6,
-                            md: 3
-                        }}>
+                    <Grid xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                    <Grid xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                    <Grid xs={12} sm={6} md={3}>
                         <Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, val) => handleFilterChange('tecnico', val)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
                     </Grid>
-                     <Grid
-                         size={{
-                             xs: 12,
-                             sm: 6,
-                             md: 3
-                         }}>
+                     <Grid xs={12} sm={6} md={3}>
                         <Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, val) => handleFilterChange('nave', val)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
                     </Grid>
-                     <Grid
-                         size={{
-                             xs: 12,
-                             sm: 6,
-                             md: 3
-                         }}>
+                     <Grid xs={12} sm={6} md={3}>
                         <Autocomplete options={options.luoghi} getOptionLabel={(o) => o.nome || ''} value={filters.luogo} onChange={(_, val) => handleFilterChange('luogo', val)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
                     </Grid>
-                     <Grid
-                         size={{
-                             xs: 12,
-                             sm: 6,
-                             md: 3
-                         }}>
+                     <Grid xs={12} sm={6} md={3}>
                         <Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, val) => handleFilterChange('cliente', val)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} isOptionEqualToValue={(option, value) => option.id === value.id} />
                     </Grid>
-                    <Grid container justifyContent="flex-end" size={12}>
+                    <Grid xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
                         <Button onClick={resetFilters} variant="outlined">Azzera Filtri</Button>
                     </Grid>
                 </Grid>
             </Paper>
 
-            <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <DataGrid
                     rows={filteredRapportini || []}
                     columns={columns}
                     getRowId={(row) => row.id}
                     localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
                     slots={{ toolbar: GridToolbar }}
+                    slotProps={{
+                        toolbar: {
+                            showQuickFilter: true,
+                        },
+                    }}
                     initialState={{
                         pagination: { paginationModel: { pageSize: 25 } },
                         sorting: {
@@ -374,6 +374,22 @@ const RicercaAvanzata: React.FC = () => {
                 onClose={handleCloseViewDialog} 
                 rapportinoId={selectedRapportinoId} 
             />
+
+            <ConfirmationDialog
+                open={isConfirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                onConfirm={handleConfirmDelete}
+                title="Conferma Eliminazione Rapportino"
+                message="Sei sicuro di voler eliminare questo rapportino? L'azione è irreversibile e rimuoverà permanentemente il documento."
+            />
+
+            {snackbar && (
+                <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+                    <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+                        {snackbar.message}
+                    </Alert>
+                </Snackbar>
+            )}
 
           </Box>
       </LocalizationProvider>

@@ -1,7 +1,8 @@
 import React from 'react';
 import { useState, useEffect, useMemo } from 'react';
-import { doc, addDoc, updateDoc, deleteDoc, serverTimestamp, collection, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { doc, updateDoc, deleteDoc, collection, onSnapshot, Timestamp } from 'firebase/firestore';
+import { db, app } from '@/firebase'; // Importa anche 'app'
+import { getFunctions, httpsCallable } from 'firebase/functions'; // Import per le Cloud Functions
 import {
     Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Snackbar, Alert, CircularProgress, Tabs, Tab
 } from '@mui/material';
@@ -38,6 +39,7 @@ const GestioneTecnici = () => {
     const [error, setError] = useState<string | null>(null);
 
     const [isFormOpen, setFormOpen] = useState(false);
+    const [saving, setSaving] = useState(false); // Stato per il caricamento del salvataggio
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [itemToView, setItemToView] = useState<ItemToView | null>(null);
@@ -54,7 +56,7 @@ const GestioneTecnici = () => {
         }, err => { setError("Errore caricamento tecnici."); setLoading(false); console.error(err); });
 
         const unsubDitte = onSnapshot(collection(db, 'ditte'), snapshot => setDitte(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Ditta))), err => console.error("Errore caricamento ditte:", err));
-        const unsubCategorie = onSnapshot(collection(db, 'categorie'), snapshot => setCategorie(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Categoria))), err => console.error("Errore caricamento categorie:", err));
+        const unsubCategorie = onSnapshot(collection(db, 'categorie'), snapshot => setCategorie(snapshot.docs.map(c => ({ id: d.id, ...d.data() } as Categoria))), err => console.error("Errore caricamento categorie:", err));
 
         return () => { unsubTecnici(); unsubDitte(); unsubCategorie(); };
     }, []);
@@ -63,22 +65,35 @@ const GestioneTecnici = () => {
     const refreshData = () => {};
 
     const handleSave = async (data: Partial<Tecnico>) => {
-        try {
-            const dataToSave = { ...data, lastModified: serverTimestamp() };
-            if (selectedTecnico?.id) {
-                await updateDoc(doc(db, 'tecnici', selectedTecnico.id), dataToSave);
-                setSnackbar({ open: true, message: 'Tecnico aggiornato!', severity: 'success' });
-            } else {
-                await addDoc(collection(db, 'tecnici'), { ...dataToSave, attivo: true, sincronizzazioneAttiva: false });
-                setSnackbar({ open: true, message: 'Tecnico creato!', severity: 'success' });
-            }
-        } catch (dbError) {
-            console.error("Errore salvataggio:", dbError);
-            setSnackbar({ open: true, message: "Errore nel salvataggio.", severity: 'error' });
+        const { email, ...profilo } = data;
+
+        if (!email) {
+            setSnackbar({ open: true, message: "L'email è un campo obbligatorio per creare o aggiornare un tecnico.", severity: 'warning' });
+            return;
         }
-        setFormOpen(false);
-        setSelectedTecnico(null);
+
+        setSaving(true);
+        const functions = getFunctions(app, 'europe-west1');
+        const provisionTecnico = httpsCallable(functions, 'provisionTecnico');
+
+        try {
+            // La Cloud Function gestisce sia la creazione che l'aggiornamento.
+            const result = await provisionTecnico({ email, ...profilo });
+            console.log('Risultato Cloud Function:', result.data);
+
+            const message = selectedTecnico?.id ? 'Tecnico aggiornato con successo!' : 'Tecnico creato con successo!';
+            setSnackbar({ open: true, message, severity: 'success' });
+
+        } catch (error: any) {
+            console.error("Errore durante la chiamata alla Cloud Function 'provisionTecnico':", error);
+            setSnackbar({ open: true, message: error.message || 'Si è verificato un errore sul server.', severity: 'error' });
+        } finally {
+            setSaving(false);
+            setFormOpen(false);
+            setSelectedTecnico(null);
+        }
     };
+
 
     const handleStatusChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
         if (!tecnico.id) return;
@@ -162,11 +177,11 @@ const GestioneTecnici = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
                 <Tabs value={currentTab} onChange={handleTabChange}>
-                    <Tab label="Gestione Completa" />
+                    <Tab label="Lista Tecnici" />
                     <Tab label="Accesso App" />
                 </Tabs>
             </Box>
-            <Box sx={{ flexGrow: 1, pt: 3, overflow: 'hidden' }}>
+            <Box sx={{ flexGrow: 1, pt: 3 }}>
                 {currentTab === 0 && (
                     <TecniciList 
                         tecnici={tecnici}
@@ -187,7 +202,7 @@ const GestioneTecnici = () => {
                 )}
             </Box>
             
-            <TecnicoForm open={isFormOpen} onClose={() => { setFormOpen(false); setSelectedTecnico(null); }} onSave={handleSave} tecnico={selectedTecnico} ditte={ditte} categorie={categorie}/>
+            <TecnicoForm open={isFormOpen} onClose={() => { setFormOpen(false); setSelectedTecnico(null); }} onSave={handleSave} tecnico={selectedTecnico} ditte={ditte} categorie={categorie} isSaving={saving}/>
             {itemToView && <DettaglioItemDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} items={itemToView.dettagli} title={itemToView.titolo} />}
             <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}><DialogTitle>Conferma Eliminazione</DialogTitle><DialogContent><DialogContentText>Sei sicuro di voler eliminare il tecnico <b>{tecnicoToDelete?.nome} {tecnicoToDelete?.cognome}</b>? L&apos;azione è irreversibile.</DialogContentText></DialogContent><DialogActions><Button onClick={() => setDeleteDialogOpen(false)}>Annulla</Button><Button onClick={handleConfirmDelete} color="error" variant="contained">Elimina</Button></DialogActions></Dialog>
             <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}><Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>

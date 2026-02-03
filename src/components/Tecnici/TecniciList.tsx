@@ -116,7 +116,7 @@ const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieM
     });
 
     return (
-        <Box sx={{ height: '75vh', width: '100%' }}>
+        <Box sx={{ height: '100%', width: '100%' }}>
             <DataGrid
                 rows={tecnici || []}
                 columns={allColumns}

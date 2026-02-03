@@ -173,20 +173,29 @@ function GestioneAnagrafica<T extends Anagrafica>({
                 <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddNew}>Nuovo</Button>
             </Box>
 
-            <Box sx={{ flex: 1, width: '100%' }}>
+            <Box sx={{ flex: 1, width: '100%', minHeight: 0 }}>
                 <DataGrid
                     sx={{ border: 0 }}
                     rows={data || []}
                     columns={memoizedColumns}
                     localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
                     slots={{ toolbar: GridToolbar }}
+                    slotProps={{
+                      toolbar: {
+                        showQuickFilter: true,
+                      },
+                    }}
                     processRowUpdate={processRowUpdate}
                     onProcessRowUpdateError={(error) => console.error(error)}
                     initialState={{
                         sorting: {
-                            sortModel: initialSortModel,
+                            sortModel: initialSortModel || [],
+                        },
+                        pagination: {
+                            paginationModel: { pageSize: 25, page: 0 },
                         },
                     }}
+                    pageSizeOptions={[10, 25, 50, 100]}
                     paginationModel={paginationModel}
                     onPaginationModelChange={setPaginationModel}
                     checkboxSelection

@@ -1,118 +1,125 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+// src/pages/SignupPage.tsx
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+// import { useAuth } from "@/hooks/useAuth"; // VECCHIO IMPORT SBAGLIATO
+import { useAuth } from "@/contexts/AuthContext"; // NUOVO IMPORT CORRETTO
 import {
   Container,
   Box,
+  Typography,
   TextField,
   Button,
-  Typography,
-  Alert,
-  CircularProgress,
-  Paper,
-  Avatar,
-  Grid
-} from '@mui/material';
-import LockPersonIcon from '@mui/icons-material/LockPerson';
+  Grid,
+} from "@mui/material";
 
 const SignupPage = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passError, setPassError] = useState('');
-
-  // Dobbiamo importare la nuova funzione `signup`
-  const { user, signup, error, loading } = useAuth(); 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [nome, setNome] = useState("");
+  const [cognome, setCognome] = useState("");
+  const { signup, error } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (user) {
-      navigate('/'); // Se l'utente è già loggato o si registra con successo, vai alla dashboard
-    }
-  }, [user, navigate]);
-
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) {
-      setPassError('Le password non coincidono');
-      return;
-    }
-    setPassError('');
-    if (email && password) {
-      signup(email, password);
+    try {
+      await signup(email, password, nome, cognome);
+      // Se la registrazione ha successo, l'onAuthStateChanged nell'AuthContext
+      // rileverà il nuovo utente e lo stato verrà aggiornato.
+      // A questo punto, il ProtectedRoute dovrebbe far passare l'utente alla dashboard.
+      navigate("/");
+    } catch (err: any) {
+      // L'errore viene già gestito e memorizzato nel contesto da useAuth
+      console.error("Errore durante la registrazione:", err);
     }
   };
 
   return (
-    <Container component='main' maxWidth='xs'>
-      <Paper elevation={6} sx={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 4, borderRadius: '16px' }}>
-        <Avatar sx={{ m: 1, bgcolor: 'secondary.main' }}>
-            <LockPersonIcon />
-        </Avatar>
-        <Typography component='h1' variant='h5'>
+    <Container maxWidth="xs">
+      <Box
+        sx={{
+          marginTop: 8,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+        }}
+      >
+        <Typography component="h1" variant="h5">
           Registra Nuovo Utente
         </Typography>
-        
-        {/* Mostra errore di registrazione da Firebase o di password non coincidenti */}
-        {(error || passError) && <Alert severity='error' sx={{ width: '100%', mt: 2 }}>{error || passError}</Alert>}
-        
-        <Box component='form' onSubmit={handleSignup} sx={{ mt: 1, width: '100%' }}>
-          <TextField
-            margin='normal'
-            required
-            fullWidth
-            id='email'
-            label='Indirizzo Email'
-            name='email'
-            autoComplete='email'
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-          />
-          <TextField
-            margin='normal'
-            required
-            fullWidth
-            name='password'
-            label='Password'
-            type='password'
-            id='password'
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-          />
-          <TextField
-            margin='normal'
-            required
-            fullWidth
-            name='confirmPassword'
-            label='Conferma Password'
-            type='password'
-            id='confirmPassword'
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            disabled={loading}
-          />
+        <Box component="form" noValidate onSubmit={handleSignup} sx={{ mt: 3 }}>
+          <Grid container spacing={2}>
+            <Grid xs={12} sm={6}>
+              <TextField
+                autoComplete="given-name"
+                name="firstName"
+                required
+                fullWidth
+                id="firstName"
+                label="Nome"
+                autoFocus
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+              />
+            </Grid>
+            <Grid xs={12} sm={6}>
+              <TextField
+                required
+                fullWidth
+                id="lastName"
+                label="Cognome"
+                name="lastName"
+                autoComplete="family-name"
+                value={cognome}
+                onChange={(e) => setCognome(e.target.value)}
+              />
+            </Grid>
+            <Grid xs={12}>
+              <TextField
+                required
+                fullWidth
+                id="email"
+                label="Indirizzo Email"
+                name="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Grid>
+            <Grid xs={12}>
+              <TextField
+                required
+                fullWidth
+                name="password"
+                label="Password"
+                type="password"
+                id="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </Grid>
+          </Grid>
+          {error && <Typography color="error" sx={{ mt: 2 }}>{error}</Typography>}
           <Button
-            type='submit'
+            type="submit"
             fullWidth
-            variant='contained'
-            sx={{ mt: 3, mb: 2, py: 1.5, borderRadius: '8px' }}
-            disabled={loading}
+            variant="contained"
+            sx={{ mt: 3, mb: 2 }}
           >
-            {loading ? <CircularProgress size={24} color="inherit" /> : 'Registrati'}
+            Registrati
           </Button>
           <Grid container justifyContent="flex-end">
             <Grid>
-                <Link to="/login" style={{ textDecoration: 'none' }}>
-                    <Typography variant="body2" color="primary">
-                        Hai già un account? Accedi
-                    </Typography>
-                </Link>
+              <Link to="/login">
+                <Typography variant="body2">
+                    Hai già un account? Accedi
+                </Typography>
+              </Link>
             </Grid>
           </Grid>
         </Box>
-      </Paper>
+      </Box>
     </Container>
   );
 };
