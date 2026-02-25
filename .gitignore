@@ -1,5 +1,36 @@
-CIAO Sembra che ci sia stato un errore interno nell'esecuzione del comando precedente. Mi scuso per l'inconveniente.
+# Dependencies
+/node_modules
+/functions/node_modules
 
-CIAO Riproverò a scrivere il contenuto nel file `.gitignore`.CIAO Mi scuso ancora, ma continuo a riscontrare un errore interno che mi impedisce di eseguire il comando di scrittura del file `.gitignore`. Sembra esserci un problema con l'ambiente in cui sto cercando di utilizzare gli strumenti.
+# Build artifacts
+/dist
+/functions/lib
 
-CIAO Purtroppo, finché questo problema tecnico non sarà risolto, non posso procedere con la modifica del file `.gitignore` o con qualsiasi altra operazione che richieda l'utilizzo degli strumenti.
+# Log files
+*.log
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# IDE files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Firebase
+.firebase
+firebase-debug.log
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary files
+*.tmp
