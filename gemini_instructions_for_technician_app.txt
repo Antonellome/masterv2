@@ -1,0 +1,22 @@
+Ciao Gemini,
+
+Ci troviamo di nuovo nell'ambiente di sviluppo dell'**app Tecnici**.
+
+**Problema Finale Identificato:**
+Dall'app Master abbiamo analizzato i dati su Firestore e trovato la causa definitiva del fallimento delle notifiche per categoria. Il problema è doppio:
+
+1.  **Nome Campo Errati:** I documenti nella collezione `/tecnici` salvano l'ID della categoria in un campo di primo livello chiamato `categoriaId`, non in `categoria.id` come la nostra Cloud Function si aspetta.
+2.  **`fcmToken` Mancante:** I profili dei tecnici che abbiamo ispezionato non hanno il campo `fcmToken`.
+
+**Azione Richiesta:**
+Ignoriamo per ora il problema del token mancante (presumiamo che venga impostato al primo login del tecnico). Dobbiamo concentrarci sulla correzione della Cloud Function.
+
+**Modifica la funzione `sendPushNotifications` per adattarla ai dati esistenti:**
+
+1.  **Localizza la Query:** Trova la parte della funzione dove viene costruita la query per recuperare i tecnici in base alla categoria.
+2.  **Correggi il Campo:** Modifica la condizione `where` della query. Deve filtrare sul campo `categoriaId` invece che su `categoria.id`.
+    *   **DA:** `where('categoria.id', 'in', categoryIds)`
+    *   **A:** `where('categoriaId', 'in', categoryIds)`
+3.  **Rifai il Deploy:** Esegui nuovamente il deploy della funzione aggiornata.
+
+Questa modifica allineerà la logica della funzione alla struttura dati reale del database, risolvendo il problema principale. Procedi.

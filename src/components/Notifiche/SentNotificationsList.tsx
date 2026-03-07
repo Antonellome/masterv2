@@ -2,7 +2,6 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
     Typography,
     Box,
-    ListItemText,
     CircularProgress,
     Paper,
     IconButton,
@@ -14,9 +13,14 @@ import {
     Button,
     Snackbar,
     Alert,
-    Tooltip
+    List,
+    ListItem,
+    ListItemText,
+    ListItemAvatar,
+    Avatar,
+    Divider
 } from '@mui/material';
-import { Delete as DeleteIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Notifications as NotificationsIcon } from '@mui/icons-material';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import dayjs from 'dayjs';
@@ -64,43 +68,35 @@ const SentNotificationsList = () => {
         if (confirmDelete.id) {
             try {
                 await deleteDoc(doc(db, 'notificheRichieste', confirmDelete.id));
-                setSnackbar({ open: true, message: 'Notifica inviata eliminata con successo', severity: 'info' });
+                setSnackbar({ open: true, message: 'Notifica eliminata con successo', severity: 'info' });
             } catch (error) {
-                console.error("Errore durante l'eliminazione della notifica inviata:", error);
+                console.error("Errore durante l'eliminazione:", error);
                 setSnackbar({ open: true, message: 'Errore durante l\'eliminazione', severity: 'error' });
             }
         }
         setConfirmDelete({ open: false, id: null });
     };
 
-    const renderRecipients = (notifica: NotificaRichiesta) => {
-        const recipients = [...(notifica.to_names || []), ...(notifica.to_categories || []).map((c: string) => `Cat: ${c}`)];
-        if (recipients.length === 0) {
-            return <Typography variant="body2" color="text.secondary">Nessun destinatario</Typography>;
+    const renderRecipientsText = (notifica: NotificaRichiesta): string => {
+        if (notifica.sendToAll) {
+            return 'Tutti i tecnici';
         }
 
-        const displayLimit = 3;
-        const displayedRecipients = recipients.slice(0, displayLimit);
-        const hiddenCount = recipients.length - displayedRecipients.length;
+        // CORREZIONE: Leggo dai campi _names per la visualizzazione
+        const toNames = notifica.to_names || [];
+        const toCategoryNames = notifica.to_category_names || [];
+        
+        const recipients = [
+            ...toNames,
+            ...toCategoryNames.map(c => `Cat: ${c}`)
+        ];
 
-        return (
-            <Box>
-                {displayedRecipients.map((recipient, index) => (
-                    <Typography key={index} variant="body2" sx={{ fontWeight: 'bold', display: 'block' }} noWrap>
-                        {recipient}
-                    </Typography>
-                ))}
-                {hiddenCount > 0 && (
-                    <Tooltip title={recipients.slice(displayLimit).join(', ')}>
-                        <Typography variant="caption" color="text.secondary">
-                            + {hiddenCount} altri...
-                        </Typography>
-                    </Tooltip>
-                )}
-            </Box>
-        );
+        if (recipients.length === 0) {
+            return 'Destinatari non specificati';
+        }
+
+        return recipients.join(', ');
     };
-
 
     if (loading) {
         return <Box display="flex" justifyContent="center" p={4}><CircularProgress /></Box>;
@@ -108,7 +104,7 @@ const SentNotificationsList = () => {
     if (sentNotifications.length === 0) {
         return (
              <Box sx={{ p: { xs: 0.5, sm: 1 } }}>
-                <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
+                <Paper elevation={3} sx={{ p: 4, textAlign: 'center', mt: 2 }}>
                     <Typography color="text.secondary">Nessuna notifica inviata.</Typography>
                 </Paper>
             </Box>
@@ -117,44 +113,44 @@ const SentNotificationsList = () => {
 
     return (
         <>
-            <Box sx={{ p: { xs: 0.5, sm: 1 } }}>
-                {sentNotifications.map((notifica) => (
-                    <Paper 
-                        key={notifica.id} 
-                        elevation={3}
-                        sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            p: 2,
-                            mb: 1.5,
-                            cursor: 'pointer',
-                            position: 'relative',
-                            transition: 'background-color 0.2s ease-in-out',
-                            '&:hover': { backgroundColor: 'action.hover' }
-                        }}
-                        onClick={() => handleOpenDetail(notifica)}
-                    >
-                        <Box sx={{ flex: '0 0 40%', pr: 2 }}>
-                            {renderRecipients(notifica)}
-                        </Box>
-
-                        <ListItemText
-                            primary={notifica.title}
-                            secondary={`Inviata il: ${dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY HH:mm')}`}
-                            sx={{ flex: '1 1 auto', m: 0 }}
-                            primaryTypographyProps={{ variant: 'h6' }}
-                            secondaryTypographyProps={{ color: 'text.secondary' }}
-                        />
-                         <IconButton
-                            onClick={(e) => handleDeleteClick(e, notifica.id!)}
-                            size="small"
-                            sx={{ position: 'absolute', top: 8, right: 8, color: 'action.active' }}
-                        >
-                            <DeleteIcon fontSize="small" />
-                        </IconButton>
-                    </Paper>
-                ))}
-            </Box>
+            <Paper elevation={3} sx={{ mt: 2 }}>
+                <List sx={{ padding: 0 }}>
+                    {sentNotifications.map((notifica, index) => (
+                        <React.Fragment key={notifica.id}>
+                            <ListItem
+                                secondaryAction={
+                                    <IconButton edge="end" aria-label="delete" onClick={(e) => handleDeleteClick(e, notifica.id!)}>
+                                        <DeleteIcon />
+                                    </IconButton>
+                                }
+                                button
+                                onClick={() => handleOpenDetail(notifica)}
+                            >
+                                <ListItemAvatar>
+                                    <Avatar>
+                                        <NotificationsIcon />
+                                    </Avatar>
+                                </ListItemAvatar>
+                                <ListItemText
+                                    primary={notifica.title || '(Nessun titolo)'}
+                                    secondary={
+                                        <Box component="span" sx={{ display: 'block' }}>
+                                            <Typography component="span" variant="body2" color="text.primary" sx={{ fontWeight: 'bold' }}>
+                                                {renderRecipientsText(notifica)}
+                                            </Typography>
+                                            <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
+                                                {`Inviata il: ${dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY HH:mm')}`}
+                                            </Typography>
+                                        </Box>
+                                    }
+                                    primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
+                                />
+                            </ListItem>
+                            {index < sentNotifications.length - 1 && <Divider variant="inset" component="li" />}
+                        </React.Fragment>
+                    ))}
+                </List>
+            </Paper>
 
             <Suspense fallback={<CircularProgress />}>
                 {isDetailOpen && (
@@ -173,7 +169,7 @@ const SentNotificationsList = () => {
                 <DialogTitle>Conferma Eliminazione</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        Sei sicuro di voler eliminare questa notifica inviata? L&apos;azione è irreversibile.
+                        Sei sicuro di voler eliminare questa notifica? L'azione è irreversibile.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

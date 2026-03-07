@@ -1,0 +1,12 @@
+import React from 'react';
+
+const App = () => {
+  return (
+    <div>
+      <h1>App non configurata</h1>
+      <p>Questo è un file App.jsx obsoleto. L'applicazione principale è in App.tsx</p>
+    </div>
+  );
+};
+
+export default App;

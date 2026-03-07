@@ -1,102 +1,87 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button,
-    Typography, Box, CircularProgress, Chip, Avatar, List, ListItem, ListItemAvatar, ListItemText
+    Typography, Box, Chip, Avatar, List, ListItem, ListItemAvatar, ListItemText, Divider
 } from '@mui/material';
-import { Person as PersonIcon, Category as CategoryIcon } from '@mui/icons-material';
-import { collection, getDocs, query, where, documentId, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase'; // <-- Percorso corretto
+import { Person as PersonIcon, Category as CategoryIcon, Group as GroupIcon } from '@mui/icons-material';
 import dayjs from 'dayjs';
-import type { Notifica, Tecnico } from '@/models/definitions'; // <-- Percorso e tipo corretti
+import type { NotificaRichiesta } from '../../types/definitions';
+import { Timestamp } from 'firebase/firestore';
 
 interface DettaglioNotificaDialogProps {
     open: boolean;
     onClose: () => void;
-    notifica: Notifica | null; // <-- Usiamo il tipo unificato
+    notifica: NotificaRichiesta | null;
 }
 
 const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open, onClose, notifica }) => {
-    const [destinatari, setDestinatari] = useState<Tecnico[]>([]);
-    const [loading, setLoading] = useState(false);
 
-    const target = notifica?.target;
-    const targetId = notifica?.targetId;
+    const renderDestinatari = () => {
+        if (!notifica) return null;
 
-    useEffect(() => {
-        const fetchDestinatari = async (ids: string[]) => {
-            if (!ids || ids.length === 0) return;
-            setLoading(true);
-            try {
-                const q = query(collection(db, 'tecnici'), where(documentId(), 'in', ids));
-                const querySnapshot = await getDocs(q);
-                const tecniciList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tecnico));
-                setDestinatari(tecniciList);
-            } catch (error) {
-                console.error("Errore nel recuperare i destinatari: ", error);
-                setDestinatari([]);
-            }
-            setLoading(false);
-        };
-
-        if (target === 'tecnici' && targetId) {
-            fetchDestinatari([targetId]);
-        } else {
-            setDestinatari([]);
-        }
-
-    }, [target, targetId]);
-
-    const renderDestinatari = useMemo(() => {
-        if (loading) return <CircularProgress size={24} />;
-
-        if (target === 'categoria' && targetId) {
-            return <Chip icon={<CategoryIcon />} label={targetId} color="primary" variant="filled" />;
-        }
-
-        if (destinatari.length > 0) {
+        if (notifica.sendToAll) {
             return (
-                <List dense sx={{ p: 0 }}>
-                    {destinatari.map((t, index) => (
-                        <ListItem key={t.id || index} disableGutters>
-                            <ListItemAvatar sx={{minWidth: 40}}>
-                                <Avatar sx={{ width: 32, height: 32 }}>
-                                    <PersonIcon />
-                                </Avatar>
-                            </ListItemAvatar>
-                            {/* Corretto: uso di name e cognome */}
-                            <ListItemText primary={`${t.name} ${t.cognome || ''}`} />
-                        </ListItem>
-                    ))}
-                </List>
+                <ListItem disableGutters>
+                    <ListItemAvatar sx={{ minWidth: 40 }}>
+                        <Avatar sx={{ width: 32, height: 32 }}><GroupIcon /></Avatar>
+                    </ListItemAvatar>
+                    <ListItemText primary="Tutti i tecnici" />
+                </ListItem>
             );
         }
 
-        if (target === 'all') {
-            return <Typography variant="body2" color="text.secondary">A tutti gli utenti</Typography>;
+        const tecnici = notifica.to_names || [];
+        const categorie = notifica.to_category_names || [];
+
+        if (tecnici.length === 0 && categorie.length === 0) {
+            return <Typography variant="body2" color="text.secondary">Nessun destinatario specifico.</Typography>;
         }
 
-        return <Typography variant="body2" color="text.secondary">Nessun destinatario specifico.</Typography>;
-    }, [loading, destinatari, target, targetId]);
+        return (
+            <List dense sx={{ p: 0 }}>
+                {tecnici.map((nome, index) => (
+                    <ListItem key={`t-${index}`} disableGutters>
+                        <ListItemAvatar sx={{ minWidth: 40 }}>
+                            <Avatar sx={{ width: 32, height: 32 }}><PersonIcon /></Avatar>
+                        </ListItemAvatar>
+                        <ListItemText primary={nome} />
+                    </ListItem>
+                ))}
+                {categorie.map((nome, index) => (
+                    <ListItem key={`c-${index}`} disableGutters>
+                        <ListItemAvatar sx={{ minWidth: 40 }}>
+                            <Avatar sx={{ width: 32, height: 32 }}><CategoryIcon /></Avatar>
+                        </ListItemAvatar>
+                        <ListItemText primary={nome} />
+                    </ListItem>
+                ))}
+            </List>
+        );
+    };
 
     if (!notifica) return null;
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-            <DialogTitle sx={{ pb: 1 }}>{notifica.title}</DialogTitle>
+            <DialogTitle sx={{ pb: 1 }}>{notifica.title || '(Nessun titolo)'}</DialogTitle>
             <DialogContent dividers>
                 <Box sx={{ mb: 2 }}>
-                    <Typography variant="caption" color="text.secondary" component="div">Destinatari</Typography>
-                    {renderDestinatari}
+                    <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>Destinatari</Typography>
+                    {renderDestinatari()}
                 </Box>
+
+                <Divider sx={{ my: 2 }} />
 
                 <Box sx={{ mb: 2 }}>
                     <Typography variant="caption" color="text.secondary">Messaggio</Typography>
-                    <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>{notifica.body}</Typography>
+                    <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>{notifica.body}</Typography>
                 </Box>
+
+                <Divider sx={{ my: 2 }} />
 
                 <Box>
                     <Typography variant="caption" color="text.secondary">Data Invio</Typography>
-                    <Typography variant="body2">{dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY HH:mm')}</Typography>
+                    <Typography variant="body2" sx={{ mt: 1 }}>{dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY [alle] HH:mm')}</Typography>
                 </Box>
             </DialogContent>
             <DialogActions>
