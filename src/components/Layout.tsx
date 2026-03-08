@@ -1,5 +1,5 @@
 import { useState, ReactNode } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, NavLink } from 'react-router-dom';
 import {
     AppBar, Box, CssBaseline, Drawer, IconButton, List, ListItemButton,
     ListItemIcon, ListItemText, Toolbar, Typography, Collapse
@@ -93,9 +93,9 @@ const Layout = ({ children }: LayoutProps) => {
                                         {item.subItems.map(subItem => (
                                             <ListItemButton 
                                                 key={subItem.text} 
+                                                component={NavLink}
+                                                to={subItem.path}
                                                 sx={{ pl: 4 }} 
-                                                onClick={() => navigate(subItem.path)}
-                                                selected={location.pathname === subItem.path}
                                             >
                                                 <ListItemIcon>{subItem.icon}</ListItemIcon>
                                                 <ListItemText primary={subItem.text} />
@@ -109,8 +109,8 @@ const Layout = ({ children }: LayoutProps) => {
                     return (
                         <ListItemButton 
                             key={item.text} 
-                            onClick={() => navigate(item.path!)}
-                            selected={location.pathname === item.path}
+                            component={NavLink}
+                            to={item.path!}
                         >
                             <ListItemIcon>{item.icon}</ListItemIcon>
                             <ListItemText primary={item.text} />

@@ -1,13 +1,27 @@
 import { z } from 'zod';
 import type { TipoGiornata } from '@/models/definitions'; // Importa il tipo aggiornato
 
-// La funzione che crea lo schema di validazione dinamicamente
+// Schema per un singolo tecnico aggiunto, con i suoi orari personalizzati
+export const tecnicoAggiuntoSchema = z.object({
+  tecnicoId: z.string(),
+  inserimentoManualeOre: z.boolean().default(false),
+  oraInizio: z.coerce.date().nullable().optional(),
+  oraFine: z.coerce.date().nullable().optional(),
+  pausa: z.number().min(0, "La pausa non può essere negativa.").optional(),
+  oreLavorate: z.number().min(0, 'Le ore non possono essere negative.').optional(),
+});
+
+// Tipo derivato dallo schema per l'uso nell'applicazione
+export type TecnicoAggiunto = z.infer<typeof tecnicoAggiuntoSchema>;
+
+// Funzione che crea lo schema di validazione principale dinamicamente
 export const createRapportinoSchema = (tipiGiornata: TipoGiornata[]) => {
 
   return z.object({
     // --- SEZIONE TECNICI ---
     tecnicoScriventeId: z.string({ required_error: 'Il tecnico scrivente è obbligatorio.' }),
-    tecniciAggiuntiIds: z.array(z.string()).optional(),
+    // Aggiornato da `tecniciAggiuntiIds` a `tecniciAggiunti` con il nuovo schema
+    tecniciAggiunti: z.array(tecnicoAggiuntoSchema).optional(),
 
     // --- SEZIONE TEMPO ---
     inserimentoManualeOre: z.boolean().default(false),

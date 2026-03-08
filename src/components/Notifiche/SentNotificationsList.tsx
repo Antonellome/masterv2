@@ -15,6 +15,7 @@ import {
     Alert,
     List,
     ListItem,
+    ListItemButton,
     ListItemText,
     ListItemAvatar,
     Avatar,
@@ -82,7 +83,6 @@ const SentNotificationsList = () => {
             return 'Tutti i tecnici';
         }
 
-        // CORREZIONE: Leggo dai campi _names per la visualizzazione
         const toNames = notifica.to_names || [];
         const toCategoryNames = notifica.to_category_names || [];
         
@@ -99,7 +99,7 @@ const SentNotificationsList = () => {
     };
 
     if (loading) {
-        return <Box display="flex" justifyContent="center" p={4}><CircularProgress /></Box>;
+        return <Box display="flex" justifyContent="center" p={4}><CircularProgress />;</Box>;
     }
     if (sentNotifications.length === 0) {
         return (
@@ -118,33 +118,34 @@ const SentNotificationsList = () => {
                     {sentNotifications.map((notifica, index) => (
                         <React.Fragment key={notifica.id}>
                             <ListItem
+                                disablePadding
                                 secondaryAction={
                                     <IconButton edge="end" aria-label="delete" onClick={(e) => handleDeleteClick(e, notifica.id!)}>
                                         <DeleteIcon />
                                     </IconButton>
                                 }
-                                button
-                                onClick={() => handleOpenDetail(notifica)}
                             >
-                                <ListItemAvatar>
-                                    <Avatar>
-                                        <NotificationsIcon />
-                                    </Avatar>
-                                </ListItemAvatar>
-                                <ListItemText
-                                    primary={notifica.title || '(Nessun titolo)'}
-                                    secondary={
-                                        <Box component="span" sx={{ display: 'block' }}>
-                                            <Typography component="span" variant="body2" color="text.primary" sx={{ fontWeight: 'bold' }}>
-                                                {renderRecipientsText(notifica)}
-                                            </Typography>
-                                            <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
-                                                {`Inviata il: ${dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY HH:mm')}`}
-                                            </Typography>
-                                        </Box>
-                                    }
-                                    primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
-                                />
+                                <ListItemButton onClick={() => handleOpenDetail(notifica)}>
+                                    <ListItemAvatar>
+                                        <Avatar>
+                                            <NotificationsIcon />
+                                        </Avatar>
+                                    </ListItemAvatar>
+                                    <ListItemText
+                                        primary={notifica.title || '(Nessun titolo)'}
+                                        secondary={
+                                            <Box component="span" sx={{ display: 'block' }}>
+                                                <Typography component="span" variant="body2" color="text.primary" sx={{ fontWeight: 'bold' }}>
+                                                    {renderRecipientsText(notifica)}
+                                                </Typography>
+                                                <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
+                                                    {`Inviata il: ${dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY HH:mm')}`}
+                                                </Typography>
+                                            </Box>
+                                        }
+                                        primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
+                                    />
+                                </ListItemButton>
                             </ListItem>
                             {index < sentNotifications.length - 1 && <Divider variant="inset" component="li" />}
                         </React.Fragment>

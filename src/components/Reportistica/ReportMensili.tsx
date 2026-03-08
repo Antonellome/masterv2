@@ -18,7 +18,6 @@ import { db } from '@/firebase';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 
-// Imposta la lingua di dayjs a italiano
 dayjs.locale('it');
 
 interface Tecnico {
@@ -79,7 +78,7 @@ const ConsuntivoMensile = () => {
 
             const rapportiniQuery = query(
                 collection(db, "rapportini"), 
-                where("tecnicoScriventeId", "==", selectedTecnico.id),
+                where("tecnicoId", "==", selectedTecnico.id),
                 where("data", ">=", Timestamp.fromDate(startOfMonth.toDate())),
                 where("data", "<=", Timestamp.fromDate(endOfMonth.toDate()))
             );
@@ -88,8 +87,6 @@ const ConsuntivoMensile = () => {
             const presenzeData = querySnapshot.docs.map(doc => {
                 const data = doc.data();
 
-                // --- CORREZIONE FINALE: CODICE PARANOICO ---
-                // Aggiungo un fallback per OGNI campo per prevenire crash.
                 const formattedDate = (data.data && typeof data.data.toDate === 'function')
                     ? dayjs(data.data.toDate()).format('DD/MM/YYYY')
                     : 'Data Invalida';
@@ -100,11 +97,10 @@ const ConsuntivoMensile = () => {
                     tipoGiornata: data.tipoGiornata || 'N/D',
                     nave: data.nave || 'N/D',
                     luogo: data.luogo || 'N/D',
-                    ore: data.ore || 0,
+                    ore: data.oreLavorate || 0,
                 } as Presenza;
             });
             
-            // Filtro via le date invalide prima di ordinarle per evitare crash
             const validPresenze = presenzeData.filter(p => p.data !== 'Data Invalida');
             const invalidPresenze = presenzeData.filter(p => p.data === 'Data Invalida');
 
@@ -113,7 +109,7 @@ const ConsuntivoMensile = () => {
             setPresenze([...validPresenze, ...invalidPresenze]);
             setReportGenerated(true);
         } catch (err) {
-            console.error("ERRORE DOPO LA CORREZIONE FINALE:", err);
+            console.error("Errore durante la generazione del report:", err);
             setError("Si è verificato un errore imprevisto. Controlla la console per i dettagli.");
         }
         setLoading(false);
@@ -129,15 +125,13 @@ const ConsuntivoMensile = () => {
 
     const totaliPerTipoGiornata: Totali = useMemo(() => {
         return presenze.reduce((acc, curr) => {
-            // Il fallback (curr.ore || 0) previene errori qui
-            acc[curr.tipoGiornata] = (acc[curr.tipoGiornata] || 0) + curr.ore;
+            acc[curr.tipoGiornata] = (acc[curr.tipoGiornata] || 0) + (curr.ore || 0);
             return acc;
         }, {} as Totali);
     }, [presenze]);
 
     const totaleGenerale = useMemo(() => {
-         // Il fallback (curr.ore || 0) previene errori qui
-        return presenze.reduce((acc, curr) => acc + curr.ore, 0);
+        return presenze.reduce((acc, curr) => acc + (curr.ore || 0), 0);
     }, [presenze]);
 
     
@@ -147,12 +141,7 @@ const ConsuntivoMensile = () => {
                  <Typography variant="h6" gutterBottom>Riepilogo Ore</Typography>
                  <Grid container spacing={2}>
                     {Object.entries(totaliPerTipoGiornata).map(([tipo, ore]) => (
-                        <Grid
-                            item
-                            key={tipo}
-                            xs={6}
-                            sm={4}
-                            md={3}>
+                        <Grid key={tipo} size={{ xs: 6, sm: 4, md: 3}}>
                             <Typography variant="body2"><strong>{tipo}:</strong> {ore} ore</Typography>
                         </Grid>
                     ))}
@@ -168,11 +157,7 @@ const ConsuntivoMensile = () => {
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Paper sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Grid container spacing={2} alignItems="center" sx={{ mb: 3, flexShrink: 0 }}>
-                    <Grid
-                        item
-                        xs={12}
-                        sm={6}
-                        md={4}>
+                    <Grid size={{ xs: 12, sm: 6, md: 4}}>
                         <Autocomplete
                             options={tecnici}
                             getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
@@ -182,11 +167,7 @@ const ConsuntivoMensile = () => {
                             isOptionEqualToValue={(option, value) => option.id === value.id}
                         />
                     </Grid>
-                    <Grid
-                        item
-                        xs={12}
-                        sm={6}
-                        md={4}>
+                    <Grid size={{ xs: 12, sm: 6, md: 4}}>
                         <DatePicker
                             label="Seleziona Mese"
                             views={['month', 'year']}
@@ -194,10 +175,7 @@ const ConsuntivoMensile = () => {
                             onChange={(newValue) => setSelectedMonth(newValue)}
                         />
                     </Grid>
-                    <Grid
-                        item
-                        xs={12}
-                        md={4}>
+                    <Grid size={{ xs: 12, md: 4}}>
                         <Button 
                             variant="contained" 
                             onClick={handleGenerateReport} 

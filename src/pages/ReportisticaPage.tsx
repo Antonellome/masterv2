@@ -13,7 +13,7 @@ function CustomTabPanel(props: { children?: React.ReactNode; index: number; valu
 }
 
 const ReportisticaPage = () => {
-  const [value, setValue] = useState(2); // Default a Analisi Ore
+  const [value, setValue] = useState(0); // Default a Ricerca Avanzata
   const navigate = useNavigate();
 
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {

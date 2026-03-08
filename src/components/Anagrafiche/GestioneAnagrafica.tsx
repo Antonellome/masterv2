@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, getDocs, doc, writeBatch, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { Box, Typography, IconButton, Button, CircularProgress, Snackbar, Alert } from '@mui/material';
-import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbar, GridRenderCellParams, GridRowModel, GridPaginationModel } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbar, GridRenderCellParams, GridRowModel } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import FormDialog from './FormDialog';
@@ -31,41 +31,89 @@ function GestioneAnagrafica<T extends Anagrafica>({
     const [itemToDelete, setItemToDelete] = useState<string | null>(null);
     const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
-    const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ pageSize: 25, page: 0 });
-
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        try {
-            const mainSnapshot = await getDocs(collection(db, collectionName));
-            const items = mainSnapshot.docs.map(doc => {
-                const docData = doc.data() as T;
-                const sanitizedData: T = { id: doc.id, ...docData };
-
-                fields.forEach(field => {
-                    if (sanitizedData[field.name as keyof T] === undefined || sanitizedData[field.name as keyof T] === null) {
-                        if (field.type === 'number') {
-                            (sanitizedData as any)[field.name] = 0;
-                        } else {
-                            (sanitizedData as any)[field.name] = '';
-                        }
-                    }
-                });
-
-                return sanitizedData;
-            });
-            setData(items);
-        } catch (error) {
-            console.error(`Errore durante il caricamento della collezione '${collectionName}':`, error);
-            setData([]);
-            setSnackbar({ open: true, message: `Errore caricamento dati per ${collectionName}.`, severity: 'error' });
-        } finally {
-            setLoading(false);
-        }
-    }, [collectionName, fields]);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     useEffect(() => {
+        const abortController = new AbortController();
+        const { signal } = abortController;
+
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const mainSnapshot = await getDocs(collection(db, collectionName));
+                if (signal.aborted) return;
+
+                let items;
+
+                if (anagraficaType === 'cliente') {
+                    const [naviSnapshot, luoghiSnapshot] = await Promise.all([
+                        getDocs(collection(db, 'navi')),
+                        getDocs(collection(db, 'luoghi'))
+                    ]);
+                    if (signal.aborted) return;
+
+                    const naviPerCliente = new Map<string, number>();
+                    naviSnapshot.docs.forEach(doc => {
+                        const nave = doc.data();
+                        if (nave.clienteId) {
+                            naviPerCliente.set(nave.clienteId, (naviPerCliente.get(nave.clienteId) || 0) + 1);
+                        }
+                    });
+
+                    const luoghiPerCliente = new Map<string, number>();
+                    luoghiSnapshot.docs.forEach(doc => {
+                        const luogo = doc.data();
+                        if (luogo.clienteId) {
+                            luoghiPerCliente.set(luogo.clienteId, (luoghiPerCliente.get(luogo.clienteId) || 0) + 1);
+                        }
+                    });
+
+                    items = mainSnapshot.docs.map(doc => {
+                        const docData = doc.data() as T;
+                        const sanitizedData: any = { id: doc.id, ...docData };
+                        fields.forEach((field: any) => {
+                           if (sanitizedData[field.name] === undefined || sanitizedData[field.name] === null) {
+                               sanitizedData[field.name] = field.type === 'number' ? 0 : '';
+                           }
+                        });
+                        sanitizedData.numNavi = naviPerCliente.get(doc.id) || 0;
+                        sanitizedData.numLuoghi = luoghiPerCliente.get(doc.id) || 0;
+                        return sanitizedData;
+                    });
+                } else {
+                     items = mainSnapshot.docs.map(doc => {
+                        const docData = doc.data() as T;
+                        const sanitizedData: any = { id: doc.id, ...docData };
+                        fields.forEach((field: any) => {
+                            if (sanitizedData[field.name] === undefined || sanitizedData[field.name] === null) {
+                               sanitizedData[field.name] = field.type === 'number' ? 0 : '';
+                            }
+                        });
+                        return sanitizedData;
+                    });
+                }
+                
+                setData(items);
+
+            } catch (error: any) {
+                if (error.name !== 'AbortError') {
+                    console.error(`Errore durante il caricamento della collezione '${collectionName}':`, error);
+                    setData([]);
+                    setSnackbar({ open: true, message: `Errore caricamento dati per ${collectionName}.`, severity: 'error' });
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+
         fetchData();
-    }, [fetchData]);
+
+        return () => {
+            abortController.abort();
+        };
+    }, [collectionName, fields, anagraficaType, refreshTrigger]);
+
+    const forceRefresh = () => setRefreshTrigger(t => t + 1);
 
     const handleSave = async (item: Partial<T>) => {
         const batch = writeBatch(db);
@@ -75,21 +123,24 @@ function GestioneAnagrafica<T extends Anagrafica>({
             item.id = docRef.id;
         }
 
-        batch.set(docRef, item, { merge: true });
+        const { numNavi, numLuoghi, ...itemToSave } = item as any;
+
+        batch.set(docRef, itemToSave, { merge: true });
         await batch.commit();
         setSnackbar({ open: true, message: 'Elemento salvato con successo!', severity: 'success' });
-        fetchData();
+        forceRefresh();
+        setFormOpen(false);
     };
 
     const handleDelete = async (id: string) => {
         await deleteDoc(doc(db, collectionName, id));
         setSnackbar({ open: true, message: 'Elemento eliminato.', severity: 'success' });
-        fetchData();
+        forceRefresh();
     };
     
     const processRowUpdate = useCallback(async (newRow: GridRowModel, oldRow: GridRowModel) => {
         try {
-            const { id, ...dataToUpdate } = newRow;
+            const { id, numNavi, numLuoghi, ...dataToUpdate } = newRow;
             for (const field of fields) {
                 if (field.type === 'number' && dataToUpdate[field.name] !== undefined) {
                     dataToUpdate[field.name] = Number(dataToUpdate[field.name]);
@@ -97,6 +148,7 @@ function GestioneAnagrafica<T extends Anagrafica>({
             }
             await updateDoc(doc(db, collectionName, id), dataToUpdate);
             setSnackbar({ open: true, message: 'Modifica salvata!', severity: 'success' });
+            forceRefresh(); 
             return newRow;
         } catch (error) {
             setSnackbar({ open: true, message: 'Errore durante l\'aggiornamento.', severity: 'error' });
@@ -188,16 +240,14 @@ function GestioneAnagrafica<T extends Anagrafica>({
                     processRowUpdate={processRowUpdate}
                     onProcessRowUpdateError={(error) => console.error(error)}
                     initialState={{
-                        sorting: {
-                            sortModel: initialSortModel || [],
-                        },
                         pagination: {
                             paginationModel: { pageSize: 25, page: 0 },
                         },
+                        sorting: {
+                            sortModel: initialSortModel || [],
+                        },
                     }}
                     pageSizeOptions={[10, 25, 50, 100]}
-                    paginationModel={paginationModel}
-                    onPaginationModelChange={setPaginationModel}
                     checkboxSelection
                     disableRowSelectionOnClick
                     onRowSelectionModelChange={(newSelectionModel) => setSelectionModel(newSelectionModel)}
@@ -213,7 +263,6 @@ function GestioneAnagrafica<T extends Anagrafica>({
                 fields={fields}
                 initialData={selectedItem ?? (initialFormState as Partial<T>)}
                 title={selectedItem ? `Modifica ${title.slice(0, -1)}` : `Nuovo ${title.slice(0, -1)}`}
-                anagraficaType={anagraficaType}
             />
 
             <ConfirmationDialog
