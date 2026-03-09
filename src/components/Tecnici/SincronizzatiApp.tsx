@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db, app } from '@/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getAuth, sendPasswordResetEmail } from 'firebase/auth'; // <-- MODIFICA: Import aggiunto
 import {
     Box, Typography, Alert, CircularProgress, Switch, Tooltip, Dialog, DialogTitle, DialogContent, TextField, DialogActions, Button, Chip
 } from '@mui/material';
@@ -13,6 +15,9 @@ import VpnKey from '@mui/icons-material/VpnKey';
 import Edit from '@mui/icons-material/Edit';
 import NoAccounts from '@mui/icons-material/NoAccounts';
 
+const functions = getFunctions(app, 'europe-west1');
+const auth = getAuth(app); // <-- MODIFICA: Istanza di Auth creata
+
 function CustomToolbar() {
     return (
         <GridToolbarContainer>
@@ -21,12 +26,7 @@ function CustomToolbar() {
             <GridToolbarDensitySelector />
             <GridToolbarExport />
             <Box sx={{ flexGrow: 1 }} />
-            <GridToolbarQuickFilter
-                sx={{ minWidth: 240, mr: 1 }}
-                placeholder="Cerca..."
-                variant="outlined"
-                size="small"
-            />
+            <GridToolbarQuickFilter sx={{ minWidth: 240, mr: 1 }} placeholder="Cerca..." variant="outlined" size="small" />
         </GridToolbarContainer>
     );
 }
@@ -38,6 +38,7 @@ interface Tecnico {
     email?: string;
     attivo: boolean;
     accessoApp?: boolean;
+    uid?: string;
 }
 
 interface SincronizzatiAppProps {
@@ -48,47 +49,101 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
     const [tecnici, setTecnici] = useState<Tecnico[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
+    const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; message: string } | null>(null);
 
     const [emailDialogOpen, setEmailDialogOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [currentEmail, setCurrentEmail] = useState('');
+    const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
     const fetchTecniciAttivi = useCallback(async () => {
         setLoading(true);
-        setError(null);
         try {
             const q = query(collection(db, "tecnici"), where("attivo", "==", true));
             const querySnapshot = await getDocs(q);
-            const tecniciData = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            } as Tecnico));
-            setTecnici(tecniciData);
+            setTecnici(querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tecnico)));
         } catch (err) {
-            console.error("Errore nel caricamento dei tecnici attivi:", err);
             setError("Impossibile caricare l'elenco dei tecnici.");
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchTecniciAttivi();
-    }, [fetchTecniciAttivi]);
+    useEffect(() => { fetchTecniciAttivi(); }, [fetchTecniciAttivi]);
 
-    const handleToggleAccessoApp = async (id: string, currentValue: boolean) => {
-        const tecnicoRef = doc(db, 'tecnici', id);
+    // --- MODIFICA COMPLETA DELLA FUNZIONE ---
+    const handleProvisionAndShare = async (tecnico: Tecnico) => {
+        if (!tecnico.email) {
+            setFeedback({ type: 'warning', message: 'Aggiungi un\'email prima di poter inviare un link di accesso.' });
+            return;
+        }
+
+        setActionLoading(prev => ({ ...prev, [tecnico.id]: true }));
+        setFeedback(null);
+
         try {
-            await updateDoc(tecnicoRef, { accessoApp: !currentValue });
-            setTecnici(prev => prev.map(t => t.id === id ? { ...t, accessoApp: !currentValue } : t));
-            setFeedback({ type: 'success', message: `Accesso App ${!currentValue ? 'abilitato' : 'disabilitato'}.` });
+            // Step 1: Provisiona l'utente sul backend (crea Auth user, aggiorna Firestore)
+            const provisionTecnico = httpsCallable(functions, 'provisionTecnico');
+            await provisionTecnico({ 
+                email: tecnico.email, 
+                profileData: { nome: tecnico.nome, cognome: tecnico.cognome },
+                tecnicoId: tecnico.id
+            });
+
+            // Step 2: Invia l'email di reset password dal client
+            try {
+                await sendPasswordResetEmail(auth, tecnico.email);
+                setFeedback({ type: 'success', message: `Provisioning completato. Email di accesso inviata a ${tecnico.email}.` });
+            } catch (emailError: any) {
+                console.error("Errore durante l'invio dell'email di reset password:", emailError);
+                // L'utente è stato creato, ma l'email non è partita. Informa l'utente di questo stato specifico.
+                throw new Error(`Utente creato, ma l\'invio dell\'email è fallito: ${emailError.message}`);
+            }
+
+            // Aggiorna lo stato locale per riflettere l'accesso abilitato
+            if (!tecnico.accessoApp) {
+                 setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, accessoApp: true } : t));
+            }
+
+        } catch (error: any) {
+            console.error("Errore dettagliato dalla chiamata alla funzione o dall'invio email:", error);
+            const message = error.message || 'Si è verificato un errore sconosciuto.';
+            setFeedback({ type: 'error', message: `Errore: ${message}` });
+        } finally {
+            setActionLoading(prev => ({ ...prev, [tecnico.id]: false }));
             onDataChange();
-        } catch {
-            setFeedback({ type: 'error', message: "Errore durante l'aggiornamento." });
         }
     };
+    
+    const handleToggleAccessoApp = async (id: string, currentValue: boolean) => {
+        const tecnico = tecnici.find(t => t.id === id);
+        if (!tecnico) return;
 
+        if (!currentValue) {
+            if (!tecnico.email) {
+                setFeedback({ type: 'warning', message: "Aggiungi un'email per abilitare l'accesso" });
+                return;
+            }
+            // Chiama la funzione principale che ora gestisce sia provisioning che invio email
+            await handleProvisionAndShare(tecnico);
+        } else {
+            // Logica per disabilitare l'accesso
+            setActionLoading(prev => ({ ...prev, [id]: true }));
+            try {
+                // Qui potresti voler chiamare una funzione server che disabilita l'utente in Auth
+                // Per ora, aggiorniamo solo Firestore
+                await updateDoc(doc(db, 'tecnici', id), { accessoApp: false, uid: null }); // Rimuovi anche l'UID
+                setTecnici(prev => prev.map(t => t.id === id ? { ...t, accessoApp: false, uid: undefined } : t));
+                setFeedback({ type: 'success', message: 'Accesso App disabilitato.' });
+            } catch (error: any) {
+                 setFeedback({ type: 'error', message: `Errore durante la disabilitazione: ${error.message}` });
+            } finally {
+                 setActionLoading(prev => ({ ...prev, [id]: false }));
+                 onDataChange();
+            }
+        }
+    };
+    
     const handleOpenEmailDialog = (tecnico: Tecnico) => {
         setSelectedTecnico(tecnico);
         setCurrentEmail(tecnico.email || '');
@@ -103,50 +158,38 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
 
     const handleSaveEmail = async () => {
         if (!selectedTecnico) return;
-        const tecnicoRef = doc(db, 'tecnici', selectedTecnico.id);
-        try {
-            await updateDoc(tecnicoRef, { email: currentEmail, accessoApp: selectedTecnico.accessoApp || false });
-            setFeedback({ type: 'success', message: 'Email aggiornata con successo.' });
-            fetchTecniciAttivi();
-            onDataChange();
-        } catch {
-            setFeedback({ type: 'error', message: 'Errore durante il salvataggio dell\'email.' });
-        } finally {
-            handleCloseEmailDialog();
-        }
-    };
 
-    const handlePasswordReset = (email?: string) => {
-        if (!email) {
-            setFeedback({ type: 'warning', message: 'Nessuna email associata per inviare il reset.' });
-            return;
+        setActionLoading(prev => ({ ...prev, [selectedTecnico.id]: true }));
+        try {
+            const tecnicoRef = doc(db, 'tecnici', selectedTecnico.id);
+            await updateDoc(tecnicoRef, { email: currentEmail });
+            setTecnici(prev => prev.map(t => t.id === selectedTecnico.id ? { ...t, email: currentEmail } : t));
+            setFeedback({ type: 'success', message: 'Email aggiornata con successo.' });
+        } catch (error: any) {
+            setFeedback({ type: 'error', message: `Errore durante l'aggiornamento: ${error.message}` });
+        } finally {
+            setActionLoading(prev => ({ ...prev, [selectedTecnico.id]: false }));
+            handleCloseEmailDialog();
+            onDataChange();
         }
-        console.log(`Reset password per: ${email}`);
-        setFeedback({ type: 'success', message: `Richiesta di reset password inviata a ${email}.` });
     };
 
     const columns: GridColDef[] = [
         {
             field: 'accessoApp',
             headerName: 'Accesso App',
-            width: 120,
-            align: 'center',
-            headerAlign: 'center',
-            renderCell: (params) => {
-                const hasEmail = !!params.row.email;
-                const tooltipText = !hasEmail ? "Aggiungi un'email per abilitare l'accesso" : (params.value ? 'Accesso attivo' : 'Accesso disattivato');
-                return (
-                    <Tooltip title={tooltipText}>
-                        <span>
-                            <Switch
-                                checked={Boolean(params.value)}
-                                onChange={() => handleToggleAccessoApp(params.row.id, params.row.accessoApp)}
-                                disabled={!hasEmail}
-                            />
-                        </span>
-                    </Tooltip>
-                );
-            }
+            width: 120, align: 'center', headerAlign: 'center',
+            renderCell: (params) => (
+                 <Tooltip title={!params.row.email ? "Aggiungi un'email per abilitare l'accesso" : (params.value ? 'Accesso attivo, clicca per disabilitare' : 'Accesso disattivato, clicca per abilitare e inviare il link')}>
+                    <span>
+                        <Switch 
+                            checked={!!params.value} 
+                            onChange={() => handleToggleAccessoApp(params.row.id, params.row.accessoApp)} 
+                            disabled={!params.row.email || actionLoading[params.row.id]}
+                        />
+                    </span>
+                </Tooltip>
+            )
         },
         { field: 'cognome', headerName: 'Cognome', flex: 1 },
         { field: 'nome', headerName: 'Nome', flex: 1 },
@@ -154,31 +197,18 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
             field: 'email',
             headerName: 'Email',
             flex: 1.5,
-            renderCell: (params) => (
-                params.value ? 
-                <Typography variant="body2">{params.value}</Typography> : 
-                <Chip icon={<NoAccounts />} label="Email mancante" size="small" variant="outlined" color="warning" onClick={() => handleOpenEmailDialog(params.row)} />
-            )
+            renderCell: (params) => params.value ? <Typography variant="body2">{params.value}</Typography> : <Chip icon={<NoAccounts />} label="Email mancante" size="small" variant="outlined" color="warning" onClick={() => handleOpenEmailDialog(params.row)} />
         },
         {
-            field: 'actions',
-            type: 'actions',
-            headerName: 'Azioni',
-            width: 100,
-            cellClassName: 'actions',
+            field: 'actions', type: 'actions', headerName: 'Azioni', width: 100,
             getActions: ({ row }) => [
+                <GridActionsCellItem key={`edit-${row.id}`} icon={<Tooltip title="Modifica Email"><Edit /></Tooltip>} label="Modifica Email" onClick={() => handleOpenEmailDialog(row)} />,
                 <GridActionsCellItem
-                    key={`edit-${row.id}`}
-                    icon={<Tooltip title="Modifica Email"><Edit /></Tooltip>}
-                    label="Modifica Email"
-                    onClick={() => handleOpenEmailDialog(row)}
-                />,
-                <GridActionsCellItem
-                    key={`reset-${row.id}`}
-                    icon={<Tooltip title="Invia/Reset Password"><VpnKey /></Tooltip>}
-                    label="Reset Password"
-                    onClick={() => handlePasswordReset(row.email)}
-                    disabled={!row.email || !row.accessoApp}
+                    key={`share-${row.id}`}
+                    icon={actionLoading[row.id] ? <CircularProgress size={20} /> : <Tooltip title="Invia / Condividi Link di Accesso"><VpnKey /></Tooltip>}
+                    label="Condividi Link"
+                    onClick={() => handleProvisionAndShare(row)}
+                    disabled={!row.email || actionLoading[row.id]}
                 />,
             ],
         },
@@ -187,25 +217,14 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Typography variant="caption" display="block" sx={{ mb: 2, color: 'text.secondary', px: 2, pt: 2 }}>
-                In questa sezione puoi gestire quali tecnici (con contratto attivo) possono accedere all&apos;applicazione mobile. L&apos;accesso è consentito solo ai tecnici con un&apos;email associata.
+                 In questa sezione puoi gestire quali tecnici (con contratto attivo) possono accedere all&apos;applicazione mobile. L&apos;accesso è consentito solo ai tecnici con un&apos;email associata.
             </Typography>
             {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
             {feedback && <Alert severity={feedback.type} sx={{ m: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
             
             {loading ? <CircularProgress sx={{ mx: 'auto', mt: 4 }} /> : 
                 <Box sx={{ flexGrow: 1, width: '100%' }}>
-                    <DataGrid
-                        rows={tecnici || []}
-                        columns={columns}
-                        localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-                        initialState={{
-                            pagination: { paginationModel: { page: 0, pageSize: 25 } },
-                            sorting: { sortModel: [{ field: 'cognome', sort: 'asc' }] }
-                        }}
-                        pageSizeOptions={[10, 25, 50]}
-                        slots={{ toolbar: CustomToolbar }}
-                        disableRowSelectionOnClick
-                    />
+                     <DataGrid rows={tecnici || []} columns={columns} localeText={itIT.components.MuiDataGrid.defaultProps.localeText} initialState={{ pagination: { paginationModel: { page: 0, pageSize: 25 } }, sorting: { sortModel: [{ field: 'cognome', sort: 'asc' }] } }} pageSizeOptions={[10, 25, 50]} slots={{ toolbar: CustomToolbar }} disableRowSelectionOnClick />
                 </Box>
             }
 
@@ -213,6 +232,7 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
                 <DialogTitle>Modifica Email per {selectedTecnico?.nome} {selectedTecnico?.cognome}</DialogTitle>
                 <DialogContent>
                     <TextField
+                        autoFocus
                         margin="dense"
                         label="Indirizzo Email"
                         type="email"

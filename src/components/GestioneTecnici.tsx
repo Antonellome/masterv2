@@ -1,8 +1,8 @@
 import React from 'react';
 import { useState, useEffect, useMemo } from 'react';
 import { doc, updateDoc, deleteDoc, collection, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db, app } from '@/firebase'; // Importa anche 'app'
-import { getFunctions, httpsCallable } from 'firebase/functions'; // Import per le Cloud Functions
+import { db, app } from '@/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
     Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Snackbar, Alert, CircularProgress, Tabs, Tab
 } from '@mui/material';
@@ -39,7 +39,7 @@ const GestioneTecnici = () => {
     const [error, setError] = useState<string | null>(null);
 
     const [isFormOpen, setFormOpen] = useState(false);
-    const [saving, setSaving] = useState(false); // Stato per il caricamento del salvataggio
+    const [saving, setSaving] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [itemToView, setItemToView] = useState<ItemToView | null>(null);
@@ -64,29 +64,58 @@ const GestioneTecnici = () => {
     const handleTabChange = (event: React.SyntheticEvent, newValue: number) => setCurrentTab(newValue);
     const refreshData = () => {};
 
+    // --- FUNZIONE DI SALVATAGGIO DEFINITIVA (con struttura payload corretta) ---
     const handleSave = async (data: Partial<Tecnico>) => {
-        const { email, ...profilo } = data;
+        setSaving(true);
 
-        if (!email) {
-            setSnackbar({ open: true, message: "L'email è un campo obbligatorio per creare o aggiornare un tecnico.", severity: 'warning' });
+        // 1. Sanificazione dei dati (converte undefined in null)
+        const sanitizedData: { [key: string]: any } = {};
+        Object.keys(data).forEach(key => {
+            // @ts-ignore
+            const value = data[key];
+            sanitizedData[key] = value === undefined ? null : value;
+        });
+
+        // 2. Validazione critica lato client
+        if (!sanitizedData.email) {
+            setSnackbar({ open: true, message: "L'email è un campo obbligatorio.", severity: 'warning' });
+            setSaving(false);
             return;
         }
 
-        setSaving(true);
+        // 3. COSTRUZIONE DEL PAYLOAD CORRETTO (LA SVOLTA)
+        // La Cloud Function si aspetta un oggetto { email: string, profileData: object }
+        const payload = {
+            email: sanitizedData.email,
+            profileData: { ...sanitizedData }
+        };
+
+        // Pulizia finale del payload: rimuovo dati non necessari o duplicati da profileData
+        delete payload.profileData.email; // L'email è già al livello superiore
+        if (payload.profileData.id === null) {
+            delete payload.profileData.id; // L'id non serve per una nuova creazione
+        }
+
+        // 4. Logging Diagnostico Finale
+        console.log("--- DEBUG SALVATAGGIO TECNICO (STRUTTURA CORRETTA) ---");
+        console.log("Payload inviato alla Cloud Function 'provisionTecnico':", payload);
+        console.log("--- FINE DEBUG ---");
+
         const functions = getFunctions(app, 'europe-west1');
         const provisionTecnico = httpsCallable(functions, 'provisionTecnico');
 
         try {
-            // La Cloud Function gestisce sia la creazione che l'aggiornamento.
-            const result = await provisionTecnico({ email, ...profilo });
+            // 5. Chiamata alla Cloud Function con il payload corretto
+            const result = await provisionTecnico(payload);
             console.log('Risultato Cloud Function:', result.data);
 
-            const message = selectedTecnico?.id ? 'Tecnico aggiornato con successo!' : 'Tecnico creato con successo!';
+            const message = payload.profileData.id ? 'Tecnico aggiornato con successo!' : 'Tecnico creato con successo!';
             setSnackbar({ open: true, message, severity: 'success' });
 
         } catch (error: any) {
             console.error("Errore durante la chiamata alla Cloud Function 'provisionTecnico':", error);
-            setSnackbar({ open: true, message: error.message || 'Si è verificato un errore sul server.', severity: 'error' });
+            const errorMessage = error.details?.message || error.message || 'Si è verificato un errore imprevisto sul server.';
+            setSnackbar({ open: true, message: `Errore: ${errorMessage}`, severity: 'error' });
         } finally {
             setSaving(false);
             setFormOpen(false);
@@ -94,20 +123,15 @@ const GestioneTecnici = () => {
         }
     };
 
-
     const handleStatusChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
         if (!tecnico.id) return;
         const nuovoStato = event.target.checked;
-        // Aggiornamento ottimistico dell'UI
         setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, attivo: nuovoStato } : t));
         try {
             await updateDoc(doc(db, 'tecnici', tecnico.id), { attivo: nuovoStato });
-            // Il listener onSnapshot aggiornerà lo stato definitivo,
-            // ma l'aggiornamento ottimistico rende l'UI più reattiva.
         } catch (error) {
             console.error("Errore aggiornamento stato:", error);
             setSnackbar({ open: true, message: 'Errore: impossibile aggiornare lo stato.', severity: 'error' });
-            // Ripristino in caso di errore
             setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, attivo: !nuovoStato } : t));
         }
     };
@@ -205,7 +229,7 @@ const GestioneTecnici = () => {
             <TecnicoForm open={isFormOpen} onClose={() => { setFormOpen(false); setSelectedTecnico(null); }} onSave={handleSave} tecnico={selectedTecnico} ditte={ditte} categorie={categorie} isSaving={saving}/>
             {itemToView && <DettaglioItemDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} items={itemToView.dettagli} title={itemToView.titolo} />}
             <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}><DialogTitle>Conferma Eliminazione</DialogTitle><DialogContent><DialogContentText>Sei sicuro di voler eliminare il tecnico <b>{tecnicoToDelete?.nome} {tecnicoToDelete?.cognome}</b>? L&apos;azione è irreversibile.</DialogContentText></DialogContent><DialogActions><Button onClick={() => setDeleteDialogOpen(false)}>Annulla</Button><Button onClick={handleConfirmDelete} color="error" variant="contained">Elimina</Button></DialogActions></Dialog>
-            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}><Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>
+            <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}><Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%', whiteSpace: 'pre-wrap' }}>{snackbar.message}</Alert></Snackbar>
         </Box>
     );
 };

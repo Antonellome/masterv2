@@ -9,16 +9,14 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Timestamp } from 'firebase/firestore';
 import dayjs from 'dayjs';
 import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
-import { TIPI_CONTRATTO } from '@/utils/contratti'; // <-- IMPORTATO
+import { TIPI_CONTRATTO } from '@/utils/contratti';
 
-// Elenco di tutti i campi data per la conversione
 const dateFields: (keyof Tecnico)[] = [
     'dataAssunzione', 'scadenzaContratto', 'scadenzaVisita', 'scadenzaUnilav',
     'scadenzaCartaIdentita', 'scadenzaPassaporto', 'scadenzaPatente', 'scadenzaCQC',
     'scadenzaCorsoSicurezza', 'scadenzaPrimoSoccorso', 'scadenzaAntincendio'
 ];
 
-// Funzione per creare un campo data riutilizzabile
 const renderDatePicker = (label: string, name: keyof Tecnico, value: any, handleChange: (name: keyof Tecnico, date: dayjs.Dayjs | null) => void) => (
     <Grid
         size={{
@@ -42,7 +40,7 @@ interface TecnicoFormProps {
     tecnico: Tecnico | null;
     ditte: Ditta[];
     categorie: Categoria[];
-    isSaving?: boolean; // Nuova prop
+    isSaving?: boolean;
 }
 
 const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnico, ditte, categorie, isSaving = false }) => {
@@ -53,11 +51,22 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
         if (open) {
             const initialData = tecnico ? { ...tecnico } : {
                 nome: '', cognome: '', codiceFiscale: '', indirizzo: '', citta: '', cap: '', provincia: '', email: '', telefono: '',
-                dittaId: '', categoriaId: '', tipoContratto: '', // <-- Valore iniziale per il contratto
+                dittaId: '', categoriaId: '', tipoContratto: '', 
                 numeroPatente: '', categoriaPatente: '', numeroCQC: '', 
                 numeroCartaIdentita: '', numeroPassaporto: '',
-                note: '', attivo: true, sincronizzazioneAttiva: false
+                note: '', attivo: true,
+                dataAssunzione: null, scadenzaContratto: null, scadenzaVisita: null, scadenzaUnilav: null,
+                scadenzaCartaIdentita: null, scadenzaPassaporto: null, scadenzaPatente: null, scadenzaCQC: null,
+                scadenzaCorsoSicurezza: null, scadenzaPrimoSoccorso: null, scadenzaAntincendio: null
             };
+
+            // @ts-ignore
+            if (initialData.categoria && typeof initialData.categoria === 'object' && initialData.categoria.id) {
+                // @ts-ignore
+                initialData.categoriaId = initialData.categoria.id;
+                // @ts-ignore
+                delete initialData.categoria;
+            }
 
             dateFields.forEach(field => {
                 const dateValue = initialData[field];
@@ -66,6 +75,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                     initialData[field] = dayjs(dateValue.toDate());
                 }
             });
+
             setFormData(initialData);
         }
     }, [tecnico, open]);
@@ -81,13 +91,18 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
 
     const handleSave = () => {
         const dataToSave = { ...formData };
+        
         dateFields.forEach(field => {
             const dateValue = dataToSave[field];
             if (dayjs.isDayjs(dateValue)) {
-                 // @ts-ignore
-                dataToSave[field] = Timestamp.fromDate(dateValue.toDate());
+                // @ts-ignore
+                dataToSave[field] = dateValue.toISOString();
+            } else if (dateValue === null || dateValue === undefined) {
+                // @ts-ignore
+                dataToSave[field] = null;
             }
         });
+
         onSave(dataToSave);
     };
 
@@ -215,7 +230,6 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                                 md: 4
                             }}><TextField select name="categoriaId" label="Categoria" value={formData.categoriaId || ''} onChange={handleChange} fullWidth>{categorie.map(c => <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>)}</TextField></Grid>
                         
-                        {/* CAMPO MODIFICATO: TENDINA CONTRATTI */}
                         <Grid
                             size={{
                                 xs: 12,
@@ -235,7 +249,6 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                         {renderDatePicker("Scadenza Contratto", 'scadenzaContratto', formData.scadenzaContratto, handleDateChange)}
                         {renderDatePicker("Scadenza UNILAV", 'scadenzaUnilav', formData.scadenzaUnilav, handleDateChange)}
                         
-                        {/* CAMPO SPOSTATO: NOTE */}
                         <Grid size={12}><TextField name="note" label="Note su Contratto e Altro" value={formData.note || ''} onChange={handleChange} fullWidth multiline rows={3} /></Grid>
 
 
@@ -255,7 +268,6 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                             justifyContent="center"
                             size={12}>
                             <Grid><FormControlLabel control={<Switch name="attivo" checked={formData.attivo ?? true} onChange={handleChange} />} label="Tecnico Attivo" /></Grid>
-                            <Grid><FormControlLabel control={<Switch name="sincronizzazioneAttiva" checked={formData.sincronizzazioneAttiva || false} onChange={handleChange} />} label="Sincronizzazione App" /></Grid>
                         </Grid>
                     </Grid>
                 </LocalizationProvider>

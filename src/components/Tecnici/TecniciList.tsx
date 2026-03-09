@@ -37,13 +37,12 @@ interface TecniciListProps {
     categorieMap: Map<string, string>;
     onViewDetails: (tecnico: Tecnico) => void;
     onStatusChange: (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => void;
-    onSyncChange: (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => void;
     onEdit: (tecnico: Tecnico) => void;
     onDelete: (event: React.MouseEvent, id: string) => void;
     onAdd: () => void; 
 }
 
-const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieMap, onViewDetails, onStatusChange, onSyncChange, onEdit, onDelete, onAdd }) => {
+const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieMap, onViewDetails, onStatusChange, onEdit, onDelete, onAdd }) => {
 
     const handleExport = (event: React.MouseEvent, tecnico: Tecnico) => {
         event.stopPropagation(); // Evita che altri click vengano triggerati
@@ -52,7 +51,6 @@ const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieM
 
     const allColumns: GridColDef[] = [
         { field: 'attivo', headerName: 'Stato', width: 65, align: 'center', headerAlign: 'center', renderCell: (params) => (<Tooltip title={params.value ? 'Attivo' : 'Non Attivo'}><Switch size="small" checked={Boolean(params.value)} onChange={(e) => onStatusChange(e, params.row as Tecnico)} onClick={(e) => e.stopPropagation()} color="primary"/></Tooltip>)},
-        { field: 'sincronizzazioneAttiva', headerName: 'Sync', width: 55, align: 'center', headerAlign: 'center', renderCell: (params) => { const hasEmail = !!params.row.email; const tooltipText = !hasEmail ? "Email mancante" : params.value ? "Sync attiva" : "Sync non attiva"; return (<Tooltip title={tooltipText}><span><Switch size="small" checked={Boolean(params.value)} onChange={(e) => onSyncChange(e, params.row as Tecnico)} onClick={(e) => e.stopPropagation()} disabled={!hasEmail} color="secondary"/></span></Tooltip>);}},
         { field: 'cognome', headerName: 'Cognome', flex: 1, renderCell: (params) => (<Link component="button" variant="body2" onClick={() => onViewDetails(params.row as Tecnico)} sx={{ textAlign: 'left', fontWeight: 'bold' }}>{params.value}</Link>)}, 
         { field: 'nome', headerName: 'Nome', flex: 1 },
         { 

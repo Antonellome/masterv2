@@ -1,81 +1,88 @@
-import * as functions from "firebase-functions";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
-admin.initializeApp();
+// Inizializza l'SDK di Admin una sola volta
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
 
-export const getCalendarData = functions.https.onCall(async (data, context) => {
-  // your logic here
-  return { message: "This is a placeholder for calendar data." };
-});
-
-export const provisionTecnico = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-        "unauthenticated",
-        "La funzione deve essere chiamata da un utente autenticato."
-    );
+/**
+ * Funzione V2 per creare o aggiornare un utente tecnico in Firebase Authentication
+ * e aggiornare il documento corrispondente in Firestore.
+ * NON invia email. L'invio è delegato al client.
+ */
+export const provisionTecnico = onCall({ region: "europe-west1" }, async (request) => {
+  // 1. Autenticazione
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "La funzione deve essere chiamata da un utente amministratore autenticato.");
   }
 
-  const { email, profileData } = data;
+  // 2. Validazione input
+  const { email, profileData, tecnicoId } = request.data;
 
   if (!email || typeof email !== "string") {
-    throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Il campo 'email' è richiesto e deve essere una stringa valida."
-    );
+    throw new HttpsError("invalid-argument", "Il campo 'email' è obbligatorio.");
   }
-  if (!profileData || typeof profileData !== "object") {
-    throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Il campo 'profileData' è richiesto e deve essere un oggetto."
-    );
+  if (!tecnicoId || typeof tecnicoId !== "string") {
+    throw new HttpsError("invalid-argument", "Il campo 'tecnicoId' è obbligatorio.");
   }
 
   try {
     let userRecord: admin.auth.UserRecord;
 
+    // 3. Creazione o recupero utente in Auth
     try {
       userRecord = await admin.auth().getUserByEmail(email);
-    } catch (error) { // Modified from catch (error: any)
-      if ((error as any).code === 'auth/user-not-found') { // Cast error to any for code property
-        const tempPassword = Math.random().toString(36).slice(-8); // Genera una password temporanea
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found') {
         userRecord = await admin.auth().createUser({
           email: email,
-          password: tempPassword,
           displayName: profileData.nome ? `${profileData.nome} ${profileData.cognome || ''}`.trim() : email,
-          emailVerified: false, // L'utente dovrà verificare l'email o resettare la password
+          emailVerified: true, // Si assume che l'email sia valida
         });
-        // Nota: La password temporanea non viene ritornata per sicurezza. Si presume un flusso di reset password.
       } else {
-        throw new functions.https.HttpsError(
-            "internal",
-            `Errore durante la ricerca/creazione utente in Auth: ${(error as any).message}` // Cast error to any for message property
-        );
+        // Rilancia altri errori di Auth
+        throw new HttpsError("internal", `Errore di Firebase Auth: ${error.message}`);
       }
     }
 
     const uid = userRecord.uid;
 
-    const tecnicoRef = admin.firestore().collection("tecnici").doc(uid);
+    // 4. Impostazione Custom Claim (es. ruolo)
+    await admin.auth().setCustomUserClaims(uid, { role: 'tecnico' });
 
-    await tecnicoRef.set({
+    // 5. Aggiornamento documento in Firestore
+    const tecnicoRef = admin.firestore().collection("tecnici").doc(tecnicoId);
+    await tecnicoRef.update({
+      uid: uid,
+      email: email, // Assicura che l'email sia consistente
+      accessoApp: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 6. Successo: restituisce i dati essenziali al client
+    return {
       uid: uid,
       email: email,
-      ...profileData,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true }); // Usa merge: true per non sovrascrivere completamente se il documento esiste già
+      message: "Provisioning del tecnico completato con successo. Il client può ora inviare l'email di accesso."
+    };
 
-    return { uid: uid, email: email, message: "Tecnico provisionato con successo." };
-
-  } catch (error) { // Modified from catch (error: any)
-    if (error instanceof functions.https.HttpsError) {
+  } catch (error: any) {
+    // Gestione errori centralizzata
+    if (error instanceof HttpsError) {
       throw error;
     }
-    // Gestione di errori inaspettati
-    throw new functions.https.HttpsError(
-        "internal",
-        `Errore interno del server durante il provisioning del tecnico: ${(error as any).message}` // Cast error to any for message property
-    );
+    // Log dell'errore per il debug
+    console.error("Errore imprevisto in provisionTecnico:", error);
+    throw new HttpsError("internal", `Errore interno del server: ${error.message}`);
   }
+});
+
+
+/**
+ * Funzione placeholder V2 per recuperare dati del calendario.
+ */
+export const getCalendarData = onCall({ region: "europe-west1" }, (request) => {
+  console.log("Funzione 'getCalendarData' chiamata.");
+  return { message: "Placeholder per i dati del calendario restituito con successo." };
 });

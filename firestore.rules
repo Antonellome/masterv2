@@ -2,36 +2,10 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Funzione per controllare se l'utente è un amministratore
-    function isAdmin() {
-      return exists(/databases/$(database)/documents/utenti_master/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/utenti_master/$(request.auth.uid)).data.ruolo == 'admin';
-    }
-
-    // Funzione per verificare se l'utente è autenticato
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // Gli utenti master possono essere letti da tutti gli utenti autenticati,
-    // ma modificati solo dagli amministratori.
-    match /utenti_master/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Le notifiche possono essere lette e scritte da qualsiasi utente autenticato.
-    // Questa regola sblocca il problema corrente.
-    match /notifiche/{notificationId} {
-        allow read, write: if isAuthenticated();
-    }
-
-    // Regola generica per tutte le altre collezioni:
-    // Permetti lettura e scrittura a tutti gli utenti autenticati.
-    // Questo copre tecnici, veicoli, navi, clienti, rapportini, etc.
+    // Regola di base: Permetti la lettura e la scrittura solo agli utenti autenticati.
+    // Questo è un buon punto di partenza per la maggior parte delle applicazioni.
     match /{document=**} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if request.auth != null;
     }
   }
 }

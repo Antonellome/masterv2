@@ -23,6 +23,32 @@ _... (sezioni precedenti invariate) ..._
 
 ---
 
+## Piano di Intervento: Normalizzazione del Dato "Categoria" (28/05/2024)
+
+### Il Problema: Incoerenza Fatale dei Dati tra Frontend e Backend
+
+*   **Causa:** Le notifiche per categoria non funzionano a causa di una discrepanza nel formato del dato `categoria` associato a un tecnico.
+    *   **Frontend (`TecnicoForm.tsx`):** Salvava il dato come un **oggetto complesso** (es: `{ id: "cat1", nome: "Elettricista" }`).
+    *   **Backend (Cloud Function):** Si aspettava di ricevere un **ID stringa** in un campo `categoriaId` (es: `"cat1"`).
+*   **Conseguenza:** Le query del backend per trovare i tecnici di una data categoria fallivano, non restituendo alcun risultato e impedendo l'invio delle notifiche.
+
+### La Strategia Risolutiva: Normalizzazione all'Ingresso
+
+Per risolvere il problema alla radice e garantire la coerenza perpetua del dato, si procederà con la **normalizzazione del dato direttamente all'ingresso**, ovvero all'interno del form di modifica.
+
+### L'Intervento: Cosa, Perché, Come
+
+*   **COSA:** Verrà modificato il file `src/components/Tecnici/TecnicoForm.tsx`.
+*   **PERCHÉ:** Per standardizzare il formato del dato `categoria` prima che venga salvato, assicurando che sia sempre e solo un ID stringa (`categoriaId`). Questo risolve il bug delle notifiche e previene future corruzioni del dato.
+*   **COME:**
+    1.  **Azione:** Verrà potenziato il `useEffect` che inizializza il form all'apertura.
+    2.  **Logica di "Pulizia":** All'interno del `useEffect`, verrà aggiunta una logica che controlla i dati del tecnico in ingresso:
+        *   Se rileva la presenza di un campo `categoria` strutturato come un oggetto (dato "legacy"), estrae il suo `id`.
+        *   Assegna questo `id` al campo corretto: `categoriaId`.
+        *   **Rimuove** la vecchia e problematica proprietà `categoria` dall'oggetto dati.
+    3.  **Risultato:** Il form opererà sempre con una struttura dati pulita e coerente. La funzione di salvataggio (`handleSave`) invierà al backend solo il campo `categoriaId`, allineando perfettamente frontend e backend.
+
+
 ## Standard di Sintassi Obbligatorio (Decisione del 25/05/2024 - **Versione Definitiva Post-Analisi**)
 
 ### 1. Fonte della Verità: Analisi Comparativa

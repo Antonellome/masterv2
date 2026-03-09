@@ -1,6 +1,7 @@
 {
         "name": "riso-app",
         "private": true,
+        "type": "module",
         "scripts": {
                 "dev": "vite",
                 "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
