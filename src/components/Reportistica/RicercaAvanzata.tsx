@@ -199,7 +199,7 @@ const RicercaAvanzata: React.FC = () => {
     };
 
     // --- GESTIONE FILTRI E DATI FILTRATI ---
-    const handleFilterChange = useCallback((filterName: keyof FilterState, value: any) => {
+    const handleFilterChange = useCallback(<K extends keyof FilterState>(filterName: K, value: FilterState[K]) => {
         setFilters(prev => ({ ...prev, [filterName]: value }));
     }, []);
     const resetFilters = useCallback(() => {
@@ -235,12 +235,12 @@ const RicercaAvanzata: React.FC = () => {
                 <Paper elevation={2} sx={{ p: 2, flexShrink: 0 }}>
                     <Typography variant="h6" component="h2" sx={{ mb: 2 }}>Filtri di Ricerca</Typography>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid size={{ xs: 12, sm: 6, md: 3 }}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid size={{ xs: 12, sm: 6, md: 3 }}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid size={{ xs: 12, sm: 6, md: 3 }}><Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
-                        <Grid size={{ xs: 12, sm: 6, md: 3 }}><Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
-                        <Grid size={{ xs: 12, sm: 6, md: 3 }}><Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
-                        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: 'flex', alignItems: 'center' }}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
+                        <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', alignItems: 'center' }}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
                     </Grid>
                 </Paper>
 

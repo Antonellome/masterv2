@@ -45,18 +45,18 @@ const TipoGiornataForm = ({ open, onClose, tipoGiornata }: TipoGiornataFormProps
 
     const isEditMode = tipoGiornata && tipoGiornata.id;
 
-    // FIX: Dipendenza stabile per useEffect
-    // L'hook ora dipende da `tipoGiornata?.id` (una stringa stabile) invece che dall'intero oggetto `tipoGiornata`,
-    // prevenendo il ciclo infinito di rendering.
+    // L'hook viene eseguito quando il dialogo si apre o quando l'oggetto `tipoGiornata` cambia.
+    // Questo assicura che il form sia sempre sincronizzato con i dati passati dall'esterno.
     useEffect(() => {
         if (open) {
-            if (isEditMode) {
-                reset(tipoGiornata as TipoGiornata);
+            if (isEditMode && tipoGiornata) {
+                reset(tipoGiornata);
             } else {
+                // Resetta ai valori di default per la creazione di un nuovo elemento.
                 reset({ nome: '', gettonata: false });
             }
         }
-    }, [tipoGiornata?.id, open, isEditMode, reset]);
+    }, [tipoGiornata, open, reset, isEditMode]);
 
     const handleFormSubmit: SubmitHandler<TipoGiornata> = async (data) => {
         try {

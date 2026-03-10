@@ -19,13 +19,20 @@ import {
     ListItemText,
     ListItemAvatar,
     Avatar,
-    Divider
+    Divider,
+    Tooltip
 } from '@mui/material';
-import { Delete as DeleteIcon, Notifications as NotificationsIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Done as DoneIcon, DoneAll as DoneAllIcon } from '@mui/icons-material';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import dayjs from 'dayjs';
 import type { NotificaRichiesta } from '../../types/definitions';
+
+// Definizione del tipo per la nuova struttura di `readBy`
+interface ReadByEntry {
+    name: string;
+    readAt: Timestamp;
+}
 
 const DettaglioNotificaDialog = lazy(() => import('./DettaglioNotificaDialog'));
 
@@ -78,24 +85,32 @@ const SentNotificationsList = () => {
         setConfirmDelete({ open: false, id: null });
     };
 
-    const renderRecipientsText = (notifica: NotificaRichiesta): string => {
-        if (notifica.sendToAll) {
-            return 'Tutti i tecnici';
-        }
-
-        const toNames = notifica.to_names || [];
-        const toCategoryNames = notifica.to_category_names || [];
-        
+    const generateTooltipContent = (notifica: NotificaRichiesta): React.ReactNode => {
         const recipients = [
-            ...toNames,
-            ...toCategoryNames.map(c => `Cat: ${c}`)
+            ...(notifica.to_names || []),
+            ...(notifica.to_category_names || []).map(c => `Cat: ${c}`)
         ];
+        const recipientsText = notifica.sendToAll ? 'Tutti i tecnici' : recipients.join(', ') || 'Nessun destinatario';
 
-        if (recipients.length === 0) {
-            return 'Destinatari non specificati';
-        }
+        const readByData = notifica.readBy as { [uid: string]: ReadByEntry } | undefined;
+        const readers = readByData ? Object.values(readByData) : [];
 
-        return recipients.join(', ');
+        return (
+            <Box>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>Inviata a: {recipientsText}</Typography>
+                <Divider />
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mt: 1, mb: 0.5 }}>Stato Letture:</Typography>
+                {readers.length > 0 ? (
+                    readers.map(reader => (
+                        <Typography key={reader.name} variant="caption" display="block">
+                            - {reader.name} (Letto il: {dayjs(reader.readAt.toDate()).format('DD/MM HH:mm')})
+                        </Typography>
+                    ))
+                ) : (
+                    <Typography variant="caption">Nessuna lettura registrata.</Typography>
+                )}
+            </Box>
+        );
     };
 
     if (loading) {
@@ -115,41 +130,41 @@ const SentNotificationsList = () => {
         <>
             <Paper elevation={3} sx={{ mt: 2 }}>
                 <List sx={{ padding: 0 }}>
-                    {sentNotifications.map((notifica, index) => (
-                        <React.Fragment key={notifica.id}>
-                            <ListItem
-                                disablePadding
-                                secondaryAction={
-                                    <IconButton edge="end" aria-label="delete" onClick={(e) => handleDeleteClick(e, notifica.id!)}>
-                                        <DeleteIcon />
-                                    </IconButton>
-                                }
-                            >
-                                <ListItemButton onClick={() => handleOpenDetail(notifica)}>
-                                    <ListItemAvatar>
-                                        <Avatar>
-                                            <NotificationsIcon />
-                                        </Avatar>
-                                    </ListItemAvatar>
-                                    <ListItemText
-                                        primary={notifica.title || '(Nessun titolo)'}
-                                        secondary={
-                                            <Box component="span" sx={{ display: 'block' }}>
-                                                <Typography component="span" variant="body2" color="text.primary" sx={{ fontWeight: 'bold' }}>
-                                                    {renderRecipientsText(notifica)}
-                                                </Typography>
-                                                <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
+                    {sentNotifications.map((notifica, index) => {
+                        const hasBeenRead = notifica.readBy && Object.keys(notifica.readBy).length > 0;
+                        return (
+                            <React.Fragment key={notifica.id}>
+                                <ListItem
+                                    disablePadding
+                                    secondaryAction={
+                                        <IconButton edge="end" aria-label="delete" onClick={(e) => handleDeleteClick(e, notifica.id!)}>
+                                            <DeleteIcon />
+                                        </IconButton>
+                                    }
+                                >
+                                    <ListItemButton onClick={() => handleOpenDetail(notifica)}>
+                                        <ListItemAvatar>
+                                            <Tooltip title={generateTooltipContent(notifica)} arrow placement="right">
+                                                <Avatar sx={{ bgcolor: hasBeenRead ? 'primary.main' : 'grey.500' }}>
+                                                    {hasBeenRead ? <DoneAllIcon /> : <DoneIcon />}
+                                                </Avatar>
+                                            </Tooltip>
+                                        </ListItemAvatar>
+                                        <ListItemText
+                                            primary={notifica.title || '(Nessun titolo)'}
+                                            secondary={
+                                                <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                                                     {`Inviata il: ${dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY HH:mm')}`}
                                                 </Typography>
-                                            </Box>
-                                        }
-                                        primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
-                                    />
-                                </ListItemButton>
-                            </ListItem>
-                            {index < sentNotifications.length - 1 && <Divider variant="inset" component="li" />}
-                        </React.Fragment>
-                    ))}
+                                            }
+                                            primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
+                                        />
+                                    </ListItemButton>
+                                </ListItem>
+                                {index < sentNotifications.length - 1 && <Divider variant="inset" component="li" />}
+                            </React.Fragment>
+                        );
+                    })}
                 </List>
             </Paper>
 

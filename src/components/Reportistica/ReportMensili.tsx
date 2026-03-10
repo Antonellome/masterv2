@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
     Box, 
     Typography, 
@@ -55,14 +55,14 @@ const ConsuntivoMensile = () => {
                 const querySnapshot = await getDocs(q);
                 const tecniciList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tecnico));
                 setTecnici(tecniciList.sort((a, b) => a.cognome.localeCompare(b.cognome)));
-            } catch (err) {
+            } catch {
                 setError("Errore nel caricamento dei tecnici.");
             }
         };
         fetchTecnici();
     }, []);
 
-    const handleGenerateReport = useCallback(async () => {
+    const handleGenerateReport = async () => {
         if (!selectedTecnico || !selectedMonth) {
             setError("Per favore, seleziona un tecnico e un mese validi.");
             return;
@@ -113,7 +113,7 @@ const ConsuntivoMensile = () => {
             setError("Si è verificato un errore imprevisto. Controlla la console per i dettagli.");
         }
         setLoading(false);
-    }, [selectedTecnico, selectedMonth]);
+    };
 
     const columns: GridColDef[] = [
         { field: 'data', headerName: 'Data', width: 120, sortable: true },
@@ -141,7 +141,7 @@ const ConsuntivoMensile = () => {
                  <Typography variant="h6" gutterBottom>Riepilogo Ore</Typography>
                  <Grid container spacing={2}>
                     {Object.entries(totaliPerTipoGiornata).map(([tipo, ore]) => (
-                        <Grid key={tipo} size={{ xs: 6, sm: 4, md: 3}}>
+                        <Grid key={tipo} item xs={6} sm={4} md={3}>
                             <Typography variant="body2"><strong>{tipo}:</strong> {ore} ore</Typography>
                         </Grid>
                     ))}
@@ -157,7 +157,7 @@ const ConsuntivoMensile = () => {
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Paper sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Grid container spacing={2} alignItems="center" sx={{ mb: 3, flexShrink: 0 }}>
-                    <Grid size={{ xs: 12, sm: 6, md: 4}}>
+                    <Grid item xs={12} sm={6} md={4}>
                         <Autocomplete
                             options={tecnici}
                             getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
@@ -167,7 +167,7 @@ const ConsuntivoMensile = () => {
                             isOptionEqualToValue={(option, value) => option.id === value.id}
                         />
                     </Grid>
-                    <Grid size={{ xs: 12, sm: 6, md: 4}}>
+                    <Grid item xs={12} sm={6} md={4}>
                         <DatePicker
                             label="Seleziona Mese"
                             views={['month', 'year']}
@@ -175,7 +175,7 @@ const ConsuntivoMensile = () => {
                             onChange={(newValue) => setSelectedMonth(newValue)}
                         />
                     </Grid>
-                    <Grid size={{ xs: 12, md: 4}}>
+                    <Grid item xs={12} md={4}>
                         <Button 
                             variant="contained" 
                             onClick={handleGenerateReport} 
@@ -201,9 +201,9 @@ const ConsuntivoMensile = () => {
                             density="compact"
                             disableRowSelectionOnClick
                             localeText={{
-                                toolbarDensity: 'Densità',
-                                toolbarFilters: 'Filtri',
-                                toolbarColumns: 'Colonne',
+                                toolbarDensity: 'Densità', 
+                                toolbarFilters: 'Filtri', 
+                                toolbarColumns: 'Colonne', 
                                 toolbarExport: 'Esporta',
                             }}
                         />

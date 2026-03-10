@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { db, app } from '@/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth'; // <-- MODIFICA: Import aggiunto
+import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import {
     Box, Typography, Alert, CircularProgress, Switch, Tooltip, Dialog, DialogTitle, DialogContent, TextField, DialogActions, Button, Chip
 } from '@mui/material';
@@ -16,7 +16,7 @@ import Edit from '@mui/icons-material/Edit';
 import NoAccounts from '@mui/icons-material/NoAccounts';
 
 const functions = getFunctions(app, 'europe-west1');
-const auth = getAuth(app); // <-- MODIFICA: Istanza di Auth creata
+const auth = getAuth(app);
 
 function CustomToolbar() {
     return (
@@ -62,7 +62,7 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
             const q = query(collection(db, "tecnici"), where("attivo", "==", true));
             const querySnapshot = await getDocs(q);
             setTecnici(querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tecnico)));
-        } catch (err) {
+        } catch {
             setError("Impossibile caricare l'elenco dei tecnici.");
         } finally {
             setLoading(false);
@@ -71,7 +71,6 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
 
     useEffect(() => { fetchTecniciAttivi(); }, [fetchTecniciAttivi]);
 
-    // --- MODIFICA COMPLETA DELLA FUNZIONE ---
     const handleProvisionAndShare = async (tecnico: Tecnico) => {
         if (!tecnico.email) {
             setFeedback({ type: 'warning', message: 'Aggiungi un\'email prima di poter inviare un link di accesso.' });
@@ -82,32 +81,23 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
         setFeedback(null);
 
         try {
-            // Step 1: Provisiona l'utente sul backend (crea Auth user, aggiorna Firestore)
             const provisionTecnico = httpsCallable(functions, 'provisionTecnico');
             await provisionTecnico({ 
                 email: tecnico.email, 
                 profileData: { nome: tecnico.nome, cognome: tecnico.cognome },
                 tecnicoId: tecnico.id
             });
+            
+            await sendPasswordResetEmail(auth, tecnico.email);
+            setFeedback({ type: 'success', message: `Provisioning completato. Email di accesso inviata a ${tecnico.email}.` });
 
-            // Step 2: Invia l'email di reset password dal client
-            try {
-                await sendPasswordResetEmail(auth, tecnico.email);
-                setFeedback({ type: 'success', message: `Provisioning completato. Email di accesso inviata a ${tecnico.email}.` });
-            } catch (emailError: any) {
-                console.error("Errore durante l'invio dell'email di reset password:", emailError);
-                // L'utente è stato creato, ma l'email non è partita. Informa l'utente di questo stato specifico.
-                throw new Error(`Utente creato, ma l\'invio dell\'email è fallito: ${emailError.message}`);
-            }
-
-            // Aggiorna lo stato locale per riflettere l'accesso abilitato
             if (!tecnico.accessoApp) {
                  setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, accessoApp: true } : t));
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Errore dettagliato dalla chiamata alla funzione o dall'invio email:", error);
-            const message = error.message || 'Si è verificato un errore sconosciuto.';
+            const message = error instanceof Error ? error.message : 'Si è verificato un errore sconosciuto.';
             setFeedback({ type: 'error', message: `Errore: ${message}` });
         } finally {
             setActionLoading(prev => ({ ...prev, [tecnico.id]: false }));
@@ -124,19 +114,16 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
                 setFeedback({ type: 'warning', message: "Aggiungi un'email per abilitare l'accesso" });
                 return;
             }
-            // Chiama la funzione principale che ora gestisce sia provisioning che invio email
             await handleProvisionAndShare(tecnico);
         } else {
-            // Logica per disabilitare l'accesso
             setActionLoading(prev => ({ ...prev, [id]: true }));
             try {
-                // Qui potresti voler chiamare una funzione server che disabilita l'utente in Auth
-                // Per ora, aggiorniamo solo Firestore
-                await updateDoc(doc(db, 'tecnici', id), { accessoApp: false, uid: null }); // Rimuovi anche l'UID
+                await updateDoc(doc(db, 'tecnici', id), { accessoApp: false, uid: null });
                 setTecnici(prev => prev.map(t => t.id === id ? { ...t, accessoApp: false, uid: undefined } : t));
                 setFeedback({ type: 'success', message: 'Accesso App disabilitato.' });
-            } catch (error: any) {
-                 setFeedback({ type: 'error', message: `Errore durante la disabilitazione: ${error.message}` });
+            } catch (error: unknown) {
+                 const message = error instanceof Error ? error.message : 'Errore durante la disabilitazione.';
+                 setFeedback({ type: 'error', message });
             } finally {
                  setActionLoading(prev => ({ ...prev, [id]: false }));
                  onDataChange();
@@ -165,8 +152,9 @@ const SincronizzatiApp: React.FC<SincronizzatiAppProps> = ({ onDataChange }) => 
             await updateDoc(tecnicoRef, { email: currentEmail });
             setTecnici(prev => prev.map(t => t.id === selectedTecnico.id ? { ...t, email: currentEmail } : t));
             setFeedback({ type: 'success', message: 'Email aggiornata con successo.' });
-        } catch (error: any) {
-            setFeedback({ type: 'error', message: `Errore durante l'aggiornamento: ${error.message}` });
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Errore durante l\'aggiornamento.';
+            setFeedback({ type: 'error', message });
         } finally {
             setActionLoading(prev => ({ ...prev, [selectedTecnico.id]: false }));
             handleCloseEmailDialog();

@@ -74,9 +74,10 @@ const GestioneUtentiTab = () => {
             setNewUserEmail('');
             setOpenDialog(false);
             fetchUsers();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Errore nella creazione dell'utente:", err);
-            setSnackbar({ open: true, message: err.message || 'Errore durante la creazione dell\'utente.', severity: 'error' });
+            const message = err instanceof Error ? err.message : 'Errore durante la creazione dell\'utente.';
+            setSnackbar({ open: true, message, severity: 'error' });
         }
     };
 
@@ -90,9 +91,10 @@ const GestioneUtentiTab = () => {
             await deleteUserFunction({ uid: id });
             setSnackbar({ open: true, message: 'Utente eliminato con successo.', severity: 'success' });
             fetchUsers();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Errore nella rimozione dell'utente:", err);
-            setSnackbar({ open: true, message: err.message || 'Errore durante l\'eliminazione dell\'utente.', severity: 'error' });
+            const message = err instanceof Error ? err.message : 'Errore durante l\'eliminazione dell\'utente.';
+            setSnackbar({ open: true, message, severity: 'error' });
         }
     };
     
@@ -109,9 +111,10 @@ const GestioneUtentiTab = () => {
             await setUserStatusFunction({ uid: id, disabled: newStatus });
             setSnackbar({ open: true, message: `Utente ${newStatus ? 'disabilitato' : 'abilitato'} con successo.`, severity: 'success' });
             fetchUsers();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(`Errore nel ${actionText} l'utente:`, error);
-            setSnackbar({ open: true, message: error.message || 'Operazione fallita.', severity: 'error' });
+            const message = error instanceof Error ? error.message : 'Operazione fallita.';
+            setSnackbar({ open: true, message, severity: 'error' });
         }
     };
 
@@ -120,9 +123,10 @@ const GestioneUtentiTab = () => {
         try {
             await sendPasswordResetEmail(getAuth(), email);
             setSnackbar({ open: true, message: `Email di ripristino inviata a ${email}.`, severity: 'success' });
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Errore nell'invio dell'email di reset:", error);
-            setSnackbar({ open: true, message: error.message || 'Invio fallito.', severity: 'error' });
+            const message = error instanceof Error ? error.message : 'Invio fallito.';
+            setSnackbar({ open: true, message, severity: 'error' });
         }
     };
 
@@ -171,10 +175,15 @@ const GestioneUtentiTab = () => {
     }
     
     if (!user) {
-        // CORREZIONE: Il return di un componente JSX dentro un if statement
-        // deve essere wrappato tra parentesi per evitare ambiguità del parser.
         return (<Alert severity="error">Devi essere autenticato per accedere a questa sezione.</Alert>);
     }
+
+    const handleCloseSnackbar = (event?: React.SyntheticEvent | Event, reason?: string) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbar({ ...snackbar, open: false });
+    };
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -197,8 +206,8 @@ const GestioneUtentiTab = () => {
                     <Button onClick={handleCreateUser}>Crea e Abilita</Button>
                 </DialogActions>
             </Dialog>
-            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}
+            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+                <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}
                 </Alert>
             </Snackbar>
         </Box>

@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Grid, FormControlLabel, Switch, MenuItem, Divider, Typography, CircularProgress
 } from '@mui/material';
@@ -17,7 +16,7 @@ const dateFields: (keyof Tecnico)[] = [
     'scadenzaCorsoSicurezza', 'scadenzaPrimoSoccorso', 'scadenzaAntincendio'
 ];
 
-const renderDatePicker = (label: string, name: keyof Tecnico, value: any, handleChange: (name: keyof Tecnico, date: dayjs.Dayjs | null) => void) => (
+const renderDatePicker = (label: string, name: keyof Tecnico, value: dayjs.Dayjs | Timestamp | null | undefined, handleChange: (name: keyof Tecnico, date: dayjs.Dayjs | null) => void) => (
     <Grid
         size={{
             xs: 12,
@@ -45,40 +44,55 @@ interface TecnicoFormProps {
 
 const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnico, ditte, categorie, isSaving = false }) => {
 
-    const [formData, setFormData] = useState<Partial<Tecnico>>({});
+    const initialData = useMemo(() => {
+        const baseData = {
+            nome: '', cognome: '', codiceFiscale: '', indirizzo: '', citta: '', cap: '', provincia: '', email: '', telefono: '',
+            dittaId: '', categoriaId: '', tipoContratto: '', 
+            numeroPatente: '', categoriaPatente: '', numeroCQC: '', 
+            numeroCartaIdentita: '', numeroPassaporto: '',
+            note: '', attivo: true,
+            dataAssunzione: null, scadenzaContratto: null, scadenzaVisita: null, scadenzaUnilav: null,
+            scadenzaCartaIdentita: null, scadenzaPassaporto: null, scadenzaPatente: null, scadenzaCQC: null,
+            scadenzaCorsoSicurezza: null, scadenzaPrimoSoccorso: null, scadenzaAntincendio: null
+        };
 
+        if (!tecnico) return baseData;
+
+        const tecnicoData = { ...tecnico };
+
+        // Gestione categoriaId: il dato 'tecnico' può arrivare con l'oggetto `categoria` popolato.
+        // Per il form, è necessario estrarre l'ID e rimuovere l'oggetto per evitare conflitti.
+        // @ts-expect-error - `tecnicoData.categoria` è un campo dinamico, non strettamente tipizzato nel modello base.
+        if (tecnicoData.categoria && typeof tecnicoData.categoria === 'object' && tecnicoData.categoria.id) {
+            // @ts-expect-error - Assegnazione a `categoriaId` che non è definito nel tipo inferito di `tecnicoData` in questo scope.
+            tecnicoData.categoriaId = tecnicoData.categoria.id;
+            // @ts-expect-error - Rimozione del campo `categoria` per pulire l'oggetto dati del form.
+            delete tecnicoData.categoria;
+        }
+
+        // Conversione Timestamp in Dayjs per i componenti DatePicker.
+        dateFields.forEach(field => {
+            const dateValue = tecnicoData[field];
+            if (dateValue && dateValue instanceof Timestamp) {
+                 // @ts-expect-error - Il tipo di `tecnicoData[field]` è un'unione complessa; qui forziamo l'assegnazione a `Dayjs`.
+                tecnicoData[field] = dayjs(dateValue.toDate());
+            }
+        });
+
+        return { ...baseData, ...tecnicoData };
+
+    }, [tecnico]);
+
+    const [formData, setFormData] = useState<Partial<Tecnico>>(initialData);
+
+    // Effetto per resettare il form quando il dialogo viene aperto o i dati iniziali cambiano.
     useEffect(() => {
         if (open) {
-            const initialData = tecnico ? { ...tecnico } : {
-                nome: '', cognome: '', codiceFiscale: '', indirizzo: '', citta: '', cap: '', provincia: '', email: '', telefono: '',
-                dittaId: '', categoriaId: '', tipoContratto: '', 
-                numeroPatente: '', categoriaPatente: '', numeroCQC: '', 
-                numeroCartaIdentita: '', numeroPassaporto: '',
-                note: '', attivo: true,
-                dataAssunzione: null, scadenzaContratto: null, scadenzaVisita: null, scadenzaUnilav: null,
-                scadenzaCartaIdentita: null, scadenzaPassaporto: null, scadenzaPatente: null, scadenzaCQC: null,
-                scadenzaCorsoSicurezza: null, scadenzaPrimoSoccorso: null, scadenzaAntincendio: null
-            };
-
-            // @ts-ignore
-            if (initialData.categoria && typeof initialData.categoria === 'object' && initialData.categoria.id) {
-                // @ts-ignore
-                initialData.categoriaId = initialData.categoria.id;
-                // @ts-ignore
-                delete initialData.categoria;
-            }
-
-            dateFields.forEach(field => {
-                const dateValue = initialData[field];
-                if (dateValue && dateValue instanceof Timestamp) {
-                    // @ts-ignore
-                    initialData[field] = dayjs(dateValue.toDate());
-                }
-            });
-
-            setFormData(initialData);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setFormData(initialData); // Volutamente si resetta lo stato all'apertura, il rischio di loop è controllato dalle dipendenze.
         }
-    }, [tecnico, open]);
+    }, [open, initialData]);
+    
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = event.target;
@@ -95,10 +109,10 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
         dateFields.forEach(field => {
             const dateValue = dataToSave[field];
             if (dayjs.isDayjs(dateValue)) {
-                // @ts-ignore
+                // @ts-expect-error - Conversione da Dayjs a stringa ISO per salvataggio su Firestore.
                 dataToSave[field] = dateValue.toISOString();
             } else if (dateValue === null || dateValue === undefined) {
-                // @ts-ignore
+                 // @ts-expect-error - Normalizzazione a `null` per i campi data non valorizzati.
                 dataToSave[field] = null;
             }
         });

@@ -15,6 +15,18 @@ interface InviaNotificaDialogProps {
   onError: (message: string) => void;
 }
 
+// Definizione dell'interfaccia per la notifica
+interface NotificaRichiesta {
+  title: string;
+  body: string;
+  createdAt: Timestamp;
+  isRead: boolean;
+  status: string;
+  isGlobal?: boolean;
+  to_ids?: string[];
+  to_category_ids?: string[];
+}
+
 const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose, onSuccess, onError }) => {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -61,17 +73,24 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
     setSending(true);
     
-    const notificaRichiesta = {
+    const notificaRichiesta: NotificaRichiesta = {
         title,
         body,
         createdAt: Timestamp.now(),
-        sendToAll: sendToAll,
-        to_ids: sendToAll ? [] : selectedTecnici.map(t => t.id),
-        to_names: sendToAll ? [] : selectedTecnici.map(t => `${t.nome} ${t.cognome}`),
-        to_categories: sendToAll ? [] : selectedCategorie.map(c => c.id),
-        to_category_names: sendToAll ? [] : selectedCategorie.map(c => c.nome),
-        status: 'pending',
+        isRead: false, 
+        status: 'pending', 
     };
+
+    if (sendToAll) {
+        notificaRichiesta.isGlobal = true;
+    } else {
+        if (selectedTecnici.length > 0) {
+            notificaRichiesta.to_ids = selectedTecnici.map(t => t.id);
+        }
+        if (selectedCategorie.length > 0) {
+            notificaRichiesta.to_category_ids = selectedCategorie.map(c => c.id);
+        }
+    }
 
     try {
       await addDoc(collection(db, 'notificheRichieste'), notificaRichiesta);

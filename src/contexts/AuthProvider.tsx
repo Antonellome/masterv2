@@ -1,21 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import {
   onAuthStateChanged,
-  User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebase';
 import type { IAuthContext, AuthUser } from './AuthContext'; // MODIFICATO: Importo solo i tipi
 
 // --- CREAZIONE DEL CONTESTO ---
-// L'oggetto AuthContext viene creato qui, non importato.
 const AuthContext = createContext<IAuthContext | undefined>(undefined);
 
 // --- HOOK USEAUTH ---
-// Questo è l'hook pubblico che i componenti useranno per accedere al contesto.
 export const useAuth = () => {
     const context = useContext(AuthContext);
     if (context === undefined) {
@@ -25,7 +22,6 @@ export const useAuth = () => {
 };
 
 // --- COMPONENTE PROVIDER ---
-// Questo componente avvolge l'app e fornisce il valore del contesto.
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser>(null);
     const [loading, setLoading] = useState(true);
@@ -45,8 +41,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       try {
         await signInWithEmailAndPassword(auth, email, pass);
-      } catch (e: any) {
-        // Semplificazione del messaggio di errore
+      } catch (_e: unknown) { // CORRETTO: Tipo 'unknown' per sicurezza e variabile non usata con _
         setError("Credenziali non valide. Riprova.");
       } finally {
         setLoading(false);
@@ -65,7 +60,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           cognome,
           email
         });
-      } catch (e: any) { 
+      } catch (_e: unknown) { // CORRETTO: Tipo 'unknown' per sicurezza e variabile non usata con _
         setError("Errore durante la registrazione.");
       } finally {
         setLoading(false);
@@ -76,7 +71,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       try {
         await signOut(auth);
-      } catch (e: any) { 
+      } catch (_e: unknown) { // CORRETTO: Tipo 'unknown' per sicurezza e variabile non usata con _
         setError("Errore durante il logout.");
       }
     }, []);

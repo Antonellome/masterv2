@@ -52,7 +52,7 @@ const GestioneTecnici = () => {
     }
 
     // Queste funzioni andranno implementate per gestire l'interazione
-    const handleAction = (action: string, data?: any) => {
+    const handleAction = (action: string, data?: Tecnico | { id: string; checked: boolean } | string) => {
         console.log(`Azione: ${action}`, data);
         // Qui andrà la logica per aggiungere, modificare, eliminare, etc.
     };

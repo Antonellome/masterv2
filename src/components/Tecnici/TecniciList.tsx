@@ -57,13 +57,13 @@ const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieM
             field: 'dittaId', 
             headerName: 'Ditta', 
             flex: 1, 
-            renderCell: (params: GridRenderCellParams<any, string>) => ditteMap.get(params.value || '') || 'N/A'
+            renderCell: (params: GridRenderCellParams<Tecnico, string>) => ditteMap.get(params.value || '') || 'N/A'
         },
         { 
             field: 'categoriaId', 
             headerName: 'Categoria', 
             flex: 1, 
-            renderCell: (params: GridRenderCellParams<any, string>) => categorieMap.get(params.value || '') || 'N/A'
+            renderCell: (params: GridRenderCellParams<Tecnico, string>) => categorieMap.get(params.value || '') || 'N/A'
         },
         { field: 'email', headerName: 'Email', flex: 1.5 },
         { field: 'telefono', headerName: 'Telefono', flex: 1 },
