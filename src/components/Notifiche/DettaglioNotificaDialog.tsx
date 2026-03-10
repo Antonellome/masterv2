@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button,
-    Typography, Box, Chip, Avatar, List, ListItem, ListItemAvatar, ListItemText, Divider
+    Typography, Box, Avatar, List, ListItem, ListItemAvatar, ListItemText, Divider
 } from '@mui/material';
 import { Person as PersonIcon, Category as CategoryIcon, Group as GroupIcon } from '@mui/icons-material';
 import dayjs from 'dayjs';

@@ -10,7 +10,6 @@ import TecnicoForm from '@/components/Tecnici/TecnicoForm';
 import DettaglioItemDialog from '@/components/common/DettaglioItemDialog';
 import TecniciList from '@/components/Tecnici/TecniciList';
 import SincronizzatiApp from '@/components/Tecnici/SincronizzatiApp';
-import { TECNICI_SCADENZE_FIELDS } from '@/utils/scadenze';
 import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
 import dayjs from 'dayjs';
 
@@ -64,39 +63,31 @@ const GestioneTecnici = () => {
     const handleTabChange = (event: React.SyntheticEvent, newValue: number) => setCurrentTab(newValue);
     const refreshData = () => {};
 
-    // --- FUNZIONE DI SALVATAGGIO DEFINITIVA (con struttura payload corretta) ---
     const handleSave = async (data: Partial<Tecnico>) => {
         setSaving(true);
 
-        // 1. Sanificazione dei dati (converte undefined in null)
-        const sanitizedData: { [key: string]: any } = {};
-        Object.keys(data).forEach(key => {
-            // @ts-ignore
+        const sanitizedData: { [key: string]: unknown } = {};
+        (Object.keys(data) as Array<keyof Tecnico>).forEach(key => {
             const value = data[key];
             sanitizedData[key] = value === undefined ? null : value;
         });
 
-        // 2. Validazione critica lato client
         if (!sanitizedData.email) {
             setSnackbar({ open: true, message: "L'email è un campo obbligatorio.", severity: 'warning' });
             setSaving(false);
             return;
         }
 
-        // 3. COSTRUZIONE DEL PAYLOAD CORRETTO (LA SVOLTA)
-        // La Cloud Function si aspetta un oggetto { email: string, profileData: object }
         const payload = {
             email: sanitizedData.email,
             profileData: { ...sanitizedData }
         };
 
-        // Pulizia finale del payload: rimuovo dati non necessari o duplicati da profileData
-        delete payload.profileData.email; // L'email è già al livello superiore
+        delete (payload.profileData as { email?: unknown }).email;
         if (payload.profileData.id === null) {
-            delete payload.profileData.id; // L'id non serve per una nuova creazione
+            delete (payload.profileData as { id?: unknown }).id;
         }
 
-        // 4. Logging Diagnostico Finale
         console.log("--- DEBUG SALVATAGGIO TECNICO (STRUTTURA CORRETTA) ---");
         console.log("Payload inviato alla Cloud Function 'provisionTecnico':", payload);
         console.log("--- FINE DEBUG ---");
@@ -105,16 +96,19 @@ const GestioneTecnici = () => {
         const provisionTecnico = httpsCallable(functions, 'provisionTecnico');
 
         try {
-            // 5. Chiamata alla Cloud Function con il payload corretto
             const result = await provisionTecnico(payload);
             console.log('Risultato Cloud Function:', result.data);
 
-            const message = payload.profileData.id ? 'Tecnico aggiornato con successo!' : 'Tecnico creato con successo!';
+            const message = (payload.profileData as {id?: unknown}).id ? 'Tecnico aggiornato con successo!' : 'Tecnico creato con successo!';
             setSnackbar({ open: true, message, severity: 'success' });
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Errore durante la chiamata alla Cloud Function 'provisionTecnico':", error);
-            const errorMessage = error.details?.message || error.message || 'Si è verificato un errore imprevisto sul server.';
+            let errorMessage = 'Si è verificato un errore imprevisto sul server.';
+            if (typeof error === 'object' && error !== null && 'message' in error) {
+                const err = error as { details?: { message?: string }; message: string };
+                errorMessage = err.details?.message || err.message;
+            }
             setSnackbar({ open: true, message: `Errore: ${errorMessage}`, severity: 'error' });
         } finally {
             setSaving(false);

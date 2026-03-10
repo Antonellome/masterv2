@@ -1,88 +1,77 @@
+
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
-// Inizializza l'SDK di Admin una sola volta
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
+admin.initializeApp();
 
 /**
- * Funzione V2 per creare o aggiornare un utente tecnico in Firebase Authentication
- * e aggiornare il documento corrispondente in Firestore.
- * NON invia email. L'invio è delegato al client.
+ * Funzione per creare un nuovo utente master.
+ * Richiede che l'utente chiamante sia autenticato.
  */
-export const provisionTecnico = onCall({ region: "europe-west1" }, async (request) => {
-  // 1. Autenticazione
+export const createNewMasterUser = onCall({ region: "europe-west1" }, async (request) => {
   if (!request.auth) {
-    throw new HttpsError("unauthenticated", "La funzione deve essere chiamata da un utente amministratore autenticato.");
+    throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
   }
-
-  // 2. Validazione input
-  const { email, profileData, tecnicoId } = request.data;
-
-  if (!email || typeof email !== "string") {
-    throw new HttpsError("invalid-argument", "Il campo 'email' è obbligatorio.");
+  const { email } = request.data;
+  if (!email) {
+    throw new HttpsError("invalid-argument", "L'email è un parametro obbligatorio.");
   }
-  if (!tecnicoId || typeof tecnicoId !== "string") {
-    throw new HttpsError("invalid-argument", "Il campo 'tecnicoId' è obbligatorio.");
-  }
-
   try {
-    let userRecord: admin.auth.UserRecord;
-
-    // 3. Creazione o recupero utente in Auth
-    try {
-      userRecord = await admin.auth().getUserByEmail(email);
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found') {
-        userRecord = await admin.auth().createUser({
-          email: email,
-          displayName: profileData.nome ? `${profileData.nome} ${profileData.cognome || ''}`.trim() : email,
-          emailVerified: true, // Si assume che l'email sia valida
-        });
-      } else {
-        // Rilancia altri errori di Auth
-        throw new HttpsError("internal", `Errore di Firebase Auth: ${error.message}`);
-      }
-    }
-
-    const uid = userRecord.uid;
-
-    // 4. Impostazione Custom Claim (es. ruolo)
-    await admin.auth().setCustomUserClaims(uid, { role: 'tecnico' });
-
-    // 5. Aggiornamento documento in Firestore
-    const tecnicoRef = admin.firestore().collection("tecnici").doc(tecnicoId);
-    await tecnicoRef.update({
-      uid: uid,
-      email: email, // Assicura che l'email sia consistente
-      accessoApp: true,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    const userRecord = await admin.auth().createUser({ email, emailVerified: false, disabled: false });
+    await admin.firestore().collection("utenti_master").doc(userRecord.uid).set({
+      email: userRecord.email,
+      disabled: false,
     });
-
-    // 6. Successo: restituisce i dati essenziali al client
-    return {
-      uid: uid,
-      email: email,
-      message: "Provisioning del tecnico completato con successo. Il client può ora inviare l'email di accesso."
-    };
-
-  } catch (error: any) {
-    // Gestione errori centralizzata
-    if (error instanceof HttpsError) {
-      throw error;
-    }
-    // Log dell'errore per il debug
-    console.error("Errore imprevisto in provisionTecnico:", error);
-    throw new HttpsError("internal", `Errore interno del server: ${error.message}`);
+    return { id: userRecord.uid, email: userRecord.email };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Errore sconosciuto durante la creazione dell'utente.";
+    console.error("Errore durante la creazione dell'utente:", error);
+    throw new HttpsError("internal", message);
   }
 });
 
+/**
+ * Funzione per abilitare o disabilitare un utente.
+ * Richiede che l'utente chiamante sia autenticato.
+ */
+export const setUserDisabledStatus = onCall({ region: "europe-west1" }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+  }
+  const { uid, disabled } = request.data;
+  if (typeof uid !== 'string' || typeof disabled !== 'boolean') {
+    throw new HttpsError("invalid-argument", "Parametri 'uid' (string) e 'disabled' (boolean) non validi.");
+  }
+  try {
+    await admin.auth().updateUser(uid, { disabled });
+    await admin.firestore().collection("utenti_master").doc(uid).update({ disabled });
+    return { message: "Stato dell'utente aggiornato con successo." };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Errore sconosciuto durante l'aggiornamento dello stato utente.";
+    console.error("Errore durante l'aggiornamento dello stato dell'utente:", error);
+    throw new HttpsError("internal", message);
+  }
+});
 
 /**
- * Funzione placeholder V2 per recuperare dati del calendario.
+ * Funzione per eliminare un utente.
+ * Richiede che l'utente chiamante sia autenticato.
  */
-export const getCalendarData = onCall({ region: "europe-west1" }, (request) => {
-  console.log("Funzione 'getCalendarData' chiamata.");
-  return { message: "Placeholder per i dati del calendario restituito con successo." };
+export const deleteUser = onCall({ region: "europe-west1" }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+  }
+  const { uid } = request.data;
+  if (!uid) {
+    throw new HttpsError("invalid-argument", "L'UID dell'utente è un parametro obbligatorio.");
+  }
+  try {
+    await admin.auth().deleteUser(uid);
+    await admin.firestore().collection("utenti_master").doc(uid).delete();
+    return { message: "Utente eliminato con successo." };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Errore sconosciuto durante l'eliminazione dell'utente.";
+    console.error("Errore durante l'eliminazione dell'utente:", error);
+    throw new HttpsError("internal", message);
+  }
 });

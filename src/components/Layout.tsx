@@ -1,5 +1,5 @@
 import { useState, ReactNode } from 'react';
-import { useNavigate, useLocation, NavLink } from 'react-router-dom';
+import { useLocation, NavLink } from 'react-router-dom';
 import {
     AppBar, Box, CssBaseline, Drawer, IconButton, List, ListItemButton,
     ListItemIcon, ListItemText, Toolbar, Typography, Collapse
@@ -48,7 +48,6 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [openSubMenu, setOpenSubMenu] = useState<string | null>('Anagrafiche'); // Default open
-    const navigate = useNavigate();
     const location = useLocation();
 
     const handleDrawerToggle = () => {

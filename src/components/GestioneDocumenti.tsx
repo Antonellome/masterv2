@@ -14,7 +14,7 @@ import {
 import Add from '@mui/icons-material/Add';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import DettaglioItemDialog from '@/components/common/DettaglioItemDialog';
-import { useRefresh } from '@/hooks/useRefresh';
+import { useRefresh } from '@/contexts/RefreshContext';
 
 // Definizione di un tipo per l'oggetto dei dettagli
 interface ItemToView {
@@ -22,11 +22,15 @@ interface ItemToView {
     dettagli: { label: string; value: string | React.ReactNode }[];
 }
 
-// Funzione helper per formattare le date in modo sicuro
-const safeFormatDate = (date: any) => {
+// Definizione di un tipo sicuro per gli input di data
+type DateInput = Timestamp | Date | string | null | undefined;
+
+// La funzione ora accetta il tipo sicuro e restituisce una stringa formattata o 'N/D'
+const safeFormatDate = (date: DateInput): string => {
     if (!date) return 'N/D';
     const dateObj = date instanceof Timestamp ? date.toDate() : date;
-    return dayjs(dateObj).isValid() ? dayjs(dateObj).format('DD/MM/YYYY') : 'N/D';
+    const dayjsDate = dayjs(dateObj);
+    return dayjsDate.isValid() ? dayjsDate.format('DD/MM/YYYY') : 'N/D';
 };
 
 const GestioneDocumenti: React.FC = () => {
@@ -37,7 +41,7 @@ const GestioneDocumenti: React.FC = () => {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [selectedDocumento, setSelectedDocumento] = useState<Documento | null>(null);
-    const [itemToView, setItemToView] = useState<ItemToView | null>(null); // Utilizzo il tipo corretto
+    const [itemToView, setItemToView] = useState<ItemToView | null>(null);
     const [documentoToDeleteId, setDocumentoToDeleteId] = useState<string | null>(null);
     const { refreshKey } = useRefresh();
 

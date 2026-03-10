@@ -14,7 +14,7 @@ import {
 import Add from '@mui/icons-material/Add';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import DettaglioItemDialog from '@/components/common/DettaglioItemDialog';
-import { useRefresh } from '@/hooks/useRefresh';
+import { useRefresh } from '@/contexts/RefreshContext';
 
 // Definizione di un tipo per l'oggetto dei dettagli
 interface ItemToView {

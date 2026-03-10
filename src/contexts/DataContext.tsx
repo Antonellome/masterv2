@@ -5,7 +5,7 @@ import { db } from '@/firebase';
 import type {
     Tecnico, Veicolo, Nave, Luogo, Ditta, Categoria, TipoGiornata, Rapportino, Cliente, Documento, WebAppUser, CollectionName, BaseEntity
 } from '@/models/definitions';
-import { useAuth } from './AuthContext';
+import { useAuth } from './AuthProvider'; // CORRETTO
 import { DataContext } from './DataContext.types';
 import type { IDataContext } from './DataContext.types';
 
@@ -97,7 +97,7 @@ const dataReducer = (state: DataState, action: Action): DataState => {
 
 // --- Data Provider Component ---
 export const DataProvider = ({ children }: { children: ReactNode }) => {
-    const { currentUser, loading: authLoading } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [state, dispatch] = useReducer(dataReducer, initialState);
 
     useEffect(() => {
@@ -109,7 +109,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
         // Se l'autenticazione è terminata e non c'è nessun utente,
         // resetta lo stato a quello iniziale e assicurati che non ci siano listener attivi.
-        if (!currentUser) {
+        if (!user) {
             dispatch({ type: 'RESET_STATE' });
             return;
         }
@@ -149,7 +149,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         return () => {
             unsubscribes.forEach(unsub => unsub());
         };
-    }, [currentUser, authLoading]);
+    }, [user, authLoading]);
 
     // Funzioni di modifica dati (invariate)
     const addData = useCallback(async (collectionName: CollectionName, data: any) => {

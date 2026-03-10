@@ -9,25 +9,32 @@ import FormDialog from './FormDialog';
 import ConfirmationDialog from '../ConfirmationDialog';
 import type { FormField, Anagrafica } from '@/models/definitions';
 
+// Definizione di un tipo interno per rappresentare la riga della griglia
+type DataRow<T> = T & {
+    id: string;
+    numNavi?: number;
+    numLuoghi?: number;
+};
+
 interface GestioneAnagraficaProps<T extends Anagrafica> {
     collectionName: string;
     title: string;
     fields: FormField[];
-    columns: GridColDef<T>[];
+    columns: GridColDef<DataRow<T>>[];
     initialFormState?: Partial<T>;
     anagraficaType: string;
     lookupMaps?: { [key: string]: Map<string, string> };
     initialSortModel?: { field: string; sort: 'asc' | 'desc' }[];
 }
 
-function GestioneAnagrafica<T extends Anagrafica>({ 
+function GestioneAnagrafica<T extends Anagrafica>({
     collectionName, title, fields, columns, initialFormState, anagraficaType, lookupMaps, initialSortModel
 }: GestioneAnagraficaProps<T>) {
-    const [data, setData] = useState<any[]>([]);
+    const [data, setData] = useState<DataRow<T>[]>([]); // Stato tipizzato
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setFormOpen] = useState(false);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
-    const [selectedItem, setSelectedItem] = useState<T | null>(null);
+    const [selectedItem, setSelectedItem] = useState<DataRow<T> | null>(null);
     const [itemToDelete, setItemToDelete] = useState<string | null>(null);
     const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
@@ -43,7 +50,7 @@ function GestioneAnagrafica<T extends Anagrafica>({
                 const mainSnapshot = await getDocs(collection(db, collectionName));
                 if (signal.aborted) return;
 
-                let items;
+                let items: DataRow<T>[];
 
                 if (anagraficaType === 'cliente') {
                     const [naviSnapshot, luoghiSnapshot] = await Promise.all([
@@ -67,13 +74,13 @@ function GestioneAnagrafica<T extends Anagrafica>({
                             luoghiPerCliente.set(luogo.clienteId, (luoghiPerCliente.get(luogo.clienteId) || 0) + 1);
                         }
                     });
-
+                    
                     items = mainSnapshot.docs.map(doc => {
                         const docData = doc.data() as T;
-                        const sanitizedData: any = { id: doc.id, ...docData };
-                        fields.forEach((field: any) => {
-                           if (sanitizedData[field.name] === undefined || sanitizedData[field.name] === null) {
-                               sanitizedData[field.name] = field.type === 'number' ? 0 : '';
+                        const sanitizedData: DataRow<T> = { id: doc.id, ...docData };
+                        fields.forEach((field) => {
+                           if (sanitizedData[field.name as keyof DataRow<T>] === undefined || sanitizedData[field.name as keyof DataRow<T>] === null) {
+                                (sanitizedData as Record<string, unknown>)[field.name] = field.type === 'number' ? 0 : '';
                            }
                         });
                         sanitizedData.numNavi = naviPerCliente.get(doc.id) || 0;
@@ -83,10 +90,10 @@ function GestioneAnagrafica<T extends Anagrafica>({
                 } else {
                      items = mainSnapshot.docs.map(doc => {
                         const docData = doc.data() as T;
-                        const sanitizedData: any = { id: doc.id, ...docData };
-                        fields.forEach((field: any) => {
-                            if (sanitizedData[field.name] === undefined || sanitizedData[field.name] === null) {
-                               sanitizedData[field.name] = field.type === 'number' ? 0 : '';
+                        const sanitizedData: DataRow<T> = { id: doc.id, ...docData };
+                         fields.forEach((field) => {
+                            if (sanitizedData[field.name as keyof DataRow<T>] === undefined || sanitizedData[field.name as keyof DataRow<T>] === null) {
+                                (sanitizedData as Record<string, unknown>)[field.name] = field.type === 'number' ? 0 : '';
                             }
                         });
                         return sanitizedData;
@@ -95,8 +102,8 @@ function GestioneAnagrafica<T extends Anagrafica>({
                 
                 setData(items);
 
-            } catch (error: any) {
-                if (error.name !== 'AbortError') {
+            } catch (error: unknown) { // Use 'unknown' for better type safety
+                if (error instanceof Error && error.name !== 'AbortError') {
                     console.error(`Errore durante il caricamento della collezione '${collectionName}':`, error);
                     setData([]);
                     setSnackbar({ open: true, message: `Errore caricamento dati per ${collectionName}.`, severity: 'error' });
@@ -115,15 +122,18 @@ function GestioneAnagrafica<T extends Anagrafica>({
 
     const forceRefresh = () => setRefreshTrigger(t => t + 1);
 
-    const handleSave = async (item: Partial<T>) => {
+    const handleSave = async (item: Partial<DataRow<T>>) => {
         const batch = writeBatch(db);
         const docRef = item.id ? doc(db, collectionName, item.id) : doc(collection(db, collectionName));
         
-        if (!item.id) {
-            item.id = docRef.id;
+        // Rimuovi le proprietà calcolate prima del salvataggio
+        const { ...itemToSave } = item;
+        delete itemToSave.numNavi;
+        delete itemToSave.numLuoghi;
+        
+        if (!itemToSave.id) {
+            itemToSave.id = docRef.id;
         }
-
-        const { numNavi, numLuoghi, ...itemToSave } = item as any;
 
         batch.set(docRef, itemToSave, { merge: true });
         await batch.commit();
@@ -138,15 +148,21 @@ function GestioneAnagrafica<T extends Anagrafica>({
         forceRefresh();
     };
     
-    const processRowUpdate = useCallback(async (newRow: GridRowModel, oldRow: GridRowModel) => {
+    const processRowUpdate = useCallback(async (newRow: GridRowModel<DataRow<T>>, oldRow: GridRowModel<DataRow<T>>) => {
         try {
-            const { id, numNavi, numLuoghi, ...dataToUpdate } = newRow;
+            // Rimuovi le proprietà calcolate e non utilizzate
+            const { id, ...dataToUpdate } = newRow;
+            delete (dataToUpdate as Partial<DataRow<T>>).numNavi;
+            delete (dataToUpdate as Partial<DataRow<T>>).numLuoghi;
+
+            const dataForUpdate: { [key: string]: unknown } = dataToUpdate;
+
             for (const field of fields) {
-                if (field.type === 'number' && dataToUpdate[field.name] !== undefined) {
-                    dataToUpdate[field.name] = Number(dataToUpdate[field.name]);
+                if (field.type === 'number' && dataForUpdate[field.name] !== undefined) {
+                    dataForUpdate[field.name] = Number(dataForUpdate[field.name]);
                 }
             }
-            await updateDoc(doc(db, collectionName, id), dataToUpdate);
+            await updateDoc(doc(db, collectionName, id), dataForUpdate);
             setSnackbar({ open: true, message: 'Modifica salvata!', severity: 'success' });
             forceRefresh(); 
             return newRow;
@@ -162,7 +178,7 @@ function GestioneAnagrafica<T extends Anagrafica>({
         setFormOpen(true);
     };
 
-    const handleEdit = useCallback((item: T) => {
+    const handleEdit = useCallback((item: DataRow<T>) => {
         setSelectedItem(item);
         setFormOpen(true);
     }, []);
@@ -173,7 +189,7 @@ function GestioneAnagrafica<T extends Anagrafica>({
     }, []);
 
     const memoizedColumns = useMemo(() => {
-        const processedColumns = columns.map(col => {
+        const processedColumns: GridColDef<DataRow<T>>[] = columns.map(col => {
             const lookupMap = lookupMaps?.[col.field];
             if (lookupMap) {
                 return {
@@ -192,9 +208,9 @@ function GestioneAnagrafica<T extends Anagrafica>({
                 headerName: 'Azioni',
                 width: 120,
                 sortable: false,
-                renderCell: (params: GridRenderCellParams<T>) => (
+                renderCell: (params: GridRenderCellParams<DataRow<T>>) => (
                     <Box>
-                        <IconButton size="small" onClick={() => handleEdit(params.row as T)}><EditIcon /></IconButton>
+                        <IconButton size="small" onClick={() => handleEdit(params.row)}><EditIcon /></IconButton>
                         <IconButton size="small" onClick={() => handleConfirmDeleteRequest(params.id as string)}><DeleteIcon /></IconButton>
                     </Box>
                 ),
@@ -259,7 +275,7 @@ function GestioneAnagrafica<T extends Anagrafica>({
             <FormDialog
                 open={isFormOpen}
                 onClose={() => setFormOpen(false)}
-                onSave={handleSave}
+                onSave={handleSave as (data: Partial<Anagrafica>) => Promise<void>}
                 fields={fields}
                 initialData={selectedItem ?? (initialFormState as Partial<T>)}
                 title={selectedItem ? `Modifica ${title.slice(0, -1)}` : `Nuovo ${title.slice(0, -1)}`}

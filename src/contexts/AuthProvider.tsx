@@ -1,134 +1,101 @@
-import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
-import { 
-    onAuthStateChanged, 
-    type User, 
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    signInWithPopup,
-    GoogleAuthProvider,
-    signOut
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
+import {
+  onAuthStateChanged,
+  User,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut
 } from 'firebase/auth';
-import { FirebaseError } from 'firebase/app';
-import { doc, getDoc } from 'firebase/firestore'; // Importa le funzioni di Firestore
-import { auth, db } from '@/firebase'; // Importa la configurazione del db
-import { AuthContext, type UserRole } from './AuthContext'; // Importa UserRole
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/firebase';
+import type { IAuthContext, AuthUser } from './AuthContext'; // MODIFICATO: Importo solo i tipi
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// --- CREAZIONE DEL CONTESTO ---
+// L'oggetto AuthContext viene creato qui, non importato.
+const AuthContext = createContext<IAuthContext | undefined>(undefined);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      if (user) {
-        // Utente loggato, recupero il ruolo da Firestore
-        const userDocRef = doc(db, 'utenti_master', user.uid);
-        try {
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUserRole(userData.ruolo || 'user'); // Default a 'user' se il ruolo non è specificato
-          } else {
-            // L'utente esiste in Auth ma non in `utenti_master`, trattalo come 'user'
-            // Potresti anche creare un documento di default qui, se necessario
-            setUserRole('user');
-          }
-        } catch (e) {
-          console.error("Errore nel recuperare il ruolo dell'utente:", e);
-          setUserRole('user'); // In caso di errore, default a 'user' per sicurezza
-        }
-      } else {
-        // Nessun utente loggato
-        setUserRole(null);
+// --- HOOK USEAUTH ---
+// Questo è l'hook pubblico che i componenti useranno per accedere al contesto.
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error("useAuth deve essere utilizzato all'interno di un AuthProvider");
+    }
+    return context;
+};
+
+// --- COMPONENTE PROVIDER ---
+// Questo componente avvolge l'app e fornisce il valore del contesto.
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [user, setUser] = useState<AuthUser>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Monitora lo stato di autenticazione di Firebase
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            setUser(user);
+            setLoading(false);
+        });
+        return () => unsubscribe(); // Pulizia alla disconnessione
+    }, []);
+
+    const login = useCallback(async (email: string, pass: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (e: any) {
+        // Semplificazione del messaggio di errore
+        setError("Credenziali non valide. Riprova.");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
-    return unsubscribe;
-  }, []);
+    }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-        await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-        if (err instanceof FirebaseError) {
-            setError(err.code || err.message);
-        } else {
-            setError('An unexpected error occurred.');
-        }
-    } finally {
+    const signup = useCallback(async (email: string, pass: string, nome: string, cognome: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        const user = userCredential.user;
+        // Salva informazioni aggiuntive dell'utente
+        await setDoc(doc(db, 'users', user.uid), {
+          nome,
+          cognome,
+          email
+        });
+      } catch (e: any) { 
+        setError("Errore durante la registrazione.");
+      } finally {
         setLoading(false);
-    }
-  }, []);
-
-  const signup = useCallback(async (email: string, password: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-        await createUserWithEmailAndPassword(auth, email, password);
-        // QUI potresti aggiungere la logica per creare il documento in `utenti_master`
-    } catch (err) {
-        if (err instanceof FirebaseError) {
-            setError(err.code || err.message);
-        } else {
-            setError('An unexpected error occurred.');
-        }
-    } finally {
-        setLoading(false);
-    }
-  }, []);
-
-  const loginWithGoogle = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const provider = new GoogleAuthProvider();
-    try {
-        await signInWithPopup(auth, provider);
-    } catch (err) {
-        if (err instanceof FirebaseError) {
-            setError(err.code || err.message);
-        } else {
-            setError('An unexpected error occurred.');
-        }
-    } finally {
-        setLoading(false);
-    }
-  }, []);
-
-  const logout = useCallback(async () => {
-    setLoading(true);
-    try {
+      }
+    }, []);
+    
+    const logout = useCallback(async () => {
+      setError(null);
+      try {
         await signOut(auth);
-        setCurrentUser(null); // Pulisce lo stato dell'utente
-        setUserRole(null); // Pulisce il ruolo
-    } catch (err) { 
-        if (err instanceof FirebaseError) {
-            setError(err.code || err.message);
-        } else {
-            setError('An unexpected error occurred.');
-        }
-    } finally {
-        setLoading(false);
-    }
-  }, []);
+      } catch (e: any) { 
+        setError("Errore durante il logout.");
+      }
+    }, []);
 
-  const isAdmin = userRole === 'admin';
+    // Memoizzazione del valore del contesto per ottimizzare le performance
+    const value = useMemo(() => ({
+        user,
+        loading,
+        error,
+        login,
+        signup,
+        logout,
+        setError
+    }), [user, loading, error, login, signup, logout]);
 
-  const value = useMemo(() => ({ 
-    user: currentUser,
-    loading, 
-    error, 
-    login, 
-    signup,
-    loginWithGoogle, 
-    logout,
-    // Nuovi valori disponibili nel contesto
-    userRole,
-    isAdmin,
-  }), [currentUser, loading, error, login, signup, loginWithGoogle, logout, userRole, isAdmin]);
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    // Fornisce il contesto ai componenti figli
+    return (
+        <AuthContext.Provider value={value}>
+            {children}
+        </AuthContext.Provider>
+    );
 };

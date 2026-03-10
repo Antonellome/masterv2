@@ -1,238 +1,206 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect, useCallback } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
-import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/firebase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthProvider';
 import {
-    Box, Typography, Alert, CircularProgress, Tooltip, Select, MenuItem, FormControl, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, SelectChangeEvent
+    Box, Typography, Alert, CircularProgress, Snackbar, TextField, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Tooltip, Switch
 } from '@mui/material';
-import { DataGrid, GridColDef, GridToolbar, GridActionsCellItem } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridToolbar } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
-import { Add, Delete, ToggleOn, ToggleOff, VpnKey } from '@mui/icons-material';
-import type { UserRole } from '@/contexts/AuthContext';
-import ConfirmationDialog from '@/components/ConfirmationDialog';
+import DeleteIcon from '@mui/icons-material/Delete';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 
-interface Utente {
+interface MasterAppUser {
     id: string;
-    nome: string;
     email: string;
     disabled: boolean;
-    ruolo: UserRole;
-}
-
-// Definisco un tipo per la risposta della funzione di creazione utente
-interface CreateUserResult {
-    status: string;
-    message: string;
-    newUser: Utente;
 }
 
 const functions = getFunctions();
 const setUserStatusFunction = httpsCallable(functions, 'setUserDisabledStatus');
+const createNewMasterUserFunction = httpsCallable(functions, 'createNewMasterUser');
 const deleteUserFunction = httpsCallable(functions, 'deleteUser');
-const createUserFunction = httpsCallable<object, CreateUserResult>(functions, 'createNewUser');
 
-const GestioneUtentiTab: React.FC = () => {
-    const { isAdmin, user, loading: authLoading } = useAuth();
-    const hasAdminAccess = isAdmin || user?.uid === 'sm6w10dUiHcEs5p1zdFmWlreKAd2';
-
-    const [utenti, setUtenti] = useState<Utente[]>([]);
+const GestioneUtentiTab = () => {
+    const { user, loading: authLoading } = useAuth();
+    const [users, setUsers] = useState<MasterAppUser[]>([]);
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
-    const [openAddDialog, setOpenAddDialog] = useState(false);
-    const [newUser, setNewUser] = useState({ nome: '', email: '', ruolo: 'user' as UserRole });
-    const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-    const [confirmDialogProps, setConfirmDialogProps] = useState({ title: '', description: '', onConfirm: () => {} });
+    const [openDialog, setOpenDialog] = useState(false);
+    const [newUserEmail, setNewUserEmail] = useState('');
 
-    const fetchUtenti = useCallback(async () => {
+    const fetchUsers = useCallback(async () => {
         setLoading(true);
+        setError(null);
         try {
             const querySnapshot = await getDocs(collection(db, "utenti_master"));
-            const utentiData = querySnapshot.docs.map(doc => ({
+            const usersData = querySnapshot.docs.map(doc => ({
                 id: doc.id,
-                ...doc.data(),
-                ruolo: doc.data().ruolo || 'user',
+                email: doc.data().email || 'N/D',
                 disabled: doc.data().disabled || false,
-            } as Utente));
-            setUtenti(utentiData);
+            } as MasterAppUser));
+            setUsers(usersData);
         } catch (err) {
             console.error("Errore nel caricamento degli utenti:", err);
-            setFeedback({ type: 'error', message: "Impossibile caricare l'elenco degli utenti." });
+            setError("Impossibile caricare l'elenco degli utenti.");
         } finally {
             setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        if (!authLoading && hasAdminAccess) {
-            fetchUtenti();
+        if (user) {
+            fetchUsers();
         }
-    }, [hasAdminAccess, authLoading, fetchUtenti]);
+    }, [user, fetchUsers]);
 
-    const openConfirmationDialog = (title: string, description: string, onConfirm: () => void) => {
-        setConfirmDialogProps({ title, description, onConfirm });
-        setConfirmDialogOpen(true);
-    };
-    
-    const handleToggleDisabled = (id: string, isDisabled: boolean, nome: string) => {
-        const actionText = isDisabled ? 'abilitare' : 'disabilitare';
-        openConfirmationDialog(
-            `Conferma ${actionText.charAt(0).toUpperCase() + actionText.slice(1)}`,
-            `Sei sicuro di voler ${actionText} l'utente ${nome}?`,
-            async () => {
-                try {
-                    // **FIX**: La funzione si aspetta il NUOVO stato, che è l'opposto di quello attuale.
-                    await setUserStatusFunction({ uid: id, disabled: !isDisabled });
-                    // **FIX**: Ricaricare i dati è FONDAMENTALE per aggiornare l'UI.
-                    await fetchUtenti(); 
-                    setFeedback({ type: 'success', message: `Utente ${nome} ${!isDisabled ? 'disabilitato' : 'abilitato'} con successo.` });
-                } catch (error: any) {
-                    setFeedback({ type: 'error', message: error.message || "Errore nell'aggiornamento dello stato." });
-                }
-            }
-        );
-    };
-
-    const handleDeleteUser = (id: string, nome: string) => {
-        openConfirmationDialog(
-            'Conferma Eliminazione Utente',
-            `Sei sicuro di voler eliminare DEFINITIVAMENTE l'utente ${nome}? L'azione è irreversibile.`,
-            async () => {
-                try {
-                    await deleteUserFunction({ uid: id });
-                    await fetchUtenti();
-                    setFeedback({ type: 'success', message: "Utente eliminato con successo." });
-                } catch (error: any) {
-                    setFeedback({ type: 'error', message: error.message || "Errore durante l'eliminazione." });
-                }
-            }
-        );
-    };
-    
-    const handleRoleChange = async (id: string, event: SelectChangeEvent<UserRole>) => {
-        const newRole = event.target.value as UserRole;
-        try {
-            await updateDoc(doc(db, 'utenti_master', id), { ruolo: newRole });
-            await fetchUtenti();
-            setFeedback({ type: 'success', message: `Ruolo aggiornato con successo.` });
-        } catch (error) {
-            setFeedback({ type: 'error', message: "Errore durante l'aggiornamento del ruolo." });
-        }
-    };
-
-    const handleSaveNewUser = async () => {
-        if (!newUser.email || !newUser.nome) {
-            setFeedback({ type: 'error', message: 'Nome e Email sono obbligatori.' });
+    const handleCreateUser = async () => {
+        if (!newUserEmail) {
+            setSnackbar({ open: true, message: 'L\'email non può essere vuota.', severity: 'error' });
             return;
         }
-        setSaving(true);
+        if (users.some(u => u.email.toLowerCase() === newUserEmail.toLowerCase())) {
+            setSnackbar({ open: true, message: 'Questo utente è già abilitato.', severity: 'error' });
+            return;
+        }
         try {
-            // **FIX**: Aspetta il risultato dalla funzione per ottenere il nuovo utente con il suo ID.
-            const result: HttpsCallableResult<CreateUserResult> = await createUserFunction(newUser);
-            const createdUser = result.data.newUser;
-
-            // **FIX**: Aggiorna lo stato locale invece di ricaricare tutto, più efficiente.
-            setUtenti(prev => [...prev, createdUser]);
-            
-            setFeedback({ type: 'success', message: `Utente ${createdUser.nome} creato con successo!` });
-            setOpenAddDialog(false);
-            setNewUser({ nome: '', email: '', ruolo: 'user' });
-        } catch (error: any) {
-            setFeedback({ type: 'error', message: error.message || "Impossibile creare l'utente." });
-        } finally {
-            setSaving(false);
+            await createNewMasterUserFunction({ email: newUserEmail });
+            setSnackbar({ open: true, message: 'Nuovo utente creato con successo!', severity: 'success' });
+            setNewUserEmail('');
+            setOpenDialog(false);
+            fetchUsers();
+        } catch (err: any) {
+            console.error("Errore nella creazione dell'utente:", err);
+            setSnackbar({ open: true, message: err.message || 'Errore durante la creazione dell\'utente.', severity: 'error' });
         }
     };
 
-    const handleResetPassword = (email: string) => {
-        openConfirmationDialog(
-            'Conferma Reset Password',
-            `Inviare un'email di reset password a ${email}?`,
-            async () => {
-                try {
-                    await sendPasswordResetEmail(getAuth(), email);
-                    setFeedback({ type: 'success', message: `Email di reset inviata a ${email}.` });
-                } catch (error: any) {
-                    setFeedback({ type: 'error', message: error.message || `Invio fallito.` });
-                }
-            }
-        );
+    const handleDeleteUser = async (id: string) => {
+        if (id === user?.uid) {
+            setSnackbar({ open: true, message: 'Non puoi eliminare il tuo stesso account.', severity: 'error' });
+            return;
+        }
+        if (!window.confirm('Sei sicuro di voler ELIMINARE DEFINITIVAMENTE questo utente? L\'azione è irreversibile.')) return;
+        try {
+            await deleteUserFunction({ uid: id });
+            setSnackbar({ open: true, message: 'Utente eliminato con successo.', severity: 'success' });
+            fetchUsers();
+        } catch (err: any) {
+            console.error("Errore nella rimozione dell'utente:", err);
+            setSnackbar({ open: true, message: err.message || 'Errore durante l\'eliminazione dell\'utente.', severity: 'error' });
+        }
     };
     
-    const columns: GridColDef<Utente>[] = [
-        { field: 'nome', headerName: 'Nome', flex: 1 },
-        { field: 'email', headerName: 'Email', flex: 1.5 },
-        { 
-            field: 'disabled', 
-            headerName: 'Stato', 
-            width: 120, 
-            renderCell: ({ value }) => (
-                <Typography color={!value ? 'success.main' : 'error.main'} component="span" sx={{ fontWeight: 'bold' }}>
-                    {!value ? 'Attivo' : 'Disabilitato'}
-                </Typography>
-            ),
-        },
-        { 
-            field: 'ruolo', 
-            headerName: 'Ruolo', 
-            flex: 1, 
+    const handleToggleDisabled = async (id: string, currentStatus: boolean) => {
+        if (id === user?.uid) {
+            setSnackbar({ open: true, message: 'Non puoi disabilitare il tuo stesso account.', severity: 'error' });
+            return;
+        }
+        const newStatus = !currentStatus;
+        const actionText = newStatus ? 'disabilitare' : 'abilitare';
+        if (!window.confirm(`Sei sicuro di voler ${actionText} questo utente?`)) return;
+
+        try {
+            await setUserStatusFunction({ uid: id, disabled: newStatus });
+            setSnackbar({ open: true, message: `Utente ${newStatus ? 'disabilitato' : 'abilitato'} con successo.`, severity: 'success' });
+            fetchUsers();
+        } catch (error: any) {
+            console.error(`Errore nel ${actionText} l'utente:`, error);
+            setSnackbar({ open: true, message: error.message || 'Operazione fallita.', severity: 'error' });
+        }
+    };
+
+    const handleResetPassword = async (email: string) => {
+        if (!window.confirm(`Inviare un'email di ripristino password a ${email}?`)) return;
+        try {
+            await sendPasswordResetEmail(getAuth(), email);
+            setSnackbar({ open: true, message: `Email di ripristino inviata a ${email}.`, severity: 'success' });
+        } catch (error: any) {
+            console.error("Errore nell'invio dell'email di reset:", error);
+            setSnackbar({ open: true, message: error.message || 'Invio fallito.', severity: 'error' });
+        }
+    };
+
+    const columns: GridColDef<MasterAppUser>[] = [
+        { field: 'email', headerName: 'Email Utente', flex: 1 },
+        {
+            field: 'disabled',
+            headerName: 'Stato',
+            width: 120, align: 'center', headerAlign: 'center',
             renderCell: (params) => (
-                <FormControl fullWidth variant="standard" sx={{ m: -1 }}>
-                    <Select value={params.value} onChange={(e) => handleRoleChange(params.row.id, e)} disabled={!hasAdminAccess || params.id === user?.uid} sx={{ fontSize: 'inherit', color: 'inherit', '&::before': { border: 'none' }, '&:hover::before': { border: 'none!important' } }}>
-                        <MenuItem value="admin">Admin</MenuItem>
-                        <MenuItem value="user">User</MenuItem>
-                    </Select>
-                </FormControl>
+                <Typography color={!params.value ? 'success.main' : 'error.main'} sx={{ fontWeight: 'bold' }}>
+                    {!params.value ? 'Attivo' : 'Disabilitato'}
+                </Typography>
             ),
         },
         {
             field: 'actions',
-            type: 'actions',
             headerName: 'Azioni',
-            width: 150,
-            getActions: ({ id, row }) => { 
-                const isSelf = id === user?.uid;
-                return [
-                    <GridActionsCellItem key={`toggle-${id}`} icon={<Tooltip title={row.disabled ? 'Abilita Accesso' : 'Disabilita Accesso'}>{row.disabled ? <ToggleOn color="success"/> : <ToggleOff color="action"/>}</Tooltip>} label={row.disabled ? 'Abilita' : 'Disabilita'} onClick={() => handleToggleDisabled(id as string, row.disabled, row.nome)} disabled={!hasAdminAccess || isSelf} />, 
-                    <GridActionsCellItem key={`delete-${id}`} icon={<Tooltip title="Elimina Utente"><Delete /></Tooltip>} label="Elimina" onClick={() => handleDeleteUser(id as string, row.nome)} disabled={!hasAdminAccess || isSelf} color="error" />, 
-                    <GridActionsCellItem key={`reset-${id}`} icon={<Tooltip title="Invia Email di Reset Password"><VpnKey /></Tooltip>} label="Reset Password" onClick={() => handleResetPassword(row.email)} disabled={!hasAdminAccess || !row.email} />
-                ]; 
+            sortable: false, disableColumnMenu: true,
+            width: 180, align: 'center', headerAlign: 'center',
+            renderCell: (params) => {
+                const isSelf = params.id === user?.uid;
+                return (
+                    <Box>
+                        <Tooltip title={isSelf ? "Non puoi modificare il tuo stato" : (params.row.disabled ? 'Abilita Utente' : 'Disabilita Utente')}>
+                            <span>
+                                <Switch checked={!params.row.disabled} onChange={() => handleToggleDisabled(params.id as string, params.row.disabled)} color="success" disabled={isSelf} />
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Invia Email di Reset Password">
+                            <IconButton onClick={() => handleResetPassword(params.row.email)} color="primary"><VpnKeyIcon /></IconButton>
+                        </Tooltip>
+                        <Tooltip title={isSelf ? "Non puoi eliminare te stesso" : "Elimina Utente (Irreversibile)"}>
+                             <span>
+                                <IconButton onClick={() => handleDeleteUser(params.id as string)} color="error" disabled={isSelf}><DeleteIcon /></IconButton>
+                            </span>
+                        </Tooltip>
+                    </Box>
+                );
             },
         },
     ];
 
-    if (authLoading) {
-        return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
+    if (authLoading || loading) {
+        return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
     }
-
-    if (!hasAdminAccess) {
-        return <Alert severity="error" sx={{ mt: 2 }}>Non hai i permessi per visualizzare questa sezione.</Alert>;
+    
+    if (!user) {
+        // CORREZIONE: Il return di un componente JSX dentro un if statement
+        // deve essere wrappato tra parentesi per evitare ambiguità del parser.
+        return (<Alert severity="error">Devi essere autenticato per accedere a questa sezione.</Alert>);
     }
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Box sx={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">Gestione Ruoli e Accessi</Typography>
-                <Button variant="contained" startIcon={<Add />} onClick={() => setOpenAddDialog(true)}>
-                    Aggiungi Utente
-                </Button>
+                 <Typography variant="h6">Gestione Utenti e Accessi</Typography>
+                <Button variant="contained" onClick={() => setOpenDialog(true)}>Aggiungi Utente</Button>
             </Box>
-            {feedback && <Alert severity={feedback.type} sx={{ flexShrink: 0, mb: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
-            {loading ? <CircularProgress sx={{ m: 'auto' }} /> : 
-                <Box sx={{ flexGrow: 1, width: '100%' }}>
-                    <DataGrid rows={utenti || []} columns={columns} localeText={itIT.components.MuiDataGrid.defaultProps.localeText} initialState={{ pagination: { paginationModel: { pageSize: 10 } }, sorting: { sortModel: [{ field: 'nome', sort: 'asc' }] } }} pageSizeOptions={[10, 25, 50]} slots={{ toolbar: GridToolbar }} disableRowSelectionOnClick />
-                </Box>
-            }
-            <Dialog open={openAddDialog} onClose={() => !saving && setOpenAddDialog(false)} fullWidth maxWidth="xs">
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Gestisci gli utenti che possono accedere all'applicazione, il loro stato e le loro credenziali.</Typography>
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            <Box sx={{ flexGrow: 1, width: '100%' }}>
+                <DataGrid rows={users} columns={columns} autoHeight localeText={itIT.components.MuiDataGrid.defaultProps.localeText} initialState={{ sorting: { sortModel: [{ field: 'email', sort: 'asc' }] } }} slots={{ toolbar: GridToolbar }} disableRowSelectionOnClick sx={{ border: 0 }} />
+            </Box>
+            <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth maxWidth="sm">
                 <DialogTitle>Aggiungi Nuovo Utente</DialogTitle>
-                <DialogContent><TextField autoFocus margin="dense" label="Nome Completo" type="text" fullWidth variant="standard" value={newUser.nome} onChange={(e) => setNewUser({ ...newUser, nome: e.target.value })} disabled={saving} /><TextField margin="dense" label="Indirizzo Email" type="email" fullWidth variant="standard" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} disabled={saving} /><FormControl fullWidth margin="dense" variant="standard"><Select value={newUser.ruolo} onChange={(e) => setNewUser({ ...newUser, ruolo: e.target.value as UserRole })} disabled={saving}><MenuItem value="user">User</MenuItem><MenuItem value="admin">Admin</MenuItem></Select></FormControl></DialogContent>
-                <DialogActions sx={{ p: '16px 24px' }}><Button onClick={() => setOpenAddDialog(false)} disabled={saving}>Annulla</Button><Button onClick={handleSaveNewUser} variant="contained" disabled={saving}>{saving ? <CircularProgress size={24} /> : 'Salva'}</Button></DialogActions>
+                <DialogContent>
+                    <TextField autoFocus margin="dense" id="email" label="Indirizzo Email dell'Utente" type="email" fullWidth variant="standard" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenDialog(false)}>Annulla</Button>
+                    <Button onClick={handleCreateUser}>Crea e Abilita</Button>
+                </DialogActions>
             </Dialog>
-            <ConfirmationDialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)} onConfirm={() => { confirmDialogProps.onConfirm(); setConfirmDialogOpen(false); }} title={confirmDialogProps.title} description={confirmDialogProps.description} />
+            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

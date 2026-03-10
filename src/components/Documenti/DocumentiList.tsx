@@ -14,11 +14,15 @@ interface DocumentiListProps {
     onViewDetails: (documento: Documento) => void;
 }
 
-// Funzione helper per formattare le date in modo sicuro
-const safeFormatDate = (date: any) => {
+// Definizione di un tipo sicuro per gli input di data
+type DateInput = Timestamp | Date | string | null;
+
+// La funzione ora accetta il tipo sicuro e restituisce un oggetto Dayjs o null
+const safeFormatDate = (date: DateInput): dayjs.Dayjs | null => {
     if (!date) return null;
     const dateObj = date instanceof Timestamp ? date.toDate() : date;
-    return dayjs(dateObj).isValid() ? dayjs(dateObj) : null;
+    const dayjsDate = dayjs(dateObj);
+    return dayjsDate.isValid() ? dayjsDate : null;
 };
 
 
@@ -31,7 +35,8 @@ const getStatusColor = (date: dayjs.Dayjs | null): 'error' | 'warning' | 'defaul
     return 'default';
 };
 
-const RenderScadenzaChip = ({ label, date }: { label: string, date: any }) => {
+// Il componente ora usa il tipo DateInput per la sua prop `date`
+const RenderScadenzaChip = ({ label, date }: { label: string, date: DateInput }) => {
     const dayjsDate = safeFormatDate(date);
     if (!dayjsDate) return null;
 
@@ -50,14 +55,14 @@ const RenderScadenzaChip = ({ label, date }: { label: string, date: any }) => {
 
 const DocumentiList: React.FC<DocumentiListProps> = ({ documenti, onEdit, onDelete, onViewDetails }) => {
 
-    const columns: GridColDef[] = [
+    const columns: GridColDef<Documento>[] = [
         {
             field: 'nome',
             headerName: 'Nome Documento',
             flex: 1,
             minWidth: 200,
             renderCell: (params) => (
-                <Link component="button" variant="body2" onClick={() => onViewDetails(params.row as Documento)} sx={{ textAlign: 'left', fontWeight: 'bold' }}>
+                <Link component="button" variant="body2" onClick={() => onViewDetails(params.row)} sx={{ textAlign: 'left', fontWeight: 'bold' }}>
                    {params.value}
                </Link>
            )
@@ -93,14 +98,14 @@ const DocumentiList: React.FC<DocumentiListProps> = ({ documenti, onEdit, onDele
                         key={`${id}-view`}
                         icon={<Visibility />}
                         label="Dettagli"
-                        onClick={() => onViewDetails(row as Documento)}
+                        onClick={() => onViewDetails(row)}
                         color="inherit"
                     />,
                     <GridActionsCellItem
                         key={`${id}-edit`}
                         icon={<Edit />}
                         label="Modifica"
-                        onClick={() => onEdit(row as Documento)}
+                        onClick={() => onEdit(row)}
                         color="primary"
                     />,
                     <GridActionsCellItem

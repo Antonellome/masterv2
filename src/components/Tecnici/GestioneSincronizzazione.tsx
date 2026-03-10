@@ -1,13 +1,17 @@
 import React from 'react';
-
-// INTRODUCING A DELIBERATE ERROR TO FORCE A REFRESH
+import { Typography, Paper } from '@mui/material';
 
 const GestioneSincronizzazione: React.FC = () => {
-    THIS IS AN INTENTIONAL SYNTAX ERROR TO BREAK THE BUILD;
     return (
-        <div>
-            <p>Se vedi questo messaggio, qualcosa non ha funzionato. Se vedi una schermata di errore, allora il piano sta funzionando.</p>
-        </div>
+        <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
+            <Typography variant="h5" gutterBottom>
+                Gestione Sincronizzazione
+            </Typography>
+            <Typography variant="body1">
+                Questa sezione è dedicata alla gestione della sincronizzazione dei dati con i dispositivi mobili.
+                Le funzionalità specifiche per la sincronizzazione verranno implementate qui.
+            </Typography>
+        </Paper>
     );
 };
 

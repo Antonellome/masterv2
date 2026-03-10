@@ -1,8 +1,6 @@
 // src/components/ProtectedRoute.tsx
 import { Navigate, Outlet } from 'react-router-dom';
-// ERRORE QUI: L'import deve puntare al CONTESTO, non a un hook separato.
-// import { useAuth } from '../hooks/useAuth'; // SBAGLIATO
-import { useAuth } from '@/contexts/AuthContext'; // CORRETTO
+import { useAuth } from '@/contexts/AuthProvider'; // CORRETTO: import da AuthProvider
 import { Box, CircularProgress } from '@mui/material';
 
 const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {

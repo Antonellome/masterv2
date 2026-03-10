@@ -1,8 +1,7 @@
 // src/pages/SignupPage.tsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-// import { useAuth } from "@/hooks/useAuth"; // VECCHIO IMPORT SBAGLIATO
-import { useAuth } from "@/contexts/AuthContext"; // NUOVO IMPORT CORRETTO
+import { useAuth } from "@/contexts/AuthProvider"; // CORRETTO
 import {
   Container,
   Box,
@@ -49,7 +48,7 @@ const SignupPage = () => {
         </Typography>
         <Box component="form" noValidate onSubmit={handleSignup} sx={{ mt: 3 }}>
           <Grid container spacing={2}>
-            <Grid xs={12} sm={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 autoComplete="given-name"
                 name="firstName"
@@ -62,7 +61,7 @@ const SignupPage = () => {
                 onChange={(e) => setNome(e.target.value)}
               />
             </Grid>
-            <Grid xs={12} sm={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 required
                 fullWidth
@@ -74,7 +73,7 @@ const SignupPage = () => {
                 onChange={(e) => setCognome(e.target.value)}
               />
             </Grid>
-            <Grid xs={12}>
+            <Grid item xs={12}>
               <TextField
                 required
                 fullWidth
@@ -86,7 +85,7 @@ const SignupPage = () => {
                 onChange={(e) => setEmail(e.target.value)}
               />
             </Grid>
-            <Grid xs={12}>
+            <Grid item xs={12}>
               <TextField
                 required
                 fullWidth
@@ -110,7 +109,7 @@ const SignupPage = () => {
             Registrati
           </Button>
           <Grid container justifyContent="flex-end">
-            <Grid>
+            <Grid item>
               <Link to="/login">
                 <Typography variant="body2">
                     Hai già un account? Accedi

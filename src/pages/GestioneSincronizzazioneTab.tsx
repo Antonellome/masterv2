@@ -1,13 +1,15 @@
 import React from 'react';
-
-// INTRODUCING A DELIBERATE ERROR TO FORCE A REFRESH
+import GestioneSincronizzazione from '../components/Tecnici/GestioneSincronizzazione';
+import { Container, Typography } from '@mui/material';
 
 const GestioneSincronizzazioneTab: React.FC = () => {
-    THIS WILL CRASH THE COMPONENT. IF YOU SEE AN ERROR, THE PLAN IS WORKING.;
     return (
-        <div>
-            <p>Se vedi una schermata di errore, il piano sta funzionando. Conferma per procedere.</p>
-        </div>
+        <Container maxWidth="lg">
+            <Typography variant="h4" sx={{ mb: 3 }}>
+                Sincronizzazione Dati
+            </Typography>
+            <GestioneSincronizzazione />
+        </Container>
     );
 };
 

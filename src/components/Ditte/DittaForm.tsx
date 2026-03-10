@@ -10,7 +10,6 @@ import {
     CircularProgress
 } from '@mui/material';
 import { useForm, Controller } from 'react-hook-form';
-// Correzione Percorso
 import type { Ditta } from '@/models/definitions';
 
 interface DittaFormProps {
@@ -20,7 +19,6 @@ interface DittaFormProps {
     onSave: (ditta: Ditta) => Promise<void>; 
 }
 
-// Correzione Proprietà: nome -> name
 const defaultValues: Ditta = {
     id: '',
     name: '',
@@ -36,7 +34,7 @@ const DittaForm = ({ open, onClose, ditta, onSave }: DittaFormProps) => {
         if (open) {
            reset(ditta || defaultValues);
         }
-    }, [ditta?.id, open, reset]);
+    }, [ditta, open, reset]);
 
     const handleFormSubmit = async (data: Ditta) => {
         await onSave(data);
@@ -47,10 +45,10 @@ const DittaForm = ({ open, onClose, ditta, onSave }: DittaFormProps) => {
             <DialogTitle>{ditta?.id ? 'Modifica Ditta' : 'Nuova Ditta'}</DialogTitle>
             <form onSubmit={handleSubmit(handleFormSubmit)}>
                 <DialogContent>
+                    {/* Ripristino: Aderenza alla sintassi ibrida obbligatoria del blueprint.md */}
                     <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid size={12}>
+                        <Grid size={{ xs: 12 }}>
                             <Controller
-                                // Correzione Proprietà: nome -> name
                                 name="name"
                                 control={control}
                                 rules={{ required: 'Il nome è obbligatorio' }}
@@ -59,66 +57,42 @@ const DittaForm = ({ open, onClose, ditta, onSave }: DittaFormProps) => {
                                 )}
                             />
                         </Grid>
-                         <Grid
-                             size={{
-                                 xs: 12,
-                                 sm: 8
-                             }}>
+                         <Grid size={{ xs: 12, sm: 8 }}>
                             <Controller
                                 name="indirizzo"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Indirizzo" fullWidth />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 4
-                            }}>
+                        <Grid size={{ xs: 12, sm: 4 }}>
                              <Controller
                                 name="cap"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="CAP" fullWidth />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 4
-                            }}>
+                        <Grid size={{ xs: 12, sm: 4 }}>
                             <Controller
                                 name="piva"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Partita IVA" fullWidth />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 4
-                            }}>
+                        <Grid size={{ xs: 12, sm: 4 }}>
                             <Controller
                                 name="cf"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Codice Fiscale" fullWidth />}
                             />
                         </Grid>
-                         <Grid
-                             size={{
-                                 xs: 12,
-                                 sm: 6
-                             }}>
+                         <Grid size={{ xs: 12, sm: 6 }}>
                             <Controller
                                 name="telefono"
                                 control={control}
                                 render={({ field }) => <TextField {...field} label="Telefono" fullWidth />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6
-                            }}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                             <Controller
                                 name="email"
                                 control={control}

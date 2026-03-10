@@ -1,157 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
-import {
-  onAuthStateChanged,
-  User,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut
-} from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/firebase';
 
-export type UserRole = 'admin' | 'user';
+// src/contexts/AuthContext.tsx
+import { User } from 'firebase/auth';
 
-interface UserData {
-  nome: string;
-  cognome: string;
-  ruolo: UserRole;
-}
+/**
+ * Questo file definisce SOLO i TIPI per il contesto di autenticazione.
+ * La logica effettiva, il Provider e l'hook `useAuth` si trovano 
+ * esclusivamente in `AuthProvider.tsx` per garantire una singola fonte di verità.
+ */
 
-interface AuthContextType {
-  user: User | null;
-  userData: UserData | null;
-  userRole: UserRole | null;
+// Tipo per l'utente, che può essere un oggetto User di Firebase o null.
+export type AuthUser = User | null;
+
+// Interfaccia che definisce la forma del nostro contesto di autenticazione.
+export interface IAuthContext {
+  user: AuthUser;
   loading: boolean;
-  isAdmin: boolean;
-  login: (email: string, pass: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  signup: (email: string, pass: string, nome: string, cognome: string) => Promise<void>;
-  logout: () => Promise<void>;
   error: string | null;
-  setError: (error: string | null) => void;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, nome: string, cognome: string) => Promise<void>;
+  logout: () => Promise<void>;
+  setError: (message: string | null) => void;
 }
-
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [userData, setUserData] = useState<UserData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            setUser(user);
-            if (user) {
-                const userDocRef = doc(db, 'utenti_master', user.uid);
-                const userDoc = await getDoc(userDocRef);
-                if (userDoc.exists()) {
-                    setUserData(userDoc.data() as UserData);
-                } else {
-                    // Se l'utente non ha un documento, ne creiamo uno di default
-                    const defaultData: UserData = {
-                      nome: user.displayName?.split(' ')[0] || 'Utente',
-                      cognome: user.displayName?.split(' ')[1] || 'Nuovo',
-                      ruolo: 'user',
-                    };
-                    await setDoc(userDocRef, defaultData);
-                    setUserData(defaultData);
-                }
-            } else {
-                setUserData(null);
-            }
-            setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    const login = useCallback(async (email: string, pass: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        await signInWithEmailAndPassword(auth, email, pass);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    }, []);
-    
-    const loginWithGoogle = useCallback(async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    }, []);
-
-    const signup = useCallback(async (email: string, pass: string, nome: string, cognome: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-        const user = userCredential.user;
-        // Crea il documento utente con ruolo 'user' di default
-        await setDoc(doc(db, 'utenti_master', user.uid), {
-          nome,
-          cognome,
-          ruolo: 'user' as UserRole
-        });
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    }, []);
-    
-    const logout = useCallback(async () => {
-      // Non c'è bisogno di setLoading(true) qui, la logica onAuthStateChanged gestirà tutto
-      setError(null);
-      try {
-        await signOut(auth);
-      } catch (e: any) { 
-        setError(e.message);
-      }
-    }, []);
-
-    // Valori memoizzati per evitare re-render non necessari
-    const value = useMemo(() => {
-        const userRole = userData?.ruolo || null;
-        const isAdmin = userRole === 'admin';
-
-        return {
-            user,
-            userData,
-            userRole,
-            loading,
-            isAdmin,
-            login,
-            loginWithGoogle,
-            signup,
-            logout,
-            error,
-            setError
-        };
-    }, [user, userData, loading, error, login, loginWithGoogle, signup, logout]);
-
-    return (
-        <AuthContext.Provider value={value}>
-            {children}
-        </AuthContext.Provider>
-    );
-};
-
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error("useAuth deve essere utilizzato all'interno di un AuthProvider");
-    }
-    return context;
-};

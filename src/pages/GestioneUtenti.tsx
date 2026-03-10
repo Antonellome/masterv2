@@ -1,100 +1,94 @@
-import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect, useCallback } from 'react';
+import { collection, getDocs, doc, addDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { useAuth } from '@/contexts/AuthContext'; // Uso il nostro hook!
 import {
-    Box, Typography, Alert, CircularProgress, Select, MenuItem, FormControl, SelectChangeEvent
+    Box, Typography, Alert, CircularProgress, Snackbar, TextField, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton
 } from '@mui/material';
-// CORREZIONE: Separato l'import di itIT
 import { DataGrid, GridColDef, GridToolbar } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
-import type { UserRole } from '@/contexts/AuthContext';
+import DeleteIcon from '@mui/icons-material/Delete';
 
-interface AppUser {
+// Interfaccia utente ultra-semplificata: solo id ed email
+interface MasterAppUser {
     id: string;
     email: string;
-    nome?: string;
-    cognome?: string;
-    ruolo: UserRole;
 }
 
 const GestioneUtenti = () => {
-    const { isAdmin } = useAuth(); // Controllo se l'utente corrente è admin
-    const [users, setUsers] = useState<AppUser[]>([]);
+    const [users, setUsers] = useState<MasterAppUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
-    useEffect(() => {
-        const fetchUsers = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const querySnapshot = await getDocs(collection(db, "utenti_master"));
-                const usersData = querySnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    email: doc.data().email || 'N/D',
-                    nome: doc.data().nome || '',
-                    cognome: doc.data().cognome || '',
-                    ruolo: doc.data().ruolo || 'user', 
-                } as AppUser));
-                setUsers(usersData);
-            } catch (err) {
-                console.error("Errore nel caricamento degli utenti:", err);
-                setError("Impossibile caricare l'elenco degli utenti.");
-            } finally {
-                setLoading(false);
-            }
-        };
+    // State per la dialog di creazione nuovo utente
+    const [openDialog, setOpenDialog] = useState(false);
+    const [newUserEmail, setNewUserEmail] = useState('');
 
-        fetchUsers();
+    const fetchUsers = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const querySnapshot = await getDocs(collection(db, "utenti_master"));
+            const usersData = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                email: doc.data().email || 'N/D',
+            } as MasterAppUser));
+            setUsers(usersData);
+        } catch (err) {
+            console.error("Errore nel caricamento degli utenti:", err);
+            setError("Impossibile caricare l'elenco degli utenti.");
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
-    const handleRoleChange = async (userId: string, newRole: UserRole) => {
-        if (!isAdmin) {
-            setFeedback({ type: 'error', message: 'Non hai i permessi per modificare i ruoli.' });
+    useEffect(() => {
+        fetchUsers();
+    }, [fetchUsers]);
+
+    const handleCreateUser = async () => {
+        if (!newUserEmail) {
+            setSnackbar({ open: true, message: 'L\'email non può essere vuota.', severity: 'error' });
             return;
         }
-
-        const userRef = doc(db, 'utenti_master', userId);
         try {
-            await updateDoc(userRef, { ruolo: newRole });
-            setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, ruolo: newRole } : u));
-            setFeedback({ type: 'success', message: `Ruolo aggiornato a ${newRole}.` });
-        } catch (error) {
-            console.error("Errore durante l'aggiornamento del ruolo:", error);
-            setFeedback({ type: 'error', message: "Errore durante l'aggiornamento." });
+            // Aggiunge il documento solo con l'email, senza ruoli.
+            await addDoc(collection(db, "utenti_master"), { email: newUserEmail });
+            setSnackbar({ open: true, message: 'Nuovo utente abilitato con successo!', severity: 'success' });
+            setNewUserEmail('');
+            setOpenDialog(false);
+            fetchUsers(); // Ricarica la lista
+        } catch (err) {
+            console.error("Errore nella creazione dell'utente:", err);
+            setSnackbar({ open: true, message: 'Errore durante l\'abilitazione del nuovo utente.', severity: 'error' });
+        }
+    };
+
+    const handleDeleteUser = async (id: string) => {
+        if (!window.confirm('Sei sicuro di voler rimuovere l\'accesso a questo utente?')) return;
+        try {
+            await deleteDoc(doc(db, 'utenti_master', id));
+            setSnackbar({ open: true, message: 'Utente rimosso con successo.', severity: 'success' });
+            fetchUsers(); // Ricarica la lista
+        } catch (err) {
+            console.error("Errore nella rimozione dell'utente:", err);
+            setSnackbar({ open: true, message: 'Errore durante la rimozione dell\'utente.', severity: 'error' });
         }
     };
 
     const columns: GridColDef[] = [
-        { field: 'email', headerName: 'Email', flex: 1.5 },
-        { field: 'cognome', headerName: 'Cognome', flex: 1 },
-        { field: 'nome', headerName: 'Nome', flex: 1 },
+        { field: 'email', headerName: 'Email Utente Abilitato', flex: 1 },
         {
-            field: 'ruolo',
-            headerName: 'Ruolo',
-            flex: 1,
+            field: 'actions',
+            headerName: 'Rimuovi',
+            sortable: false,
+            disableColumnMenu: true,
+            width: 100,
+            align: 'center',
             renderCell: (params) => (
-                <FormControl fullWidth variant="standard">
-                    <Select
-                        value={params.value as UserRole}
-                        onChange={(e: SelectChangeEvent<UserRole>) => handleRoleChange(params.row.id, e.target.value as UserRole)}
-                        disabled={!isAdmin} // Disabilitato se non sei admin
-                        sx={{
-                           fontSize: 'inherit',
-                           fontWeight: 'inherit',
-                           color: 'inherit',
-                           '& .MuiSelect-select:focus': { backgroundColor: 'transparent' },
-                           '&::before': { borderBottom: 'none' },
-                           '&:hover::before': { borderBottom: 'none!important' },
-                           '& .MuiSvgIcon-root': { visibility: isAdmin ? 'visible' : 'hidden' }
-                        }}
-                    >
-                        <MenuItem value="admin">Admin</MenuItem>
-                        <MenuItem value="user">User</MenuItem>
-                    </Select>
-                </FormControl>
+                <IconButton onClick={() => handleDeleteUser(params.id as string)} color="error">
+                    <DeleteIcon />
+                </IconButton>
             ),
         },
     ];
@@ -103,15 +97,17 @@ const GestioneUtenti = () => {
 
     return (
         <Box>
-            <Typography variant="h5" component="h1" gutterBottom>
-                Gestione Utenti
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h5" component="h1">
+                    Gestione Accessi Applicazione
+                </Typography>
+                <Button variant="contained" onClick={() => setOpenDialog(true)}>Abilita Nuovo Utente</Button>
+            </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Qui puoi visualizzare gli utenti della piattaforma e modificare il loro ruolo. Solo gli amministratori possono effettuare modifiche.
+                Questa lista contiene le email degli utenti autorizzati ad accedere a questa applicazione. Tutti gli utenti hanno gli stessi permessi.
             </Typography>
             
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            {feedback && <Alert severity={feedback.type} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
 
             <Box sx={{ height: 'auto', width: '100%' }}>
                 <DataGrid
@@ -119,16 +115,43 @@ const GestioneUtenti = () => {
                     columns={columns}
                     autoHeight
                     localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-                    initialState={{
-                        pagination: { paginationModel: { page: 0, pageSize: 10 } },
-                        sorting: { sortModel: [{ field: 'cognome', sort: 'asc' }] }
+                    initialState={{ 
+                        sorting: { sortModel: [{ field: 'email', sort: 'asc' }] }
                     }}
-                    pageSizeOptions={[10, 25, 50]}
                     slots={{ toolbar: GridToolbar }}
                     disableRowSelectionOnClick
                     sx={{ border: 0 }}
                 />
             </Box>
+
+            {/* Dialog per abilitare un nuovo utente */}
+            <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+                <DialogTitle>Abilita Nuovo Utente</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        id="email"
+                        label="Indirizzo Email dell'Utente da Abilitare"
+                        type="email"
+                        fullWidth
+                        variant="standard"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenDialog(false)}>Annulla</Button>
+                    <Button onClick={handleCreateUser}>Abilita</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={() => setSnackbar({ ...snackbar, open: false })}
+                message={snackbar.message}
+            />
         </Box>
     );
 };

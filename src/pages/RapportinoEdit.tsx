@@ -20,6 +20,18 @@ import { useAlert } from '@/contexts/AlertContext';
 import { Tecnico, Nave, Luogo, TipoGiornata, Veicolo, Rapportino } from '@/models/definitions';
 import { formatOreLavoro } from '@/utils/formatters';
 
+// --- FUNZIONE DI UTILITÀ PER LA CONVERSIONE SICURA ---
+const safeTimestampToDayjs = (value: any) => {
+    if (value instanceof Timestamp) {
+        return dayjs(value.toDate());
+    }
+    if (dayjs(value).isValid()){
+        return dayjs(value)
+    }
+    return null
+};
+
+
 // --- TIPI E INTERFACCE ---
 interface RapportinoEditProps { isReadOnly?: boolean; }
 type RapportinoFirestore = Omit<Rapportino, 'id' | 'data' | 'oraInizio' | 'oraFine' | 'tecniciAggiunti'> & {
@@ -66,9 +78,7 @@ const OrariTecnicoDialog: React.FC<OrariTecnicoDialogProps> = ({ open, onClose, 
             <form onSubmit={handleSubmit(onSave)}>
                 <DialogContent dividers>
                     <Grid container spacing={2}>
-                        <Grid size={{ xs: 12}}>
-                            <Controller name="inserimentoManualeOre" control={control} render={({ field }) => <FormControlLabel control={<Switch {...field} checked={field.value} />} label="Inserisci ore manuali" />} />
-                        </Grid>
+                        <Grid size={{ xs: 12}}><FormControlLabel control={<Switch {...control.register('inserimentoManualeOre')} />} label="Inserisci ore manuali" /></Grid>
                         <Grid size={{ xs: 6}}><Controller name="oraInizio" control={control} render={({ field }) => <TimePicker {...field} label="Ora Inizio" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} />} /></Grid>
                         <Grid size={{ xs: 6}}><Controller name="oraFine" control={control} render={({ field }) => <TimePicker {...field} label="Ora Fine" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} />} /></Grid>
                         <Grid size={{ xs: 6}}><Controller name="pausa" control={control} render={({ field }) => <TextField {...field} type="number" label="Pausa (minuti)" fullWidth disabled={watchInserimentoManuale} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />} /></Grid>
@@ -152,10 +162,10 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                         const data = docSnap.data() as RapportinoFirestore;
                         reset({
                             ...data,
-                            data: dayjs(data.data.toDate()),
-                            oraInizio: data.oraInizio ? dayjs(data.oraInizio.toDate()) : null,
-                            oraFine: data.oraFine ? dayjs(data.oraFine.toDate()) : null,
-                            tecniciAggiunti: data.tecniciAggiunti?.map(t => ({...t, oraInizio: t.oraInizio ? dayjs(t.oraInizio.toDate()) : null, oraFine: t.oraFine ? dayjs(t.oraFine.toDate()) : null })) || [],
+                            data: safeTimestampToDayjs(data.data),
+                            oraInizio: safeTimestampToDayjs(data.oraInizio),
+                            oraFine: safeTimestampToDayjs(data.oraFine),
+                            tecniciAggiunti: data.tecniciAggiunti?.map(t => ({...t, oraInizio: safeTimestampToDayjs(t.oraInizio), oraFine: safeTimestampToDayjs(t.oraFine) })) || [],
                         });
                     } else { showAlert('Rapportino non trovato.', 'error'); navigate('/reportistica'); }
                 } else {
@@ -278,7 +288,7 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                                     const tecnicoInfo = options.tecnici.find(t => t.id === field.tecnicoId);
                                     return (
                                         <Chip
-                                            key={field.tecnicoId} // FIX: Key is now stable and unique
+                                            key={field.id} 
                                             label={`${tecnicoInfo ? getOptionLabel(tecnicoInfo) : 'Tecnico non trovato'} [${formatTecnicoAggiuntoOre(field)}]`}
                                             onDelete={isReadOnly ? undefined : () => remove(index)}
                                             deleteIcon={isReadOnly ? <span /> : <DeleteIcon />}

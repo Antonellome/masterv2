@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, 
-  Autocomplete, Chip, CircularProgress, Box, Typography, 
+  Autocomplete, CircularProgress, Box, Typography, 
   FormControlLabel, Checkbox, Divider
 } from '@mui/material';
 import { collection, getDocs, Timestamp, addDoc } from 'firebase/firestore';

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-    TableSortLabel, Paper, Box, Typography, TextField, Checkbox
+    TableSortLabel, Paper, Box, Typography
 } from '@mui/material';
 import type { BaseEntity } from '@/models/definitions';
 
@@ -19,7 +19,6 @@ interface DataTableProps<T extends BaseEntity> {
     title: string;
     onEdit?: (item: T) => void;
     onDelete?: (id: string) => void;
-    // Aggiungi altre props necessarie
 }
 
 function descendingComparator<T>(a: T, b: T, orderBy: keyof T) {
@@ -32,10 +31,11 @@ function descendingComparator<T>(a: T, b: T, orderBy: keyof T) {
     return 0;
 }
 
-function getComparator<Key extends keyof any>(
+// Rifattorizzazione: getComparator è ora completamente generico e type-safe.
+function getComparator<T>(
     order: Order,
-    orderBy: Key,
-): (a: { [key in Key]: number | string }, b: { [key in Key]: number | string }) => number {
+    orderBy: keyof T,
+): (a: T, b: T) => number {
     return order === 'desc'
         ? (a, b) => descendingComparator(a, b, orderBy)
         : (a, b) => -descendingComparator(a, b, orderBy);
@@ -63,7 +63,8 @@ export default function DataTable<T extends BaseEntity>({ data, headCells, title
         setOrderBy(property);
     };
 
-    const sortedData = stableSort(data, getComparator(order, orderBy));
+    // La chiamata a getComparator ora passa il tipo generico esplicitamente.
+    const sortedData = stableSort(data, getComparator<T>(order, orderBy));
 
     return (
         <Box sx={{ width: '100%' }}>

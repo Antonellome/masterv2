@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Autocomplete, CircularProgress } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -11,8 +11,8 @@ import { safeGetDayjs } from '@/utils/dateUtils';
 
 interface SelectFieldProps {
     field: FormField;
-    value: any;
-    onChange: (name: string, value: any) => void;
+    value: unknown;
+    onChange: (name: string, value: string | null) => void;
 }
 
 const SelectField: React.FC<SelectFieldProps> = ({ field, value, onChange }) => {
@@ -26,7 +26,7 @@ const SelectField: React.FC<SelectFieldProps> = ({ field, value, onChange }) => 
                 try {
                     const snapshot = await getDocs(collection(db, field.options.collectionName));
                     const fetchedOptions = snapshot.docs.map(doc => ({
-                        label: doc.data()[field.options.labelField] || 'Label non trovato',
+                        label: doc.data()[field.options.labelField] as string || 'Label non trovato',
                         value: doc.id,
                     }));
                     setOptions(fetchedOptions);
@@ -79,19 +79,24 @@ interface FormDialogProps<T extends Anagrafica> {
 }
 
 const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initialData, title }: FormDialogProps<T>) => {
-    const [formData, setFormData] = useState<Partial<T>>(initialData || {});
+    const [edits, setEdits] = useState<Partial<T>>({});
+    
+    const formData = useMemo(() => ({ ...(initialData || {} as Partial<T>), ...edits }), [initialData, edits]);
 
-    useEffect(() => {
-        setFormData(initialData || {});
-    }, [initialData, open]);
+    const handleClose = () => {
+        onClose();
+        setTimeout(() => {
+            setEdits({});
+        }, 300);
+    };
 
     const handleSave = async () => {
         await onSave(formData);
-        onClose();
+        handleClose();
     };
 
-    const handleChange = useCallback((name: keyof T, value: any) => {
-        setFormData(prev => ({ ...prev, [name]: value }));
+    const handleChange = useCallback((name: string, value: unknown) => {
+        setEdits(prev => ({ ...prev, [name]: value }));
     }, []);
 
     const renderField = (field: FormField) => {
@@ -106,7 +111,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                             type={field.type} 
                             label={field.label} 
                             value={value || ''} 
-                            onChange={(e) => handleChange(field.name as keyof T, e.target.value)} 
+                            onChange={(e) => handleChange(field.name, e.target.value)} 
                             required={field.required} 
                         />;
             case 'textarea':
@@ -114,7 +119,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                             fullWidth 
                             label={field.label} 
                             value={value || ''} 
-                            onChange={(e) => handleChange(field.name as keyof T, e.target.value)} 
+                            onChange={(e) => handleChange(field.name, e.target.value)} 
                             required={field.required}
                             multiline 
                             rows={field.rows || 3} 
@@ -123,18 +128,18 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                 return <DatePicker 
                             label={field.label} 
                             value={safeGetDayjs(value as string)} 
-                            onChange={(date) => handleChange(field.name as keyof T, date?.toISOString() ?? null)} 
+                            onChange={(date) => handleChange(field.name, date?.toISOString() ?? null)} 
                             sx={{ width: '100%' }} 
                         />;
             case 'select':
-                return <SelectField field={field} value={value} onChange={handleChange as any} />;
+                return <SelectField field={field} value={value} onChange={handleChange} />;
             default:
                 return null;
         }
     };
     
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+        <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
             <DialogTitle>{title}</DialogTitle>
             <DialogContent>
                  <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -148,7 +153,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                 </LocalizationProvider>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose}>Annulla</Button>
+                <Button onClick={handleClose}>Annulla</Button>
                 <Button onClick={handleSave} variant="contained">Salva</Button>
             </DialogActions>
         </Dialog>
