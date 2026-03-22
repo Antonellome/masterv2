@@ -93,13 +93,21 @@ const ReportMensileDialog: React.FC<ReportMensileDialogProps> = ({ open, onClose
         <DialogContent dividers sx={{ pt: 2 }}>
           <DialogContentText sx={{mb: 3}}>Seleziona il periodo desiderato per generare il report mensile.</DialogContentText>
           <Grid container spacing={3}>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <FormControl fullWidth variant="outlined">
                 <InputLabel>Anno</InputLabel>
                 <Select value={anno} onChange={(e) => setAnno(e.target.value as number)} label="Anno">{anni.map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}</Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <FormControl fullWidth variant="outlined">
                 <InputLabel>Mese</InputLabel>
                 <Select value={mese} onChange={(e) => setMese(e.target.value as number)} label="Mese">{mesi.map(m => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}</Select>
@@ -115,7 +123,6 @@ const ReportMensileDialog: React.FC<ReportMensileDialogProps> = ({ open, onClose
           </Box>
         </DialogActions>
       </Dialog>
-
       <Dialog
         fullScreen
         open={generatedReport !== null}

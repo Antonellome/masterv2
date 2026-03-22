@@ -168,18 +168,48 @@ const AnalisiOre = () => {
         <Box sx={{ p: 3, userSelect: 'none' }}>
             <Typography variant="h5" gutterBottom>Analisi Costi e Ore Lavorate</Typography>
             <Grid container spacing={2} sx={{ mb: 4 }}>
-                <Grid item xs={12} sm={6} md={3}><TextField name="dataDa" label="Da (Data)" type="date" value={filtri.dataDa} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
-                <Grid item xs={12} sm={6} md={3}><TextField name="dataA" label="A (Data)" type="date" value={filtri.dataA} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 3
+                    }}><TextField name="dataDa" label="Da (Data)" type="date" value={filtri.dataDa} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 3
+                    }}><TextField name="dataA" label="A (Data)" type="date" value={filtri.dataA} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} fullWidth /></Grid>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 3
+                    }}>
                     <FormControl fullWidth><InputLabel>Categoria Tecnico</InputLabel><Select name="categoriaId" value={filtri.categoriaId} label="Categoria Tecnico" onChange={handleFilterChange}><MenuItem value="all">Tutte</MenuItem>{categorie?.map(c => <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>)}</Select></FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 3
+                    }}>
                     <FormControl fullWidth><InputLabel>Cliente</InputLabel><Select name="clienteId" value={filtri.clienteId} label="Cliente" onChange={handleFilterChange}><MenuItem value="all">Tutti</MenuItem>{clienti?.map(c => <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>)}</Select></FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 3
+                    }}>
                     <FormControl fullWidth><InputLabel>Nave</InputLabel><Select name="naveId" value={filtri.naveId} label="Nave" onChange={handleFilterChange}><MenuItem value="all">Tutte</MenuItem>{navi?.map(n => <MenuItem key={n.id} value={n.id}>{n.nome}</MenuItem>)}</Select></FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 6,
+                        md: 3
+                    }}>
                     <FormControl fullWidth><InputLabel>Luogo</InputLabel><Select name="luogoId" value={filtri.luogoId} label="Luogo" onChange={handleFilterChange}><MenuItem value="all">Tutti</MenuItem>{luoghi?.map(l => <MenuItem key={l.id} value={l.id}>{l.nome}</MenuItem>)}</Select></FormControl>
                 </Grid>
             </Grid>
@@ -190,14 +220,30 @@ const AnalisiOre = () => {
                     {analisi ? (
                         <>
                             <Grid container spacing={3} sx={{ mb: 4 }}>
-                                <Grid item xs={12} md={4}><Card><CardContent><Typography variant="h6">Costo Totale</Typography><Typography variant="h4">€ {analisi.totali.costo.toFixed(2)}</Typography></CardContent></Card></Grid>
-                                <Grid item xs={12} md={4}><Card><CardContent><Typography variant="h6">Ore Totali Lavorate</Typography><Typography variant="h4">{analisi.totali.ore.toFixed(1)}</Typography></CardContent></Card></Grid>
-                                <Grid item xs={12} md={4}><Card><CardContent><Typography variant="h6">N. Tecnici Coinvolti</Typography><Typography variant="h4">{analisi.totali.tecnici}</Typography></CardContent></Card></Grid>
+                                <Grid
+                                    size={{
+                                        xs: 12,
+                                        md: 4
+                                    }}><Card><CardContent><Typography variant="h6">Costo Totale</Typography><Typography variant="h4">€ {analisi.totali.costo.toFixed(2)}</Typography></CardContent></Card></Grid>
+                                <Grid
+                                    size={{
+                                        xs: 12,
+                                        md: 4
+                                    }}><Card><CardContent><Typography variant="h6">Ore Totali Lavorate</Typography><Typography variant="h4">{analisi.totali.ore.toFixed(1)}</Typography></CardContent></Card></Grid>
+                                <Grid
+                                    size={{
+                                        xs: 12,
+                                        md: 4
+                                    }}><Card><CardContent><Typography variant="h6">N. Tecnici Coinvolti</Typography><Typography variant="h4">{analisi.totali.tecnici}</Typography></CardContent></Card></Grid>
                             </Grid>
 
                             {(analisi.costoPerCategoria.length > 0 || analisi.orePerDestinazione.length > 0) ? (
                                 <Grid container spacing={4}>
-                                    <Grid item xs={12} lg={7}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            lg: 7
+                                        }}>
                                         <Typography variant="h6" gutterBottom>Costi per Categoria Tecnico</Typography>
                                         <Box sx={{ overflowX: 'auto' }}>
                                             <BarChart width={600} height={350} data={analisi.costoPerCategoria} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -210,7 +256,11 @@ const AnalisiOre = () => {
                                             </BarChart>
                                         </Box>
                                     </Grid>
-                                    <Grid item xs={12} lg={5}>
+                                    <Grid
+                                        size={{
+                                            xs: 12,
+                                            lg: 5
+                                        }}>
                                         <Typography variant="h6" gutterBottom>Distribuzione Ore per Destinazione</Typography>
                                         <Box sx={{ overflowX: 'auto' }}>
                                             <PieChart width={450} height={350}>

@@ -119,7 +119,7 @@ const LoginPage = () => {
             )}
           </Box>
           <Grid container justifyContent="flex-end">
-            <Grid item>
+            <Grid>
                 <Typography variant="body2" color="text.secondary">
                     Non hai un account? Contatta l'amministratore.
                 </Typography>

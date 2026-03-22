@@ -2,58 +2,66 @@
 
 ---
 
-## 1. Regola della "Simulazione Virtuale"
+## 1. Regola del "Maestro di Scacchi" (Metodologia Primaria)
 
-Questa regola definisce il protocollo di analisi e azione prima di ogni modifica.
+Questa regola definisce il protocollo strategico per ogni interazione. Sostituisce tutte le metodologie precedenti.
 
-*   **Simulazione Virtuale:** Devo simulare mentalmente l'impatto della modifica sull'intera applicazione.
-*   **Anticipazione dello Scacco (Pre-Fix):** Devo identificare in anticipo tutti i possibili errori che la modifica potrebbe generare, con particolare attenzione ai breaking changes delle librerie.
-*   **Contromossa Preventiva:** Devo progettare la soluzione includendo già le sicurezze e le configurazioni per evitare gli errori previsti.
-*   **Base di Conoscenza Permanente (`blueprint.md`):** Ogni nuova regola di migrazione, breaking change o soluzione architetturale deve essere immediatamente e indelebilmente documentata nel `blueprint.md` per evitare fallimenti futuri.
+*   **1. Studio (Analisi):** Prima di ogni azione, analizzo in profondità la richiesta, il contesto del codice, la documentazione pertinente (`blueprint.md`, log, guide esterne) e i file sorgente.
+*   **2. Creazione (Strategia):** Sviluppo la soluzione tecnicamente più robusta ed elegante, privilegiando gli strumenti ufficiali (es. `codemod`) e le best practice consolidate.
+*   **3. Anticipazione (Pre-flight Check):** Simulo mentalmente l'impatto della modifica. Verifico l'esistenza dei percorsi, la coerenza delle dipendenze e prevedo potenziali errori o breaking changes per neutralizzarli in anticipo.
+*   **4. Scrittura (Esecuzione):** Eseguo il comando o scrivo il codice solo dopo aver completato le fasi precedenti. L'azione è decisa e basata su un piano solido.
+*   **5. Vai (Verifica e Prossima Mossa):** Dopo l'esecuzione, verifico l'assenza di errori e, senza attendere, procedo con la mossa successiva prevista dal piano strategico.
 
 ## 2. Regola del "CIAO"
 
-Questa regola definisce il protocollo di comunicazione. Ogni mia singola risposta deve tassativamente iniziare con la parola "CIAO". Funziona come un "checksum" per assicurare che io mantenga sempre il contesto della nostra conversazione.
+Questa regola definisce il protocollo di comunicazione. Ogni mia singola risposta deve tassativamente iniziare con la parola "CIAO".
 
 ---
 
 # R.I.S.O. - Blueprint di Progetto
 
-Questo documento definisce i principi architetturali e le linee guida per lo sviluppo dell'applicazione R.I.S.O. (Report Individuali Sincronizzati Online). Aderire a queste regole è obbligatorio per garantire manutenibilità, coerenza e scalabilità del codice.
+Questo documento definisce i principi architetturali e le linee guida per lo sviluppo dell'applicazione R.I.S.O.
 
-## 1. Architettura Generale
+## Vincoli Architettonici Chiave
 
-L'applicazione segue un'architettura basata su componenti React, con un backend serverless fornito da Firebase (Firestore, Authentication). I principi chiave sono la separazione delle responsabilità e il flusso di dati unidirezionale.
+*   **Priorità alla Logica:** Le modifiche devono concentrarsi sull'aggiornamento della logica di business e del flusso dati. L'estetica, la struttura delle pagine e le rotte attuali devono essere preservate il più possibile.
+*   **Separazione dei Dati "Tecnici":** La gestione dell'anagrafica dei "Tecnici" deve rimanere separata e non deve essere unificata nella sezione generica "Anagrafiche".
 
-### Principi Chiave
+## Ciclo di Aggiornamento: Allineamento a MUI v7 [COMPLETATO]
 
-1.  **Separation of Concerns (SoC):** La logica di business, la manipolazione dei dati e la loro visualizzazione devono essere nettamente separate.
-    *   **Data Fetching:** Centralizzato in custom hooks (es. `useCollection`) o in `useEffect` di alto livello.
-    *   **Data Manipulation:** La logica di creazione, modifica e calcolo dei dati risiede nei componenti form (es. `RapportinoForm`) o in funzioni di utility (es. `utils/formatters.ts`).
-    *   **Data Display:** I componenti di visualizzazione (es. tabelle, liste) devono essere il più "stupidi" possibile.
+**Obiettivo Raggiunto:** La base di codice è stata allineata con successo alle dipendenze di `@mui/material` v7.
 
-2.  **Componenti Riutilizzabili:** Creare componenti generici e riutilizzabili per elementi UI comuni (es. `ConfirmationDialog`, `ViewInfoRow`) per ridurre la duplicazione del codice.
+*   **Fase 1: Migrazione `Grid` v2 [COMPLETATA]**
+    *   **Azione:** Il `codemod` `v7.0.0/grid-props` è stato eseguito con successo, aggiornando tutte le istanze del componente `Grid` alla sintassi moderna.
+*   **Fase 2: Migrazione `Date Pickers` [NON APPLICABILE]**
+    *   **Scoperta Fondamentale:** L'analisi delle guide ufficiali ha rivelato che i componenti `@mui/x-date-pickers` appartengono alla libreria MUI X, che ha un ciclo di versioning indipendente e non richiede una migrazione specifica nel passaggio da `@mui/material` v6 a v7. La dipendenza `@mui/x-date-pickers` nel progetto è già a una versione superiore (`^8.x`), confermando che non è necessaria alcuna azione.
 
-3.  **Design System:** Si adotta Material-UI (MUI) come libreria di componenti principale. La personalizzazione deve avvenire tramite il sistema di theming di MUI, non con override CSS diretti dove possibile.
+**Conclusione:** L'infrastruttura di componenti UI è ora stabile e aggiornata. Il prossimo passo è l'implementazione delle nuove logiche di business.
 
 ---
 
-## 2. Standard di Sintassi Obbligatorio per `Grid` (Sintassi Ibrida)
+## Guide di Migrazione e Standard Tecnici
 
-Questa regola è stata ripristinata dalla cronologia ed è la fonte di verità assoluta per la gestione del layout a griglia in questo progetto.
+### Nota Strategica: Gestione dell'Errore "Resource Exhausted"
 
-*   **Scoperta:** L'analisi ha rivelato l'uso di una sintassi "ibrida" per il componente `Grid` di Material-UI, che rappresenta lo standard de-facto per questo progetto.
-*   **Importazione Corretta:** Il componente `Grid` deve essere importato dalla libreria stabile:
-    '''javascript
-    import { Grid } from '@mui/material';
-    '''
-*   **Sintassi Obbligatoria del Contenitore:** Il componente che funge da contenitore **DEVE** utilizzare la prop `container`:
-    '''jsx
-    <Grid container spacing={2}>
-    '''
-*   **Sintassi Obbligatoria degli Elementi Figli:** I componenti che fungono da elementi figli (item) **DEVONO** utilizzare la prop `size` con un oggetto per i breakpoint, **SENZA** la prop `item`:
-    '''jsx
-    <Grid size={{ xs: 12, sm: 6, md: 4}}>
-    </Grid>
-    '''
-*   **Conclusione Finale:** Questo modello ibrido è la regola. Qualsiasi deviazione da questo standard ha generato errori e deve essere evitata. Questa regola sostituisce tutte le precedenti analisi e ipotesi errate.
+*   **Problema Rilevato:** L'esecuzione di comandi ad alta intensità di risorse (come i `codemod` di MUI) sull'intera directory `src` può causare un errore generico `Resource has been exhausted`.
+*   **Causa Fondamentale:** Questo errore **non** è legato alle quote dei servizi Firebase (es. Firestore), ma ai limiti di risorse (CPU, RAM, numero di processi) della macchina virtuale temporanea che ospita l'ambiente di sviluppo. I comandi `codemod` analizzano molti file in parallelo, causando un picco di consumo che supera questi limiti.
+*   **Soluzione Strategica ("Divide et Impera"):** Per evitare questo errore, i comandi di modifica massiva del codice **devono** essere eseguiti su sotto-directory più piccole e gestibili in sequenza.
+
+### Guida Ufficiale: Migrazione a `Grid` v2 (MUI v7)
+
+*   **Fonte:** Documentazione ufficiale di Material-UI.
+*   **Sintassi Chiave:** La prop `size` sostituisce le precedenti prop per i breakpoint (`xs`, `sm`, etc.).
+    ```jsx
+    // Dopo
+    <Grid size={{ xs: 12, sm: 6 }}>
+    ```
+*   **Comando di Migrazione (Codemod):**
+    ```bash
+    npx @mui/codemod@next v7.0.0/grid-props <path/to/folder>
+    ```
+
+---
+## Architettura e Standard Precedenti
+
+(Contenuto delle regole precedenti mantenuto per riferimento storico)

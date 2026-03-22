@@ -1,3 +1,4 @@
+
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthProvider';
@@ -24,14 +25,9 @@ import SettingsPage from '@/pages/SettingsPage';
 import RapportinoEdit from '@/pages/RapportinoEdit';
 import RapportinoPrintPage from '@/pages/RapportinoPrint';
 
-// Layout e Pagine Anagrafiche
+// Pagine Anagrafiche Dinamiche
 import AnagrafichePage from '@/pages/AnagrafichePage';
-import GestioneClienti from '@/pages/Anagrafiche/GestioneClienti'; 
-import GestioneNavi from '@/pages/Anagrafiche/GestioneNavi'; 
-import GestioneLuoghi from '@/pages/Anagrafiche/GestioneLuoghi'; 
-import GestioneDitte from '@/pages/Anagrafiche/GestioneDitte';
-import GestioneCategorie from '@/pages/Anagrafiche/GestioneCategorie';
-import GestioneTipiGiornata from '@/pages/Anagrafiche/GestioneTipiGiornata';
+import AnagraficaDetailPage from '@/pages/AnagraficaDetailPage';
 
 const AppFeatureProviders = ({ children }: { children: React.ReactNode }) => (
     <NotificationProvider>
@@ -68,15 +64,10 @@ function App() {
                     <Route path="/" element={<DashboardPage />} />
                     <Route path="/dashboard" element={<DashboardPage />} />
                     
-                    {/* --- ROTTE ANAGRAFICHE --- */}
+                    {/* --- NUOVA GESTIONE DINAMICA ANAGRAFICHE --- */}
                     <Route path="/anagrafiche" element={<AnagrafichePage />}>
                       <Route index element={<Navigate to="clienti" replace />} /> 
-                      <Route path="clienti" element={<GestioneClienti />} />
-                      <Route path="navi" element={<GestioneNavi />} />
-                      <Route path="luoghi" element={<GestioneLuoghi />} />
-                      <Route path="ditte" element={<GestioneDitte />} />
-                      <Route path="categorie" element={<GestioneCategorie />} />
-                      <Route path="tipi-giornata" element={<GestioneTipiGiornata />} />
+                      <Route path=":anagraficaType" element={<AnagraficaDetailPage />} />
                     </Route>
 
                     <Route path="/tecnici" element={<TecniciPage />} />

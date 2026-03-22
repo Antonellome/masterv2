@@ -48,7 +48,11 @@ const SignupPage = () => {
         </Typography>
         <Box component="form" noValidate onSubmit={handleSignup} sx={{ mt: 3 }}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 autoComplete="given-name"
                 name="firstName"
@@ -61,7 +65,11 @@ const SignupPage = () => {
                 onChange={(e) => setNome(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 required
                 fullWidth
@@ -73,7 +81,7 @@ const SignupPage = () => {
                 onChange={(e) => setCognome(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 required
                 fullWidth
@@ -85,7 +93,7 @@ const SignupPage = () => {
                 onChange={(e) => setEmail(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 required
                 fullWidth
@@ -109,7 +117,7 @@ const SignupPage = () => {
             Registrati
           </Button>
           <Grid container justifyContent="flex-end">
-            <Grid item>
+            <Grid>
               <Link to="/login">
                 <Typography variant="body2">
                     Hai già un account? Accedi
