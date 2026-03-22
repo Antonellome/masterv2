@@ -14,7 +14,6 @@ import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignupPage';
 import DashboardPage from '@/pages/DashboardPage';
 import TecniciPage from '@/pages/TecniciPage';
-import VeicoliPage from '@/pages/VeicoliPage';
 import DocumentiPage from '@/pages/DocumentiPage';
 import NotificationsPage from '@/pages/NotificationsPage';
 import PresenzePage from '@/pages/PresenzePage';
@@ -71,7 +70,6 @@ function App() {
                     </Route>
 
                     <Route path="/tecnici" element={<TecniciPage />} />
-                    <Route path="/veicoli" element={<VeicoliPage />} />
                     <Route path="/documenti" element={<DocumentiPage />} />
                     <Route path="/notifications" element={<NotificationsPage />} />
                     <Route path="/presenze" element={<PresenzePage />} />

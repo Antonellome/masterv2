@@ -1,21 +1,20 @@
 import React from 'react';
 import { Box, Tab, Tabs } from '@mui/material';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { anagraficheConfig } from '@/config/anagrafiche.config.tsx';
 
 const AnagrafichePage: React.FC = () => {
     const location = useLocation();
 
-    // Determina la tab corrente basandosi sul percorso. Default a 'clienti'
-    const currentTab = location.pathname.split('/')[2] || 'clienti';
+    // Determina la tab corrente basandosi sul percorso. Default alla prima anagrafica della configurazione.
+    const currentTab = location.pathname.split('/')[2] || Object.keys(anagraficheConfig)[0];
 
-    const tabs = [
-        { label: 'Clienti', value: 'clienti', path: '/anagrafiche/clienti' },
-        { label: 'Navi', value: 'navi', path: '/anagrafiche/navi' },
-        { label: 'Luoghi', value: 'luoghi', path: '/anagrafiche/luoghi' },
-        { label: 'Ditte', value: 'ditte', path: '/anagrafiche/ditte' },
-        { label: 'Categorie', value: 'categorie', path: '/anagrafiche/categorie' },
-        { label: 'Tipi Giornata', value: 'tipi-giornata', path: '/anagrafiche/tipi-giornata' },
-    ];
+    // Genera dinamicamente le tabs dalla configurazione
+    const tabs = Object.keys(anagraficheConfig).map(key => ({
+        label: anagraficheConfig[key].title.replace('Gestione ', ''),
+        value: key,
+        path: `/anagrafiche/${key}`,
+    }));
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -41,7 +40,6 @@ const AnagrafichePage: React.FC = () => {
                 </Tabs>
             </Box>
             <Box sx={{ flexGrow: 1, pt: 3, display: 'flex', flexDirection: 'column' }}>
-                {/* Il contenuto della tab selezionata (es. GestioneClienti) viene renderizzato qui */}
                 <Outlet />
             </Box>
         </Box>

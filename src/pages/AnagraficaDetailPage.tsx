@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Box, Typography, Alert } from '@mui/material';
 import GestioneAnagrafica from '@/components/Anagrafiche/GestioneAnagrafica';
-import { anagraficheConfig } from '@/config/anagrafiche.config';
+import { anagraficheConfig } from '@/config/anagrafiche.config.tsx';
 import type { Anagrafica } from '@/models/definitions';
 import { useData } from '@/hooks/useData';
 
@@ -38,7 +38,7 @@ const AnagraficaDetailPage = () => {
           La configurazione per l'anagrafica di tipo "{anagraficaTypeKebab}" non è stata trovata.
         </Typography>
         <Alert severity="warning" sx={{ mt: 2 }}>
-          Assicurati che un oggetto di configurazione per "{anagraficaType}" esista in `src/config/anagrafiche.config.ts`.
+          Assicurati che un oggetto di configurazione per "{anagraficaType}" esista in `src/config/anagrafiche.config.tsx`.
         </Alert>
       </Box>
     );

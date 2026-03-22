@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import {
     AppBar,
@@ -48,7 +49,6 @@ const menuItems = [
     { text: 'Tecnici', icon: <People />, path: '/tecnici' },
     { text: 'Presenze', icon: <EventNote />, path: '/presenze' },
     { text: 'Anagrafiche', icon: <Dns />, path: '/anagrafiche' },
-    { text: 'Veicoli', icon: <LocalShipping />, path: '/veicoli' },
     { text: 'Documenti', icon: <Description />, path: '/documenti' },
     { text: 'Scadenze', icon: <EventBusy />, path: '/scadenze' },
     { text: 'Notifiche', icon: <Notifications />, path: '/notifications' },
@@ -60,7 +60,6 @@ const pageTitles: { [key: string]: string } = {
     '/tecnici': 'Tecnici',
     '/presenze': 'Presenze', 
     '/anagrafiche': 'Anagrafiche',
-    '/veicoli': 'Veicoli',
     '/documenti': 'Documenti',
     '/scadenze': 'Scadenze',
     '/notifications': 'Notifiche',
@@ -85,7 +84,7 @@ const MainLayout = () => {
             '/anagrafiche/luoghi': 'Luoghi',
             '/anagrafiche/ditte': 'Ditte',
             '/anagrafiche/categorie': 'Categorie',
-            '/anagrafiche/tipi-giornata': 'Tipi Giornata'
+            '/anagrafiche/tipi-giornata': 'Tipi Giornata',
         };
 
         if (anagraficheSubPages[path]) {
