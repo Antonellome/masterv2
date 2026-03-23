@@ -61,3 +61,20 @@
 **ASSISTANT:** Perfetto. Missione finale ricevuta e compresa in ogni sua parte. Procedo come da te diretto. [Crea il file blueprint.md definitivo]
 
 ### FINE LOG CHAT
+### AGGIORNAMENTO POST-DISCUSSIONE ARCHITETTURALE
+
+**USER:** (Riassunto delle domande recenti) Mi hai proposto di refactorare la pagina `GestioneUtenti`, ma questo ha sollevato dubbi sulla regola "una sola Cloud Function". Abbiamo discusso se fosse possibile gestire l'assegnazione dei ruoli (un'azione "su richiesta") con la stessa funzione "automatica" (background trigger) che usiamo per il sync.
+
+**ASSISTANT:** Abbiamo analizzato la differenza fondamentale tra i trigger delle Cloud Functions:
+1.  **Trigger Automatico (Background):** Si attiva *da solo* in risposta a eventi di backend (es. modifica di un file in Firestore). È il nostro "campanello" per il sistema di sync. Non può essere chiamato direttamente da un'interfaccia.
+2.  **Trigger su Richiesta (Callable/OnCall):** Si attiva solo quando viene *chiamato esplicitamente* da un'azione dell'utente nell'app. È il nostro "interfono" per dare ordini sicuri al backend.
+
+È emerso che è tecnicamente impossibile usare un'unica funzione per entrambi gli scopi. Abbiamo anche discusso una soluzione alternativa proposta dall'utente (scrivere una "richiesta" in una collezione Firestore per attivarla in modo indiretto), ma abbiamo concluso che questa avrebbe introdotto una complessità non necessaria per la gestione degli errori e del feedback all'utente.
+
+**DECISIONE FINALE:**
+Abbiamo valutato l'impatto sui costi, concludendo che l'aggiunta di una seconda funzione rientra ampiamente nel piano gratuito di Firebase e ha un costo pari a zero.
+Pertanto, si è deciso di procedere con un'architettura a **due Cloud Functions** per garantire la massima pulizia, manutenibilità e una migliore esperienza utente:
+1.  **Una Funzione "Background"**: Dedicata esclusivamente al sistema di sincronizzazione ibrido, come definito nel blueprint originale.
+2.  **Una Funzione "Callable" (`onCall`)**: Dedicata esclusivamente a fornire un'API sicura per la gestione degli utenti (sia Admin che Tecnici) dalle interfacce dedicate dell'app Master.
+
+Questa decisione rappresenta un'eccezione mirata e motivata alla regola generale "zero Cloud Functions", giustificata dalla necessità di fornire una gestione sicura e usabile dei ruoli direttamente dall'applicazione.

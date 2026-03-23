@@ -1,27 +1,15 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Funzione helper per prendere i dati dell'utente autenticato.
-    function getUserData() {
-      return get(/databases/$(database)/documents/utenti_master/$(request.auth.uid)).data;
+    // REGOLA #1: Un utente con il ruolo 'admin' ha accesso completo a tutti i dati.
+    // Questa regola è la chiave per sbloccare l'intera applicazione.
+    match /{document=**} {
+      allow read, write: if request.auth.token.role == 'admin';
     }
 
-    // Regole per la collezione degli utenti.
-    match /utenti_master/{userId} {
-      // Un utente può leggere il proprio documento (e gli altri, per ora).
-      allow read: if request.auth != null;
-      // Un utente può scrivere SOLO nel proprio documento. Questo abilita l'auto-guarigione.
-      allow write: if request.auth.uid == userId;
-    }
-
-    // Regola generale per TUTTE le altre collezioni.
-    match /{collection}/{docId} {
-      // L'accesso è consentito solo se l'utente è autenticato e il suo
-      // documento ha il campo 'ruolo' impostato su 'admin'.
-      // LA CORREZIONE DEFINITIVA: uso 'ruolo' invece di 'role'.
-      allow read, write: if request.auth != null && getUserData().ruolo == 'admin';
-    }
+    // Per ora, nessun'altra regola viene definita per evitare conflitti.
+    // Questo garantisce che la regola per l'admin non venga sovrascritta.
+    // Una volta che l'app funziona, potremo aggiungere in sicurezza regole 
+    // per altri ruoli, se necessario.
   }
 }

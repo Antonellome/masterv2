@@ -7,12 +7,10 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebase';
-import type { IAuthContext, AuthUser } from './AuthContext'; // MODIFICATO: Importo solo i tipi
+import type { IAuthContext, AuthUser } from './AuthContext';
 
-// --- CREAZIONE DEL CONTESTO ---
 const AuthContext = createContext<IAuthContext | undefined>(undefined);
 
-// --- HOOK USEAUTH ---
 export const useAuth = () => {
     const context = useContext(AuthContext);
     if (context === undefined) {
@@ -21,27 +19,34 @@ export const useAuth = () => {
     return context;
 };
 
-// --- COMPONENTE PROVIDER ---
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Monitora lo stato di autenticazione di Firebase
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // MODIFICA CRUCIALE:
+                // Ad ogni cambio di stato (login, refresh pagina), forziamo
+                // l'aggiornamento del token per garantire che i Custom Claims
+                // (es. il ruolo 'admin') siano sempre letti e aggiornati.
+                // Questa è la fonte di verità più affidabile.
+                await user.getIdToken(true);
+            }
             setUser(user);
             setLoading(false);
         });
-        return () => unsubscribe(); // Pulizia alla disconnessione
+        return () => unsubscribe();
     }, []);
 
     const login = useCallback(async (email: string, pass: string) => {
       setLoading(true);
       setError(null);
       try {
+        // Il login triggera onAuthStateChanged, che ora gestisce l'aggiornamento del token.
         await signInWithEmailAndPassword(auth, email, pass);
-      } catch (_e: unknown) { // CORRETTO: Tipo 'unknown' per sicurezza e variabile non usata con _
+      } catch (_e: unknown) {
         setError("Credenziali non valide. Riprova.");
       } finally {
         setLoading(false);
@@ -54,13 +59,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         const user = userCredential.user;
-        // Salva informazioni aggiuntive dell'utente
         await setDoc(doc(db, 'users', user.uid), {
           nome,
           cognome,
           email
         });
-      } catch (_e: unknown) { // CORRETTO: Tipo 'unknown' per sicurezza e variabile non usata con _
+      } catch (_e: unknown) {
         setError("Errore durante la registrazione.");
       } finally {
         setLoading(false);
@@ -71,12 +75,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       try {
         await signOut(auth);
-      } catch (_e: unknown) { // CORRETTO: Tipo 'unknown' per sicurezza e variabile non usata con _
+      } catch (_e: unknown) {
         setError("Errore durante il logout.");
       }
     }, []);
 
-    // Memoizzazione del valore del contesto per ottimizzare le performance
     const value = useMemo(() => ({
         user,
         loading,
@@ -87,7 +90,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setError
     }), [user, loading, error, login, signup, logout]);
 
-    // Fornisce il contesto ai componenti figli
     return (
         <AuthContext.Provider value={value}>
             {children}

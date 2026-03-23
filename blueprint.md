@@ -12,7 +12,19 @@ Questa regola definisce il protocollo strategico per ogni interazione. Sostituis
 *   **4. Scrittura (Esecuzione):** Eseguo il comando o scrivo il codice solo dopo aver completato le fasi precedenti. L'azione è decisa e basata su un piano solido.
 *   **5. Vai (Verifica e Prossima Mossa):** Dopo l'esecuzione, verifico l'assenza di errori e, senza attendere, procedo con la mossa successiva prevista dal piano strategico.
 
-## 2. Regola del "CIAO"
+## 2. Regola della "Verifica Obbligatoria" (Il Principio di Realtà)
+
+**Questa regola è un correttivo fondamentale e ha la precedenza sulle fasi 3 e 4 della "Regola del Maestro di Scacchi".**
+
+*   **Principio Fondamentale:** Non fidarsi mai ciecamente degli strumenti di lettura file (`read_file` o `cat`). L'output di questi comandi può essere obsoleto o non riflettere lo stato reale del disco a causa di caching o processi di build intermedi.
+*   **Azione Obbligatoria:** Prima di qualsiasi operazione di scrittura o modifica di un file (`write_file`), è **obbligatorio** eseguire una verifica tramite un comando di ricerca diretta come `grep`.
+*   **Workflow Corretto:**
+    1.  **Ipotesi:** Formulo un'ipotesi su quale file modificare e quale contenuto cercare.
+    2.  **Verifica con `grep`:** Uso `grep` per cercare una stringa specifica nel file target. L'esito di `grep` è la prova inconfutabile dell'esistenza o meno del contenuto.
+    3.  **Azione:** Solo dopo aver ottenuto una conferma positiva da `grep`, procedo con l'operazione di scrittura. Se `grep` fallisce o restituisce un risultato inatteso, devo invalidare la mia ipotesi e ripartire dalla fase di analisi (`grep -r` globale).
+*   **Giustificazione:** L'esperienza ha dimostrato che agire senza questa verifica porta a cicli di lavoro inutili, resoconti errati e perdita di tempo, minando la fiducia e l'efficienza.
+
+## 3. Regola del "CIAO"
 
 Questa regola definisce il protocollo di comunicazione. Ogni mia singola risposta deve tassativamente iniziare con la parola "CIAO".
 
@@ -20,48 +32,59 @@ Questa regola definisce il protocollo di comunicazione. Ogni mia singola rispost
 
 # R.I.S.O. - Blueprint di Progetto
 
-Questo documento definisce i principi architetturali e le linee guida per lo sviluppo dell'applicazione R.I.S.O.
+*Per un approfondimento dettagliato delle decisioni architetturali, consultare il file `chat_log.txt`.*
+
+## Architettura del Backend (Cloud Functions)
+
+A seguito di un'analisi approfondita (documentata nel `chat_log.txt`), si è stabilita un'architettura a **due Cloud Functions** per bilanciare efficienza, sicurezza, manutenibilità e costo (nullo, rientrando nel piano gratuito).
+
+### Funzione 1: Trigger di Sincronizzazione Dati (Il "Campanello")
+
+*   **Nome di Esempio:** `syncDataTrigger`
+*   **Tipo:** Funzione Automatica (Background Trigger, `onDocumentUpdated`).
+*   **Attivazione:** Si attiva **automaticamente** quando il documento `config/syncManifest` viene modificato in Firestore.
+*   **Scopo:** Implementare il lato PUSH del nostro sistema di sincronizzazione ibrido. Il suo unico compito è inviare una notifica push **silenziosa** ai dispositivi dei tecnici per informarli che sono disponibili nuovi dati, spingendoli a eseguire la logica di sincronizzazione PULL all'interno dell'app.
+
+### Funzione 2: Gestore Utenti e Permessi (L' "Interfono")
+
+*   **Nome:** `manageUsers`
+*   **Tipo:** Funzione su Richiesta (Callable, `onCall`).
+*   **Attivazione:** Viene chiamata **esplicitamente e solo** dall'app Master quando un amministratore esegue un'azione correlata agli utenti.
+*   **Scopo:** Fornire un endpoint sicuro e centralizzato per tutte le operazioni di gestione dei ruoli e degli utenti. La funzione implementa al suo interno la logica per:
+    1.  Verificare che la richiesta provenga da un utente con ruolo `admin`.
+    2.  Distinguere l'azione richiesta (es. `listUsers`, `setAdminRole`, `enableTecnico`).
+    3.  Servire la pagina **"Impostazioni > Utenti"** per la gestione degli amministratori.
+    4.  Servire la pagina **"Accesso App"** per l'abilitazione dei tecnici.
+*   **Giustificazione:** L'uso di una funzione `onCall` è cruciale perché garantisce un feedback **immediato** (successo/errore) all'interfaccia utente, un requisito impossibile da soddisfare con una funzione di tipo background.
+
+## Modello di Accesso e Ruoli (RBAC)
+
+### Definizioni dei Ruoli
+
+1.  **Admin (Utente Ufficio):**
+    *   **Applicazione:** App Master (Web).
+    *   **Permessi:** Accesso completo (C.R.U.D.) a tutti i dati.
+    *   **Implementazione Tecnica:** Assegnazione di un Custom Claim `role: 'admin'` tramite la Cloud Function `manageUsers`.
+
+2.  **Tecnico:**
+    *   **Applicazione:** App Tecnici (Mobile).
+    *   **Accesso:** Concesso tramite la sezione "Accesso App" dell'app Master.
+    *   **Permessi:** Granulari e limitati.
+    *   **Implementazione Tecnica:** Assegnazione di un Custom Claim `role: 'tecnico'` tramite la Cloud Function `manageUsers`.
+
+### Logica dei Permessi per i Tecnici
+
+Un utente con ruolo `tecnico` ha le seguenti autorizzazioni in Firestore:
+*   **Rapportini (`rapportini`):** Scrittura/modifica solo dei propri, lettura di quelli in cui partecipa.
+*   **Collezioni di Supporto (Sola Lettura):** `tecnici` (lite), `tipiGiornata`, `veicoli`, `navi`, `luoghi`, `ditte`, `clienti`.
+
 
 ## Vincoli Architettonici Chiave
 
-*   **Priorità alla Logica:** Le modifiche devono concentrarsi sull'aggiornamento della logica di business e del flusso dati. L'estetica, la struttura delle pagine e le rotte attuali devono essere preservate il più possibile.
-*   **Separazione dei Dati "Tecnici":** La gestione dell'anagrafica dei "Tecnici" deve rimanere separata e non deve essere unificata nella sezione generica "Anagrafiche".
+*   **Priorità alla Logica:** Le modifiche devono concentrarsi sull'aggiornamento della logica di business. L'estetica e le rotte attuali devono essere preservate.
+*   **Separazione dei Flussi:** La gestione degli **Utenti Admin** e l'abilitazione dei **Tecnici** deve avvenire in due interfacce separate e distinte nell'app Master.
 
-## Ciclo di Aggiornamento: Allineamento a MUI v7 [COMPLETATO]
+## Cicli di Aggiornamento Precedenti
 
-**Obiettivo Raggiunto:** La base di codice è stata allineata con successo alle dipendenze di `@mui/material` v7.
-
-*   **Fase 1: Migrazione `Grid` v2 [COMPLETATA]**
-    *   **Azione:** Il `codemod` `v7.0.0/grid-props` è stato eseguito con successo, aggiornando tutte le istanze del componente `Grid` alla sintassi moderna.
-*   **Fase 2: Migrazione `Date Pickers` [NON APPLICABILE]**
-    *   **Scoperta Fondamentale:** L'analisi delle guide ufficiali ha rivelato che i componenti `@mui/x-date-pickers` appartengono alla libreria MUI X, che ha un ciclo di versioning indipendente e non richiede una migrazione specifica nel passaggio da `@mui/material` v6 a v7. La dipendenza `@mui/x-date-pickers` nel progetto è già a una versione superiore (`^8.x`), confermando che non è necessaria alcuna azione.
-
-**Conclusione:** L'infrastruttura di componenti UI è ora stabile e aggiornata. Il prossimo passo è l'implementazione delle nuove logiche di business.
-
----
-
-## Guide di Migrazione e Standard Tecnici
-
-### Nota Strategica: Gestione dell'Errore "Resource Exhausted"
-
-*   **Problema Rilevato:** L'esecuzione di comandi ad alta intensità di risorse (come i `codemod` di MUI) sull'intera directory `src` può causare un errore generico `Resource has been exhausted`.
-*   **Causa Fondamentale:** Questo errore **non** è legato alle quote dei servizi Firebase (es. Firestore), ma ai limiti di risorse (CPU, RAM, numero di processi) della macchina virtuale temporanea che ospita l'ambiente di sviluppo. I comandi `codemod` analizzano molti file in parallelo, causando un picco di consumo che supera questi limiti.
-*   **Soluzione Strategica ("Divide et Impera"):** Per evitare questo errore, i comandi di modifica massiva del codice **devono** essere eseguiti su sotto-directory più piccole e gestibili in sequenza.
-
-### Guida Ufficiale: Migrazione a `Grid` v2 (MUI v7)
-
-*   **Fonte:** Documentazione ufficiale di Material-UI.
-*   **Sintassi Chiave:** La prop `size` sostituisce le precedenti prop per i breakpoint (`xs`, `sm`, etc.).
-    ```jsx
-    // Dopo
-    <Grid size={{ xs: 12, sm: 6 }}>
-    ```
-*   **Comando di Migrazione (Codemod):**
-    ```bash
-    npx @mui/codemod@next v7.0.0/grid-props <path/to/folder>
-    ```
-
----
-## Architettura e Standard Precedenti
-
-(Contenuto delle regole precedenti mantenuto per riferimento storico)
+*   **Ciclo di Aggiornamento: Refactoring Anagrafiche e Navigazione [COMPLETATO]**
+*   **Ciclo di Aggiornamento: Allineamento a MUI v7 [COMPLETATO]**
