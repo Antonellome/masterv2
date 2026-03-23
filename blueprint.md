@@ -86,5 +86,27 @@ Un utente con ruolo `tecnico` ha le seguenti autorizzazioni in Firestore:
 
 ## Cicli di Aggiornamento Precedenti
 
+*   **Ciclo di Aggiornamento: Separazione Ruoli e Ottimizzazione Backend [IN CORSO]**
+    *   **Problema:** La logica di gestione degli utenti (Admin) e dei tecnici (Accesso App) è confusa e inefficiente. Entrambe le pagine caricano l'intera lista di utenti (`listAll`) per poi filtrarla sul client, causando lentezza, spreco di dati e problemi di scalabilità.
+    *   **Decisione Strategica:** Adottare un approccio **server-side filtering**. La Cloud Function `manageUsers` verrà resa più "intelligente" per eseguire i filtri direttamente sul backend, inviando al client solo i dati strettamente necessari.
+    *   **Piano d'Azione:**
+        1.  **Backend (Cloud Function `manageUsers`):**
+            *   Rinominare l'azione `listAll` in `list`.
+            *   Introdurre un `payload` opzionale per filtrare gli utenti per ruolo (es. `{role: '!tecnico'}`).
+            *   Rimuovere l'azione `createUser`, non necessaria.
+            *   Eseguire il deploy della funzione aggiornata.
+        2.  **Frontend (`GestioneUtenti.tsx`):**
+            *   Modificare la chiamata per usare la nuova azione efficiente: `manageUsers({ action: 'list', payload: { role: '!tecnico' } })`.
+        3.  **Frontend (`SincronizzatiApp.tsx`):**
+            *   Rifattorizzare il componente per usare la chiamata efficiente `manageUsers({ action: 'list' })` e unire i dati con l'anagrafica dei tecnici per una gestione chiara e centralizzata dell'accesso all'app mobile.
+
+*   **Ciclo di Aggiornamento: Correzione Bug Critico di Autenticazione [COMPLETATO]**
+    *   **Problema:** Gli utenti admin non potevano accedere ai dati a causa di un errore nel custom claim (`admi` invece di `admin`).
+    *   **Soluzione:** 
+        1.  Corretta la logica nella Cloud Function `manageUsers` per impostare il custom claim corretto (`role: 'admin'`).
+        2.  Aggiornate le regole di sicurezza di Firestore per riflettere il ruolo corretto.
+        3.  Creato uno script di servizio (`setAdminRole.js`) per correggere manualmente i ruoli degli utenti esistenti.
+        4.  Rimosso il codice di debug temporaneo (`DebugPage.tsx` e relative rotte).
+
 *   **Ciclo di Aggiornamento: Refactoring Anagrafiche e Navigazione [COMPLETATO]**
 *   **Ciclo di Aggiornamento: Allineamento a MUI v7 [COMPLETATO]**

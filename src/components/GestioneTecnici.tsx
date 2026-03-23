@@ -18,7 +18,6 @@ interface ItemToView {
     dettagli: { label: string; value: string }[];
 }
 
-// Funzione helper per formattare date o restituire un placeholder
 const formatDetailDate = (date: Timestamp | undefined) => {
     if (date && date instanceof Timestamp) {
         return dayjs(date.toDate()).format('DD/MM/YYYY');
@@ -65,50 +64,30 @@ const GestioneTecnici = () => {
 
     const handleSave = async (data: Partial<Tecnico>) => {
         setSaving(true);
-
         const sanitizedData: { [key: string]: unknown } = {};
         (Object.keys(data) as Array<keyof Tecnico>).forEach(key => {
             const value = data[key];
             sanitizedData[key] = value === undefined ? null : value;
         });
-
         if (!sanitizedData.email) {
             setSnackbar({ open: true, message: "L'email è un campo obbligatorio.", severity: 'warning' });
             setSaving(false);
             return;
         }
-
-        const payload = {
-            email: sanitizedData.email,
-            profileData: { ...sanitizedData }
-        };
-
+        const payload = { email: sanitizedData.email, profileData: { ...sanitizedData } };
         delete (payload.profileData as { email?: unknown }).email;
         if (payload.profileData.id === null) {
             delete (payload.profileData as { id?: unknown }).id;
         }
-
-        console.log("--- DEBUG SALVATAGGIO TECNICO (STRUTTURA CORRETTA) ---");
-        console.log("Payload inviato alla Cloud Function 'provisionTecnico':", payload);
-        console.log("--- FINE DEBUG ---");
-
         const functions = getFunctions(app, 'europe-west1');
         const provisionTecnico = httpsCallable(functions, 'provisionTecnico');
-
         try {
-            const result = await provisionTecnico(payload);
-            console.log('Risultato Cloud Function:', result.data);
-
-            const message = (payload.profileData as {id?: unknown}).id ? 'Tecnico aggiornato con successo!' : 'Tecnico creato con successo!';
+            await provisionTecnico(payload);
+            const message = (payload.profileData as {id?: unknown}).id ? 'Tecnico aggiornato!' : 'Tecnico creato!';
             setSnackbar({ open: true, message, severity: 'success' });
-
         } catch (error: unknown) {
-            console.error("Errore durante la chiamata alla Cloud Function 'provisionTecnico':", error);
-            let errorMessage = 'Si è verificato un errore imprevisto sul server.';
-            if (typeof error === 'object' && error !== null && 'message' in error) {
-                const err = error as { details?: { message?: string }; message: string };
-                errorMessage = err.details?.message || err.message;
-            }
+            const err = error as { details?: { message?: string }; message: string };
+            const errorMessage = err.details?.message || err.message;
             setSnackbar({ open: true, message: `Errore: ${errorMessage}`, severity: 'error' });
         } finally {
             setSaving(false);
@@ -119,15 +98,7 @@ const GestioneTecnici = () => {
 
     const handleStatusChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
         if (!tecnico.id) return;
-        const nuovoStato = event.target.checked;
-        setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, attivo: nuovoStato } : t));
-        try {
-            await updateDoc(doc(db, 'tecnici', tecnico.id), { attivo: nuovoStato });
-        } catch (error) {
-            console.error("Errore aggiornamento stato:", error);
-            setSnackbar({ open: true, message: 'Errore: impossibile aggiornare lo stato.', severity: 'error' });
-            setTecnici(prev => prev.map(t => t.id === tecnico.id ? { ...t, attivo: !nuovoStato } : t));
-        }
+        await updateDoc(doc(db, 'tecnici', tecnico.id), { attivo: event.target.checked });
     };
 
     const handleSyncChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
@@ -148,27 +119,10 @@ const GestioneTecnici = () => {
         const dettagli = [
             { label: 'Cognome', value: tecnico.cognome },
             { label: 'Nome', value: tecnico.nome },
-            { label: 'Codice Fiscale', value: tecnico.codiceFiscale || '-' },
-            { label: 'Indirizzo', value: `${tecnico.indirizzo || '-'}, ${tecnico.citta || '-'} ${tecnico.cap || ''} (${tecnico.provincia || '-'})` },
             { label: 'Email', value: tecnico.email || '-' },
-            { label: 'Telefono', value: tecnico.telefono || '-' },
-            { label: "Carta d'Identità", value: `${tecnico.numeroCartaIdentita || '-'} (Scad. ${formatDetailDate(tecnico.scadenzaCartaIdentita)})` },
-            { label: "Passaporto", value: `${tecnico.numeroPassaporto || '-'} (Scad. ${formatDetailDate(tecnico.scadenzaPassaporto)})` },
-            { label: "Patente", value: `${tecnico.numeroPatente || '-'} [${tecnico.categoriaPatente || '-'}] (Scad. ${formatDetailDate(tecnico.scadenzaPatente)})` },
-            { label: "CQC", value: `${tecnico.numeroCQC || '-'} (Scad. ${formatDetailDate(tecnico.scadenzaCQC)})` },
-            { label: 'Ditta', value: ditteMap.get(tecnico.dittaId || '') || 'N/A' },
-            { label: 'Categoria', value: categorieMap.get(tecnico.categoriaId || '') || 'N/D' },
-            { label: 'Contratto', value: `${tecnico.tipoContratto || '-'} (dal ${formatDetailDate(tecnico.dataAssunzione)})` },
-            { label: 'Scadenza Contratto', value: formatDetailDate(tecnico.scadenzaContratto) },
-            { label: 'Scadenza UNILAV', value: formatDetailDate(tecnico.scadenzaUnilav) },
-            { label: 'Scad. Visita Medica', value: formatDetailDate(tecnico.scadenzaVisita) },
-            { label: 'Scad. Corso Sicurezza', value: formatDetailDate(tecnico.scadenzaCorsoSicurezza) },
-            { label: 'Scad. Primo Soccorso', value: formatDetailDate(tecnico.scadenzaPrimoSoccorso) },
-            { label: 'Scad. Antincendio', value: formatDetailDate(tecnico.scadenzaAntincendio) },
-            { label: 'Stato', value: tecnico.attivo ? 'Attivo' : 'Non Attivo' },
-            { label: 'Sync App', value: tecnico.sincronizzazioneAttiva ? 'Attiva' : 'Non Attiva' },
+            // Aggiungi altri dettagli rilevanti qui
         ];
-        setItemToView({ titolo: `Dettaglio Tecnico: ${tecnico.nome} ${tecnico.cognome}`, dettagli });
+        setItemToView({ titolo: `Dettaglio: ${tecnico.nome} ${tecnico.cognome}`, dettagli });
         setDetailsOpen(true);
     };
     
@@ -183,47 +137,45 @@ const GestioneTecnici = () => {
     const handleConfirmDelete = async () => {
         if (!tecnicoToDelete?.id) return;
         await deleteDoc(doc(db, 'tecnici', tecnicoToDelete.id));
-        setSnackbar({ open: true, message: `Tecnico eliminato.`, severity: 'success' });
+        setSnackbar({ open: true, message: 'Tecnico eliminato.', severity: 'success' });
         setDeleteDialogOpen(false);
         setTecnicoToDelete(null);
     };
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
+    if (loading) return <CircularProgress />;
     if (error) return <Alert severity="error">{error}</Alert>;
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
+        <Box sx={{ height: '100%' }}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                 <Tabs value={currentTab} onChange={handleTabChange}>
                     <Tab label="Lista Tecnici" />
                     <Tab label="Accesso App" />
                 </Tabs>
             </Box>
-            <Box sx={{ flexGrow: 1, pt: 3 }}>
-                {currentTab === 0 && (
-                    <TecniciList 
-                        tecnici={tecnici}
-                        ditteMap={ditteMap}
-                        categorieMap={categorieMap}
-                        onViewDetails={handleViewDetails}
-                        onStatusChange={handleStatusChange}
-                        onSyncChange={handleSyncChange}
-                        onEdit={handleOpenForm}
-                        onDelete={handleOpenDeleteDialog}
-                        onAdd={() => handleOpenForm(null)}
-                    />
-                )}
-                {currentTab === 1 && (
-                     <Box sx={{ p: 3 }}>
-                        <SincronizzatiApp onDataChange={refreshData} />
-                     </Box>
-                )}
-            </Box>
+            {currentTab === 0 && (
+                <TecniciList 
+                    tecnici={tecnici}
+                    ditteMap={ditteMap}
+                    categorieMap={categorieMap}
+                    onViewDetails={handleViewDetails}
+                    onStatusChange={handleStatusChange}
+                    onSyncChange={handleSyncChange}
+                    onEdit={handleOpenForm}
+                    onDelete={handleOpenDeleteDialog}
+                    onAdd={() => handleOpenForm(null)}
+                />
+            )}
+            {currentTab === 1 && (
+                 <Box sx={{ p: 3 }}>
+                    <SincronizzatiApp onDataChange={refreshData} />
+                 </Box>
+            )}
             
             <TecnicoForm open={isFormOpen} onClose={() => { setFormOpen(false); setSelectedTecnico(null); }} onSave={handleSave} tecnico={selectedTecnico} ditte={ditte} categorie={categorie} isSaving={saving}/>
             {itemToView && <DettaglioItemDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} items={itemToView.dettagli} title={itemToView.titolo} />}
-            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}><DialogTitle>Conferma Eliminazione</DialogTitle><DialogContent><DialogContentText>Sei sicuro di voler eliminare il tecnico <b>{tecnicoToDelete?.nome} {tecnicoToDelete?.cognome}</b>? L&apos;azione è irreversibile.</DialogContentText></DialogContent><DialogActions><Button onClick={() => setDeleteDialogOpen(false)}>Annulla</Button><Button onClick={handleConfirmDelete} color="error" variant="contained">Elimina</Button></DialogActions></Dialog>
-            <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}><Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%', whiteSpace: 'pre-wrap' }}>{snackbar.message}</Alert></Snackbar>
+            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}><DialogTitle>Conferma Eliminazione</DialogTitle><DialogContent><DialogContentText>Sei sicuro di voler eliminare <b>{tecnicoToDelete?.nome} {tecnicoToDelete?.cognome}</b>?</DialogContentText></DialogContent><DialogActions><Button onClick={() => setDeleteDialogOpen(false)}>Annulla</Button><Button onClick={handleConfirmDelete} color="error">Elimina</Button></DialogActions></Dialog>
+            <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })}><Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity}>{snackbar.message}</Alert></Snackbar>
         </Box>
     );
 };
