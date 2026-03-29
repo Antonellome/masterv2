@@ -243,11 +243,12 @@ const MainLayout = () => {
                     flexGrow: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    overflow: 'hidden' 
+                    // RIMOSSO overflow: 'hidden' 
                 }}
             >
                 <Toolbar sx={{ minHeight: `${appBarHeight} !important` }} />
-                <Box sx={{ flexGrow: 1, p: 3, overflowY: 'auto' }}>
+                {/* AGGIUNTO overflowY per consentire lo scorrimento del contenuto */}
+                <Box sx={{ flexGrow: 1, p: 3, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
                     <Outlet />
                 </Box>
             </Box>

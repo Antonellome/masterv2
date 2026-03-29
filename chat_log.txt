@@ -78,3 +78,4 @@ Pertanto, si è deciso di procedere con un'architettura a **due Cloud Functions*
 2.  **Una Funzione "Callable" (`onCall`)**: Dedicata esclusivamente a fornire un'API sicura per la gestione degli utenti (sia Admin che Tecnici) dalle interfacce dedicate dell'app Master.
 
 Questa decisione rappresenta un'eccezione mirata e motivata alla regola generale "zero Cloud Functions", giustificata dalla necessità di fornire una gestione sicura e usabile dei ruoli direttamente dall'applicazione.
+

@@ -1,8 +1,6 @@
-import React from 'react';
-import { useState, useEffect, useMemo } from 'react';
-import { doc, updateDoc, deleteDoc, collection, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db, app } from '@/firebase';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/firebase';
 import {
     Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Snackbar, Alert, CircularProgress, Tabs, Tab
 } from '@mui/material';
@@ -15,17 +13,10 @@ import dayjs from 'dayjs';
 
 interface ItemToView {
     titolo: string;
-    dettagli: { label: string; value: string }[];
+    dettagli: { label: string; value: string | undefined }[];
 }
 
-const formatDetailDate = (date: Timestamp | undefined) => {
-    if (date && date instanceof Timestamp) {
-        return dayjs(date.toDate()).format('DD/MM/YYYY');
-    }
-    return 'N/D';
-};
-
-const GestioneTecnici = () => {
+const GestioneTecnici: React.FC = () => {
     const [tecnici, setTecnici] = useState<Tecnico[]>([]);
     const [ditte, setDitte] = useState<Ditta[]>([]);
     const [categorie, setCategorie] = useState<Categoria[]>([]);
@@ -51,7 +42,7 @@ const GestioneTecnici = () => {
         const unsubTecnici = onSnapshot(collection(db, 'tecnici'), snapshot => {
             setTecnici(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tecnico)));
             setLoading(false);
-        }, err => { setError("Errore caricamento tecnici."); setLoading(false); console.error(err); });
+        }, err => { setError("Errore caricamento anagrafica tecnici."); setLoading(false); console.error(err); });
 
         const unsubDitte = onSnapshot(collection(db, 'ditte'), snapshot => setDitte(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Ditta))), err => console.error("Errore caricamento ditte:", err));
         const unsubCategorie = onSnapshot(collection(db, 'categorie'), snapshot => setCategorie(snapshot.docs.map(c => ({ id: c.id, ...c.data() } as Categoria))), err => console.error("Errore caricamento categorie:", err));
@@ -59,73 +50,54 @@ const GestioneTecnici = () => {
         return () => { unsubTecnici(); unsubDitte(); unsubCategorie(); };
     }, []);
 
-    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => setCurrentTab(newValue);
-    const refreshData = () => {};
+    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+        setCurrentTab(newValue);
+    };
 
-    const handleSave = async (data: Partial<Tecnico>) => {
+    const handleSaveAnagrafica = useCallback(async (data: Partial<Tecnico>) => {
         setSaving(true);
-        const sanitizedData: { [key: string]: unknown } = {};
-        (Object.keys(data) as Array<keyof Tecnico>).forEach(key => {
-            const value = data[key];
-            sanitizedData[key] = value === undefined ? null : value;
-        });
-        if (!sanitizedData.email) {
-            setSnackbar({ open: true, message: "L'email è un campo obbligatorio.", severity: 'warning' });
-            setSaving(false);
-            return;
-        }
-        const payload = { email: sanitizedData.email, profileData: { ...sanitizedData } };
-        delete (payload.profileData as { email?: unknown }).email;
-        if (payload.profileData.id === null) {
-            delete (payload.profileData as { id?: unknown }).id;
-        }
-        const functions = getFunctions(app, 'europe-west1');
-        const provisionTecnico = httpsCallable(functions, 'provisionTecnico');
         try {
-            await provisionTecnico(payload);
-            const message = (payload.profileData as {id?: unknown}).id ? 'Tecnico aggiornato!' : 'Tecnico creato!';
-            setSnackbar({ open: true, message, severity: 'success' });
-        } catch (error: unknown) {
-            const err = error as { details?: { message?: string }; message: string };
-            const errorMessage = err.details?.message || err.message;
-            setSnackbar({ open: true, message: `Errore: ${errorMessage}`, severity: 'error' });
+            if (data.id) {
+                // Aggiornamento di un tecnico esistente
+                const { id, ...rest } = data;
+                await updateDoc(doc(db, 'tecnici', id), rest as any);
+                setSnackbar({ open: true, message: 'Anagrafica tecnico aggiornata con successo!', severity: 'success' });
+            } else {
+                // Creazione di un nuovo tecnico
+                await addDoc(collection(db, 'tecnici'), data);
+                setSnackbar({ open: true, message: 'Nuovo tecnico aggiunto all\'anagrafica!', severity: 'success' });
+            }
+        } catch (error: any) {
+            setSnackbar({ open: true, message: `Errore: ${error.message}`, severity: 'error' });
         } finally {
             setSaving(false);
             setFormOpen(false);
             setSelectedTecnico(null);
         }
-    };
+    }, []);
 
     const handleStatusChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
         if (!tecnico.id) return;
         await updateDoc(doc(db, 'tecnici', tecnico.id), { attivo: event.target.checked });
     };
 
-    const handleSyncChange = async (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => {
-        if (!tecnico.id) return;
-        if (event.target.checked && !tecnico.email) {
-             setSnackbar({ open: true, message: "Email obbligatoria per la sincronizzazione.", severity: 'warning' });
-             return;
-        }
-        await updateDoc(doc(db, 'tecnici', tecnico.id), { sincronizzazioneAttiva: event.target.checked });
-    };
-
     const handleOpenForm = (tecnico: Tecnico | null = null) => {
         setSelectedTecnico(tecnico);
         setFormOpen(true);
     };
-
+    
     const handleViewDetails = (tecnico: Tecnico) => {
-        const dettagli = [
+        const dettagli: { label: string, value: string | undefined }[] = [
             { label: 'Cognome', value: tecnico.cognome },
             { label: 'Nome', value: tecnico.nome },
             { label: 'Email', value: tecnico.email || '-' },
-            // Aggiungi altri dettagli rilevanti qui
+            { label: 'Ditta', value: tecnico.id_ditta ? ditteMap.get(tecnico.id_ditta) : 'N/D' },
+            { label: 'Categoria', value: tecnico.id_categoria ? categorieMap.get(tecnico.id_categoria) : 'N/D' },
         ];
-        setItemToView({ titolo: `Dettaglio: ${tecnico.nome} ${tecnico.cognome}`, dettagli });
+        setItemToView({ titolo: `Dettaglio Anagrafica: ${tecnico.nome} ${tecnico.cognome}`, dettagli });
         setDetailsOpen(true);
     };
-    
+
     const handleOpenDeleteDialog = (event: React.MouseEvent, id: string) => {
         const tecnico = tecnici.find(t => t.id === id);
         if (tecnico) {
@@ -136,10 +108,15 @@ const GestioneTecnici = () => {
 
     const handleConfirmDelete = async () => {
         if (!tecnicoToDelete?.id) return;
-        await deleteDoc(doc(db, 'tecnici', tecnicoToDelete.id));
-        setSnackbar({ open: true, message: 'Tecnico eliminato.', severity: 'success' });
-        setDeleteDialogOpen(false);
-        setTecnicoToDelete(null);
+        try {
+            await deleteDoc(doc(db, 'tecnici', tecnicoToDelete.id));
+            setSnackbar({ open: true, message: 'Tecnico eliminato dall\'anagrafica.', severity: 'success' });
+        } catch (error: any) {
+             setSnackbar({ open: true, message: `Errore durante l'eliminazione: ${error.message}`, severity: 'error' });
+        } finally {
+            setDeleteDialogOpen(false);
+            setTecnicoToDelete(null);
+        }
     };
 
     if (loading) return <CircularProgress />;
@@ -148,11 +125,12 @@ const GestioneTecnici = () => {
     return (
         <Box sx={{ height: '100%' }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <Tabs value={currentTab} onChange={handleTabChange}>
-                    <Tab label="Lista Tecnici" />
-                    <Tab label="Accesso App" />
+                <Tabs value={currentTab} onChange={handleTabChange} centered>
+                    <Tab label="Gestione Anagrafica Tecnici" />
+                    <Tab label="Gestione Accesso App" />
                 </Tabs>
             </Box>
+
             {currentTab === 0 && (
                 <TecniciList 
                     tecnici={tecnici}
@@ -160,21 +138,18 @@ const GestioneTecnici = () => {
                     categorieMap={categorieMap}
                     onViewDetails={handleViewDetails}
                     onStatusChange={handleStatusChange}
-                    onSyncChange={handleSyncChange}
-                    onEdit={handleOpenForm}
-                    onDelete={handleOpenDeleteDialog}
+                    onEdit={handleOpenForm} // Aggiunto onEdit per coerenza
+                    onDelete={(e, id) => handleOpenDeleteDialog(e, id)}
                     onAdd={() => handleOpenForm(null)}
                 />
             )}
             {currentTab === 1 && (
-                 <Box sx={{ p: 3 }}>
-                    <SincronizzatiApp onDataChange={refreshData} />
-                 </Box>
+                 <SincronizzatiApp />
             )}
             
-            <TecnicoForm open={isFormOpen} onClose={() => { setFormOpen(false); setSelectedTecnico(null); }} onSave={handleSave} tecnico={selectedTecnico} ditte={ditte} categorie={categorie} isSaving={saving}/>
-            {itemToView && <DettaglioItemDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} items={itemToView.dettagli} title={itemToView.titolo} />}
-            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}><DialogTitle>Conferma Eliminazione</DialogTitle><DialogContent><DialogContentText>Sei sicuro di voler eliminare <b>{tecnicoToDelete?.nome} {tecnicoToDelete?.cognome}</b>?</DialogContentText></DialogContent><DialogActions><Button onClick={() => setDeleteDialogOpen(false)}>Annulla</Button><Button onClick={handleConfirmDelete} color="error">Elimina</Button></DialogActions></Dialog>
+            <TecnicoForm open={isFormOpen} onClose={() => { setFormOpen(false); setSelectedTecnico(null); }} onSave={handleSaveAnagrafica} tecnico={selectedTecnico} ditte={ditte} categorie={categorie} isSaving={saving}/>
+            {itemToView && <DettaglioItemDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} items={itemToView.dettagli as any} title={itemToView.titolo} />}
+            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}><DialogTitle>Conferma Eliminazione Anagrafica</DialogTitle><DialogContent><DialogContentText>Sei sicuro di voler eliminare dall'anagrafica <b>{tecnicoToDelete?.nome} {tecnicoToDelete?.cognome}</b>? Questa azione non elimina l'account utente.</DialogContentText></DialogContent><DialogActions><Button onClick={() => setDeleteDialogOpen(false)}>Annulla</Button><Button onClick={handleConfirmDelete} color="error">Elimina</Button></DialogActions></Dialog>
             <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })}><Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity}>{snackbar.message}</Alert></Snackbar>
         </Box>
     );

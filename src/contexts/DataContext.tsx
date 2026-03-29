@@ -1,12 +1,12 @@
 import {
-    ReactNode, useEffect, useMemo, useCallback, useReducer
+    ReactNode, useEffect, useMemo, useCallback, useReducer, useContext
 } from 'react';
 import {
     collection, onSnapshot, Unsubscribe, Timestamp, doc, addDoc, updateDoc, deleteDoc, WithFieldValue, DocumentData
 } from 'firebase/firestore';
 import { db } from '@/firebase';
 import {
-    Tecnico, Veicolo, Nave, Luogo, Ditta, Categoria, TipoGiornata, Rapportino, Cliente, Documento, WebAppUser, CollectionName, BaseEntity
+    Tecnico, Veicolo, Nave, Luogo, Ditta, Categoria, TipoGiornata, Rapportino, Cliente, Documento, WebAppUser, CollectionName, BaseEntity, Qualifica
 } from '@/models/definitions';
 import { useAuth } from './AuthProvider';
 import { DataContext } from './DataContext.types';
@@ -15,7 +15,7 @@ import type { IDataContext } from './DataContext.types';
 // --- Helper Functions ---
 
 const SORTABLE_COLLECTIONS: Set<CollectionName> = new Set([
-    'clienti', 'navi', 'luoghi', 'ditte', 'categorie', 'tipiGiornata', 'tecnici', 'users'
+    'clienti', 'navi', 'luoghi', 'ditte', 'categorie', 'tipiGiornata', 'tecnici', 'utenti_master', 'qualifiche'
 ]);
 
 const sortData = <T extends { nome?: string }>(data: T[], collectionName: CollectionName): T[] => {
@@ -25,11 +25,8 @@ const sortData = <T extends { nome?: string }>(data: T[], collectionName: Collec
     return data;
 };
 
-const createMap = <T extends BaseEntity>(data: T[]): { [key: string]: T } => {
-    return data.reduce((acc, item) => {
-        acc[item.id] = item;
-        return acc;
-    }, {} as { [key: string]: T });
+const createMap = <T extends BaseEntity>(data: T[]): Map<string, T> => {
+    return new Map(data.map(item => [item.id, item]));
 };
 
 const parseDates = <T,>(data: T): T => {
@@ -56,7 +53,7 @@ const parseDates = <T,>(data: T): T => {
 
 const ALL_COLLECTIONS: CollectionName[] = [
     'tecnici', 'veicoli', 'navi', 'luoghi', 'ditte', 'categorie',
-    'tipiGiornata', 'rapportini', 'clienti', 'documenti', 'users'
+    'tipiGiornata', 'rapportini', 'clienti', 'documenti', 'utenti_master', 'qualifiche'
 ];
 
 // Lo stato dei dati della nostra App
@@ -73,13 +70,14 @@ interface DataState {
     rapportini: Rapportino[];
     clienti: Cliente[];
     documenti: Documento[];
-    webAppUsers: WebAppUser[]; // La proprietà per gli utenti web
+    qualifiche: Qualifica[];
+    webAppUsers: WebAppUser[];
 }
 
 const initialState: DataState = {
     loading: true, error: null,
     tecnici: [], veicoli: [], navi: [], luoghi: [], ditte: [], categorie: [],
-    tipiGiornata: [], rapportini: [], clienti: [], documenti: [], webAppUsers: []
+    tipiGiornata: [], rapportini: [], clienti: [], documenti: [], webAppUsers: [], qualifiche: []
 };
 
 // Tipo per l'azione SET_DATA, più flessibile e sicuro
@@ -89,7 +87,7 @@ type Action =
     | { type: 'START_LOADING' }
     | { type: 'STOP_LOADING' }
     | { type: 'SET_ERROR', payload: string | null }
-    | { type: 'SET_DATA', payload: DataStateUpdate } // Usiamo il nuovo tipo
+    | { type: 'SET_DATA', payload: DataStateUpdate }
     | { type: 'RESET_STATE' };
 
 const dataReducer = (state: DataState, action: Action): DataState => {
@@ -130,12 +128,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 const processedData = parseDates(rawData);
                 const sortedData = sortData(processedData, collectionName);
 
-                // FIX: Logica pulita per creare il payload senza usare `any`
                 let payload: DataStateUpdate = {};
-                if (collectionName === 'users') {
+                if (collectionName === 'utenti_master') {
                     payload.webAppUsers = sortedData as WebAppUser[];
                 } else {
-                    payload[collectionName as Exclude<CollectionName, 'users'>] = sortedData;
+                    payload[collectionName as Exclude<CollectionName, 'utenti_master'>] = sortedData;
                 }
 
                 dispatch({ type: 'SET_DATA', payload });
@@ -157,20 +154,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             unsubscribes.forEach(unsub => unsub());
         };
     }, [user, authLoading]);
-
-    const addData = useCallback(async <T,>(collectionName: CollectionName, data: WithFieldValue<T>) => {
+    
+    // --- Funzioni di manipolazione dati ---
+    const addData = useCallback(async (collectionName: CollectionName, data: DocumentData) => {
         await addDoc(collection(db, collectionName), data);
     }, []);
 
-    const updateData = useCallback(async <T,>(collectionName: CollectionName, id: string, data: WithFieldValue<T>) => {
-        await updateDoc(doc(db, collectionName, id), data as DocumentData);
+    const updateData = useCallback(async (collectionName: CollectionName, id: string, data: DocumentData) => {
+        await updateDoc(doc(db, collectionName, id), data);
     }, []);
 
     const deleteData = useCallback(async (collectionName: CollectionName, id: string) => {
         await deleteDoc(doc(db, collectionName, id));
     }, []);
 
-    const { tecnici, veicoli, navi, luoghi, ditte, categorie, tipiGiornata, webAppUsers } = state;
+    const refreshData = useCallback(() => {
+      // Funzione vuota, la logica è nell'useEffect
+    }, []);
+
+    // --- Creazione delle Mappe ---
+    const { tecnici, veicoli, navi, luoghi, ditte, categorie, tipiGiornata, webAppUsers, qualifiche } = state;
     const tecniciMap = useMemo(() => createMap(tecnici), [tecnici]);
     const veicoliMap = useMemo(() => createMap(veicoli), [veicoli]);
     const naviMap = useMemo(() => createMap(navi), [navi]);
@@ -178,13 +181,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const ditteMap = useMemo(() => createMap(ditte), [ditte]);
     const categorieMap = useMemo(() => createMap(categorie), [categorie]);
     const tipiGiornataMap = useMemo(() => createMap(tipiGiornata), [tipiGiornata]);
-    const webAppUsersMap = useMemo(() => createMap(webAppUsers), [webAppUsers]);
+    const qualificheMap = useMemo(() => createMap(qualifiche), [qualifiche]);
+    const webAppUsersMap = useMemo(() => createMap(webAppUsers || []), [webAppUsers]);
 
+    // --- Valore del Contesto ---
     const value = useMemo<IDataContext>(() => ({
         ...state,
-        tecniciMap, veicoliMap, naviMap, luoghiMap, ditteMap, categorieMap, tipiGiornataMap, webAppUsersMap,
-        addData, updateData, deleteData
-    }), [state, tecniciMap, veicoliMap, naviMap, luoghiMap, ditteMap, categorieMap, tipiGiornataMap, webAppUsersMap, addData, updateData, deleteData]);
+        tecniciMap, veicoliMap, naviMap, luoghiMap, ditteMap, categorieMap, tipiGiornataMap, qualificheMap, webAppUsersMap,
+        addData, updateData, deleteData, refreshData,
+    }), [state, tecniciMap, veicoliMap, naviMap, luoghiMap, ditteMap, categorieMap, tipiGiornataMap, qualificheMap, webAppUsersMap, addData, updateData, deleteData, refreshData]);
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+};
+
+// --- HOOK PERSONALIZZATO ---
+export const useDataContext = () => {
+    const context = useContext(DataContext);
+    if (context === undefined) {
+        throw new Error("useDataContext deve essere utilizzato all'interno di un DataProvider");
+    }
+    return context;
 };

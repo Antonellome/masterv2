@@ -17,7 +17,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import { useAlert } from '@/contexts/AlertContext';
-import { Tecnico, Nave, Luogo, TipoGiornata, Veicolo, Rapportino } from '@/models/definitions';
+import { Tecnico, Nave, Luogo, TipoGiornata, Veicolo, Rapportino, Orari } from '@/models/definitions';
 import { formatOreLavoro } from '@/utils/formatters';
 
 // --- FUNZIONE DI UTILITÀ PER LA CONVERSIONE SICURA ---
@@ -78,11 +78,11 @@ const OrariTecnicoDialog: React.FC<OrariTecnicoDialogProps> = ({ open, onClose, 
             <form onSubmit={handleSubmit(onSave)}>
                 <DialogContent dividers>
                     <Grid container spacing={2}>
-                        <Grid size={{ xs: 12}}><FormControlLabel control={<Switch {...control.register('inserimentoManualeOre')} />} label="Inserisci ore manuali" /></Grid>
-                        <Grid size={{ xs: 6}}><Controller name="oraInizio" control={control} render={({ field }) => <TimePicker {...field} label="Ora Inizio" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} />} /></Grid>
-                        <Grid size={{ xs: 6}}><Controller name="oraFine" control={control} render={({ field }) => <TimePicker {...field} label="Ora Fine" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} />} /></Grid>
-                        <Grid size={{ xs: 6}}><Controller name="pausa" control={control} render={({ field }) => <TextField {...field} type="number" label="Pausa (minuti)" fullWidth disabled={watchInserimentoManuale} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />} /></Grid>
-                        <Grid size={{ xs: 6}}><Controller name="oreLavorate" control={control} render={({ field }) => <TextField {...field} type="number" label="Ore Lavorate" fullWidth disabled={!watchInserimentoManuale} InputProps={{ inputProps: { step: 0.5 } }} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />} /></Grid>
+                        <Grid item xs={12}><FormControlLabel control={<Switch {...control.register('inserimentoManualeOre')} />} label="Inserisci ore manuali" /></Grid>
+                        <Grid item xs={6}><Controller name="oraInizio" control={control} render={({ field }) => <TimePicker {...field} label="Ora Inizio" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} />} /></Grid>
+                        <Grid item xs={6}><Controller name="oraFine" control={control} render={({ field }) => <TimePicker {...field} label="Ora Fine" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale} />} /></Grid>
+                        <Grid item xs={6}><Controller name="pausa" control={control} render={({ field }) => <TextField {...field} type="number" label="Pausa (minuti)" fullWidth disabled={watchInserimentoManuale} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />} /></Grid>
+                        <Grid item xs={6}><Controller name="oreLavorate" control={control} render={({ field }) => <TextField {...field} type="number" label="Ore Lavorate" fullWidth disabled={!watchInserimentoManuale} InputProps={{ inputProps: { step: 0.5 } }} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />} /></Grid>
                     </Grid>
                 </DialogContent>
                 <DialogActions>
@@ -169,9 +169,31 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                         });
                     } else { showAlert('Rapportino non trovato.', 'error'); navigate('/reportistica'); }
                 } else {
-                    const defaultOraInizio = dayjs().hour(7).minute(30);
-                    const defaultOraFine = dayjs().hour(16).minute(30);
-                    reset({ data: dayjs(), oraInizio: defaultOraInizio, oraFine: defaultOraFine, pausa: 60, oreLavorate: (defaultOraFine.diff(defaultOraInizio, 'minute') - 60) / 60, tecniciAggiunti: [] });
+                    // **LOGICA CORRETTA PER NUOVO RAPPORTINO**
+                    const orariDefaultRef = doc(db, 'configurazione', 'orariDefault');
+                    const orariDefaultSnap = await getDoc(orariDefaultRef);
+
+                    let oraInizio = dayjs().hour(7).minute(30); // Fallback
+                    let oraFine = dayjs().hour(16).minute(30); // Fallback
+                    let pausa = 60; // Fallback
+
+                    if (orariDefaultSnap.exists()) {
+                        const orariData = orariDefaultSnap.data() as Orari;
+                        const [startHour, startMinute] = orariData.inizio.split(':').map(Number);
+                        const [endHour, endMinute] = orariData.fine.split(':').map(Number);
+                        oraInizio = dayjs().hour(startHour).minute(startMinute);
+                        oraFine = dayjs().hour(endHour).minute(endMinute);
+                        pausa = orariData.pausa;
+                    }
+
+                    reset({ 
+                        data: dayjs(), 
+                        oraInizio: oraInizio, 
+                        oraFine: oraFine, 
+                        pausa: pausa, 
+                        oreLavorate: (oraFine.diff(oraInizio, 'minute') - pausa) / 60, 
+                        tecniciAggiunti: [] 
+                    });
                 }
             } catch (error) { console.error("Errore caricamento dati:", error); showAlert("Impossibile caricare i dati", 'error');
             } finally { setLoading(false); }
@@ -258,20 +280,20 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
 
                 <form onSubmit={handleSubmit(onSubmit)}>
                     <Grid container spacing={3}>
-                        <Grid size={{ xs: 12}}><Divider>Dettagli Principali</Divider></Grid>
-                        <Grid size={{ xs: 12, sm: 6, md: 4 }}><Controller name="data" control={control} render={({ field }) => <DatePicker {...field} label="Data" sx={{ width: '100%' }} readOnly={isReadOnly} />} /></Grid>
-                        <Grid size={{ xs: 12, sm: 6, md: 4 }}><Controller name="tecnicoScriventeId" control={control} render={({ field, fieldState }) => <Autocomplete options={options.tecnici} getOptionLabel={getOptionLabel} value={getValueFromId(field.value, options.tecnici)} onChange={(_, data) => field.onChange(data?.id || null)} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Tecnico Scrivente" required error={!!fieldState.error} />} />} /></Grid>
-                        <Grid size={{ xs: 12, sm: 12, md: 4 }}><Controller name="giornataId" control={control} render={({ field }) => <Autocomplete options={options.tipiGiornata} getOptionLabel={(o: TipoGiornata) => o.nome || ''} value={getValueFromId(field.value, options.tipiGiornata)} onChange={(_,data) => field.onChange(data?.id || null)} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Tipo Giornata" required error={!!errors.giornataId} helperText={errors.giornataId?.message} />} />} /></Grid>
+                        <Grid item xs={12}><Divider>Dettagli Principali</Divider></Grid>
+                        <Grid item xs={12} sm={6} md={4}><Controller name="data" control={control} render={({ field }) => <DatePicker {...field} label="Data" sx={{ width: '100%' }} readOnly={isReadOnly} />} /></Grid>
+                        <Grid item xs={12} sm={6} md={4}><Controller name="tecnicoScriventeId" control={control} render={({ field, fieldState }) => <Autocomplete options={options.tecnici} getOptionLabel={getOptionLabel} value={getValueFromId(field.value, options.tecnici)} onChange={(_, data) => field.onChange(data?.id || null)} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Tecnico Scrivente" required error={!!fieldState.error} />} />} /></Grid>
+                        <Grid item xs={12} sm={12} md={4}><Controller name="giornataId" control={control} render={({ field }) => <Autocomplete options={options.tipiGiornata} getOptionLabel={(o: TipoGiornata) => o.nome || ''} value={getValueFromId(field.value, options.tipiGiornata)} onChange={(_,data) => field.onChange(data?.id || null)} readOnly={isReadOnly} renderInput={(params) => <TextField {...params} label="Tipo Giornata" required error={!!errors.giornataId} helperText={errors.giornataId?.message} />} />} /></Grid>
 
-                        <Grid size={{ xs: 12}}><Divider>Tempo Lavorato</Divider></Grid>
-                        <Grid size={{ xs: 12}}><Controller name="inserimentoManualeOre" control={control} render={({ field }) => <FormControlLabel control={<Switch {...field} checked={field.value} disabled={isReadOnly} />} label="Inserisci ore manuali" />} /></Grid>
-                        <Grid size={{ xs: 6, sm: 3 }}><Controller name="oraInizio" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Inizio" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale || isReadOnly} slotProps={{ textField: { error: !!fieldState.error } }} />} /></Grid>
-                        <Grid size={{ xs: 6, sm: 3 }}><Controller name="oraFine" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Fine" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale || isReadOnly} slotProps={{ textField: { error: !!fieldState.error } }} />} /></Grid>
-                        <Grid size={{ xs: 12, sm: 3 }}><Controller name="pausa" control={control} render={({ field }) => <TextField {...field} type="number" label="Pausa (minuti)" fullWidth disabled={watchInserimentoManuale || isReadOnly} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />} /></Grid>
-                        <Grid size={{ xs: 12, sm: 3 }}><Controller name="oreLavorate" control={control} render={({ field, fieldState }) => <TextField {...field} type="number" label="Ore Lavorate" fullWidth disabled={!watchInserimentoManuale || isReadOnly} InputProps={{ inputProps: { step: 0.5 } }} error={!!fieldState.error} helperText={!fieldState.error && `Valore: ${oreLavorateFormatted}`} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />} /></Grid>
+                        <Grid item xs={12}><Divider>Tempo Lavorato</Divider></Grid>
+                        <Grid item xs={12}><Controller name="inserimentoManualeOre" control={control} render={({ field }) => <FormControlLabel control={<Switch {...field} checked={field.value} disabled={isReadOnly} />} label="Inserisci ore manuali" />} /></Grid>
+                        <Grid item xs={6} sm={3}><Controller name="oraInizio" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Inizio" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale || isReadOnly} slotProps={{ textField: { error: !!fieldState.error } }} />} /></Grid>
+                        <Grid item xs={6} sm={3}><Controller name="oraFine" control={control} render={({ field, fieldState }) => <TimePicker {...field} label="Ora Fine" ampm={false} sx={{ width: '100%' }} disabled={watchInserimentoManuale || isReadOnly} slotProps={{ textField: { error: !!fieldState.error } }} />} /></Grid>
+                        <Grid item xs={12} sm={3}><Controller name="pausa" control={control} render={({ field }) => <TextField {...field} type="number" label="Pausa (minuti)" fullWidth disabled={watchInserimentoManuale || isReadOnly} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />} /></Grid>
+                        <Grid item xs={12} sm={3}><Controller name="oreLavorate" control={control} render={({ field, fieldState }) => <TextField {...field} type="number" label="Ore Lavorate" fullWidth disabled={!watchInserimentoManuale || isReadOnly} InputProps={{ inputProps: { step: 0.5 } }} error={!!fieldState.error} helperText={!fieldState.error && `Valore: ${oreLavorateFormatted}`} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />} /></Grid>
 
-                        <Grid size={{ xs: 12}}><Divider>Altri Tecnici Presenti</Divider></Grid>
-                        <Grid size={{ xs: 12}}>
+                        <Grid item xs={12}><Divider>Altri Tecnici Presenti</Divider></Grid>
+                        <Grid item xs={12}>
                             <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
                                 <Autocomplete
                                     sx={{ flexGrow: 1 }}
@@ -301,8 +323,8 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                             </Box>
                         </Grid>
 
-                        <Grid size={{ xs: 12 }}><Divider>Riferimenti</Divider></Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
+                        <Grid item xs={12}><Divider>Riferimenti</Divider></Grid>
+                        <Grid item xs={12} md={6}>
                             <Controller
                                 name="naveId"
                                 control={control}
@@ -326,7 +348,7 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                                 )}
                             />
                         </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
+                        <Grid item xs={12} md={6}>
                             <Controller
                                 name="luogoId"
                                 control={control}
@@ -350,7 +372,7 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                                 )}
                             />
                         </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
+                        <Grid item xs={12} md={6}>
                             <Controller
                                 name="veicoloId"
                                 control={control}
@@ -367,13 +389,13 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                             />
                         </Grid>
 
-                        <Grid size={{ xs: 12}}><Divider>Dettagli Intervento</Divider></Grid>
-                        <Grid size={{ xs: 12}}><Controller name="breveDescrizione" control={control} render={({ field }) => <TextField {...field} label="Breve Descrizione Intervento" fullWidth required={isGiornataLavorativa} error={!!errors.breveDescrizione} helperText={errors.breveDescrizione?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
-                        <Grid size={{ xs: 12}}><Controller name="lavoroEseguito" control={control} render={({ field }) => <TextField {...field} label="Lavoro Eseguito" multiline rows={5} fullWidth required={isGiornataLavorativa} error={!!errors.lavoroEseguito} helperText={errors.lavoroEseguito?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
-                        <Grid size={{ xs: 12}}><Controller name="materialiImpiegati" control={control} render={({ field }) => <TextField {...field} label="Materiali Impiegati" multiline rows={3} fullWidth InputProps={{ readOnly: isReadOnly }} />} /></Grid>
+                        <Grid item xs={12}><Divider>Dettagli Intervento</Divider></Grid>
+                        <Grid item xs={12}><Controller name="breveDescrizione" control={control} render={({ field }) => <TextField {...field} label="Breve Descrizione Intervento" fullWidth required={isGiornataLavorativa} error={!!errors.breveDescrizione} helperText={errors.breveDescrizione?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
+                        <Grid item xs={12}><Controller name="lavoroEseguito" control={control} render={({ field }) => <TextField {...field} label="Lavoro Eseguito" multiline rows={5} fullWidth required={isGiornataLavorativa} error={!!errors.lavoroEseguito} helperText={errors.lavoroEseguito?.message} InputProps={{ readOnly: isReadOnly }} />} /></Grid>
+                        <Grid item xs={12}><Controller name="materialiImpiegati" control={control} render={({ field }) => <TextField {...field} label="Materiali Impiegati" multiline rows={3} fullWidth InputProps={{ readOnly: isReadOnly }} />} /></Grid>
 
                         {!isReadOnly && (
-                            <Grid size={{ xs: 12}} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4 }}>
+                            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4 }}>
                                 {!isNew && <Button variant="outlined" color="error" onClick={handleDelete} startIcon={<DeleteIcon />}>Elimina</Button>}
                                 <Box /> 
                                 <Button type="submit" variant="contained" color="primary" startIcon={<SaveIcon />}>Salva</Button>

@@ -1,43 +1,43 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
-import { Box, Typography, Alert, CircularProgress, Snackbar, Select, MenuItem, Button } from '@mui/material';
-import { DataGrid, GridColDef, GridToolbar } from '@mui/x-data-grid';
-import { itIT } from '@mui/x-data-grid/locales';
 
-interface User {
+import { useEffect, useState, useCallback } from 'react';
+import { functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { Dna } from 'react-loader-spinner';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import UserTable from '../components/UserTable';
+import AddUserModal from '../components/AddUserModal';
+
+export interface User {
     uid: string;
     email: string;
-    role: 'admin' | 'tecnico' | 'Nessuno';
+    nome: string;
+    cognome: string;
+    ruolo: 'admin' | 'tecnico' | 'utente';
     disabled: boolean;
 }
 
-interface ListUsersResult {
-    users: User[];
-}
-
-const functions = getFunctions(undefined, 'europe-west1');
 const manageUsers = httpsCallable(functions, 'manageUsers');
 
 const GestioneUtenti = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string }>({ open: false, message: '' });
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);
-        setError(null);
         try {
-            const result: HttpsCallableResult<ListUsersResult> = await manageUsers({ 
-                action: 'list', 
-                payload: { role: '!tecnico' } 
-            });
-            setUsers(result.data.users);
-        } catch (err: unknown) {
-            console.error("Errore dettagliato caricamento utenti:", err);
-            const firebaseError = err as { message?: string };
-            const errorMessage = firebaseError.message || "Impossibile caricare l'elenco degli utenti.";
-            setError(errorMessage);
+            const result = await manageUsers({ action: 'list' });
+            const data = result.data as { users: User[] };
+            
+            // Logging in console - questa è la nostra fonte di verità
+            console.log("Dati ricevuti dalla Cloud Function:", JSON.stringify(data, null, 2));
+            
+            setUsers(data.users || []);
+        } catch (error) {
+            console.error("Errore nel recuperare gli utenti:", error);
+            toast.error("Impossibile caricare la lista degli utenti.");
+            setUsers([]);
         } finally {
             setLoading(false);
         }
@@ -47,72 +47,60 @@ const GestioneUtenti = () => {
         fetchUsers();
     }, [fetchUsers]);
 
-    const handleRoleChange = async (uid: string, newRole: string) => {
-        try {
-            await manageUsers({ action: 'setRole', payload: { uid, newRole } });
-            setSnackbar({ open: true, message: 'Ruolo amministratore aggiornato.' });
-            fetchUsers();
-        } catch (err: unknown) {
-            const firebaseError = err as { message?: string };
-            const errorMessage = firebaseError.message || "Errore durante l'aggiornamento del ruolo.";
-            setSnackbar({ open: true, message: `Errore: ${errorMessage}` });
-        }
+    const handleUserAdded = () => {
+        fetchUsers();
+    };
+    
+    const handleSaveChanges = async (editedUsers: User[]) => {
+        const promises = editedUsers.map(user => {
+            return manageUsers({
+                action: 'setRole',
+                payload: { uid: user.uid, role: user.ruolo }
+            }).then(() => {
+                toast.success(`Ruolo di ${user.nome} ${user.cognome} aggiornato.`);
+            }).catch(error => {
+                console.error(`Errore nell'aggiornare l'utente ${user.uid}:`, error);
+                toast.error(`Errore nell'aggiornare ${user.nome}.`);
+            });
+        });
+
+        await Promise.all(promises);
+        fetchUsers();
     };
 
-    const columns: GridColDef<User>[] = [
-        { field: 'email', headerName: 'Email Utente', flex: 1, minWidth: 250 },
-        { field: 'uid', headerName: 'User ID', flex: 1, minWidth: 250 },
-        { 
-            field: 'role', 
-            headerName: 'Ruolo Amministratore',
-            width: 180, 
-            renderCell: (params) => (
-                <Select 
-                    value={params.row.role === 'admin' ? 'admin' : 'Nessuno'}
-                    onChange={(e) => handleRoleChange(params.row.uid, e.target.value)}
-                    size="small" 
-                    sx={{ width: '100%' }}
-                >
-                    <MenuItem value="admin">Admin</MenuItem>
-                    <MenuItem value="Nessuno">Nessuno</MenuItem>
-                </Select>
-            )
-        },
-    ];
-
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>;
-
     return (
-        <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h5" component="h1">Gestione Amministratori</Typography>
-                <Button variant="outlined" onClick={fetchUsers} disabled={loading}>Aggiorna</Button>
-            </Box>
+        <div className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
+            <ToastContainer theme="dark" />
             
-            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-purple-400">Gestione Utenti</h1>
+                <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300"
+                >
+                    Aggiungi Utente
+                </button>
+            </div>
 
-            <Box sx={{ height: 'auto', width: '100%' }}>
-                <DataGrid 
-                    rows={users}
-                    columns={columns} 
-                    getRowId={(row) => row.uid} 
-                    autoHeight 
-                    localeText={itIT.components.MuiDataGrid.defaultProps.localeText} 
-                    initialState={{ sorting: { sortModel: [{ field: 'email', sort: 'asc' }] } }} 
-                    slots={{ toolbar: GridToolbar }} 
-                    disableRowSelectionOnClick 
-                    sx={{ border: 0 }} 
-                />
-            </Box>
+            {loading ? (
+                <div className="flex justify-center items-center h-64">
+                    <Dna
+                        visible={true}
+                        height="120"
+                        width="120"
+                        ariaLabel="dna-loading"
+                    />
+                </div>
+            ) : (
+                <UserTable users={users} onSaveChanges={handleSaveChanges} refreshUsers={fetchUsers} />
+            )}
 
-            <Snackbar 
-                open={snackbar.open} 
-                autoHideDuration={6000} 
-                onClose={() => setSnackbar({ ...snackbar, open: false })} 
-                message={snackbar.message} 
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            <AddUserModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onUserAdded={handleUserAdded}
             />
-        </Box>
+        </div>
     );
 };
 

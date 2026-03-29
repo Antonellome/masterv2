@@ -1,14 +1,14 @@
+
 import { useState, useEffect, useMemo } from 'react';
-import { Box, TextField, Button, Typography, CircularProgress, Snackbar, Alert, Grid } from '@mui/material';
+import { Box, TextField, Button, Typography, CircularProgress, Snackbar, Alert, Grid, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import type { Orari } from '@/models/definitions';
 
 const OrariDefault = () => {
     const [orari, setOrari] = useState<Orari>({
-        inizioMattina: '08:00',
-        fineMattina: '12:00',
-        inizioPomeriggio: '13:00',
-        finePomeriggio: '17:00'
+        inizio: '07:30',
+        fine: '16:30',
+        pausa: 60,
     });
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -21,8 +21,16 @@ const OrariDefault = () => {
     useEffect(() => {
         const unsubscribe = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
-                setOrari(docSnap.data() as Orari);
+                // Assicuriamo compatibilità con vecchi dati per non crashare
+                const data = docSnap.data();
+                const newOrari: Orari = {
+                    inizio: data.inizio || '07:30',
+                    fine: data.fine || '16:30',
+                    pausa: data.pausa !== undefined ? data.pausa : 60,
+                };
+                setOrari(newOrari);
             } else {
+                // Se il documento non esiste, lo creiamo con i valori di default
                 setDoc(docRef, orari).catch(e => {
                     console.error("Errore nella creazione degli orari predefiniti: ", e);
                     setError("Impossibile creare le impostazioni predefinite.");
@@ -36,11 +44,14 @@ const OrariDefault = () => {
         });
     
         return () => unsubscribe();
+    // Aggiungo 'orari' al dependency array per gestire il primo salvataggio
     }, [docRef, orari]);
 
-    const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChange = (event: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
         const { name, value } = event.target;
-        setOrari(prev => ({ ...prev, [name]: value }));
+        if (name) {
+            setOrari(prev => ({ ...prev, [name]: value }));
+        }
     };
 
     const handleSave = async () => {
@@ -61,39 +72,48 @@ const OrariDefault = () => {
     return (
         <Box>
             <Typography variant='h6' gutterBottom>
-                Orari di Lavoro Standard
+                Orario di Lavoro Standard
             </Typography>
-            <Grid container spacing={2} alignItems="center">
-                <Grid
-                    size={{
-                        xs: 6,
-                        sm: 3
-                    }}>
-                    <TextField label="Inizio Mattina" name="inizioMattina" type="time" value={orari.inizioMattina} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
+            <Grid container spacing={3} alignItems="center">
+                <Grid item xs={12} sm={4}>
+                    <TextField 
+                        label="Inizio Lavoro" 
+                        name="inizio" 
+                        type="time" 
+                        value={orari.inizio} 
+                        onChange={handleChange} 
+                        fullWidth 
+                        InputLabelProps={{ shrink: true }} 
+                    />
                 </Grid>
-                <Grid
-                    size={{
-                        xs: 6,
-                        sm: 3
-                    }}>
-                    <TextField label="Fine Mattina" name="fineMattina" type="time" value={orari.fineMattina} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
+                <Grid item xs={12} sm={4}>
+                    <TextField 
+                        label="Fine Lavoro" 
+                        name="fine" 
+                        type="time" 
+                        value={orari.fine} 
+                        onChange={handleChange} 
+                        fullWidth 
+                        InputLabelProps={{ shrink: true }} 
+                    />
                 </Grid>
-                <Grid
-                    size={{
-                        xs: 6,
-                        sm: 3
-                    }}>
-                    <TextField label="Inizio Pomeriggio" name="inizioPomeriggio" type="time" value={orari.inizioPomeriggio} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid
-                    size={{
-                        xs: 6,
-                        sm: 3
-                    }}>
-                    <TextField label="Fine Pomeriggio" name="finePomeriggio" type="time" value={orari.finePomeriggio} onChange={handleChange} fullWidth InputLabelProps={{ shrink: true }} />
+                <Grid item xs={12} sm={4}>
+                    <FormControl fullWidth>
+                        <InputLabel>Pausa</InputLabel>
+                        <Select
+                            label="Pausa"
+                            name="pausa"
+                            value={orari.pausa}
+                            onChange={(e) => handleChange(e as any)} // Cast per gestire il tipo di evento
+                        >
+                            <MenuItem value={0}>0 minuti</MenuItem>
+                            <MenuItem value={30}>30 minuti</MenuItem>
+                            <MenuItem value={60}>60 minuti</MenuItem>
+                        </Select>
+                    </FormControl>
                 </Grid>
             </Grid>
-            <Button variant="contained" onClick={handleSave} disabled={isSaving} sx={{ mt: 2 }}>
+            <Button variant="contained" onClick={handleSave} disabled={isSaving} sx={{ mt: 3 }}>
                 {isSaving ? <CircularProgress size={24} /> : 'Salva Orari'}
             </Button>
             <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={() => setSnackbarOpen(false)}>

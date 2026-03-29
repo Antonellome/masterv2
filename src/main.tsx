@@ -9,7 +9,7 @@ import './firebase.ts';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
+    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='it'>
       <App />
     </LocalizationProvider>
   </React.StrictMode>,

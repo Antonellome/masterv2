@@ -1,0 +1,10 @@
+{
+  "users": [
+    {
+      "localId": "sXvqYlhkUdfUUDH6xOqaUB267OI3",
+      "customClaims": {
+        "role": "admin"
+      }
+    }
+  ]
+}

@@ -1,147 +1,141 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { Box, Typography, Alert, CircularProgress, Switch, Tooltip } from '@mui/material';
-import { DataGrid, GridColDef, GridToolbar, GridActionsCellItem } from '@mui/x-data-grid';
-import { itIT } from '@mui/x-data-grid/locales';
-import { VpnKey } from '@mui/icons-material';
 
-// Definiamo l'interfaccia per l'utente, basandoci sui dati osservati
-interface Utente {
-    id: string; // L'ID del documento
-    nome: string;
+import React, { useState, useEffect, useCallback } from 'react';
+import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
+import {
+    Box, Typography, Alert, CircularProgress, Switch, Tooltip
+} from '@mui/material';
+import {
+    DataGrid, GridColDef,
+    GridToolbarContainer, GridToolbarColumnsButton, GridToolbarFilterButton, GridToolbarDensitySelector, GridToolbarExport, GridToolbarQuickFilter
+} from '@mui/x-data-grid';
+import { itIT } from '@mui/x-data-grid/locales';
+
+// Interfaccia per l'oggetto Utente dalla Cloud Function
+interface AuthUser {
+    uid: string;
     email: string;
+    role: 'admin' | 'tecnico' | 'Nessuno';
     disabled: boolean;
-    ruolo?: string; // Campo opzionale
+}
+
+// Inizializzazione delle Cloud Functions
+const functions = getFunctions(undefined, 'europe-west1');
+const manageUsers = httpsCallable(functions, 'manageUsers');
+
+// Toolbar custom per la DataGrid
+function CustomToolbar() {
+    return (
+        <GridToolbarContainer>
+            <GridToolbarColumnsButton />
+            <GridToolbarFilterButton />
+            <GridToolbarDensitySelector />
+            <GridToolbarExport />
+            <Box sx={{ flexGrow: 1 }} />
+            <GridToolbarQuickFilter sx={{ minWidth: 240, mr: 1 }} placeholder="Cerca..." variant="outlined" size="small" />
+        </GridToolbarContainer>
+    );
 }
 
 const GestioneUtenti: React.FC = () => {
-    const [utenti, setUtenti] = useState<Utente[]>([]);
+    const [users, setUsers] = useState<AuthUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
-    const fetchUtenti = useCallback(async () => {
+    const fetchUsers = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const querySnapshot = await getDocs(collection(db, "utenti_master"));
-            const utentiData = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            } as Utente));
-            setUtenti(utentiData);
-        } catch (err) {
-            console.error("Errore nel caricamento degli utenti:", err);
-            setError("Impossibile caricare l'elenco degli utenti.");
+            const result: HttpsCallableResult<{ users: AuthUser[] }> = await manageUsers({ 
+                action: 'list', 
+                payload: { role: '!tecnico' } 
+            });
+            setUsers(result.data.users);
+        } catch (err: any) {
+            console.error("Errore caricamento utenti:", err);
+            setError(err.message || "Impossibile caricare l'elenco degli utenti.");
         } finally {
             setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        fetchUtenti();
-    }, [fetchUtenti]);
+        fetchUsers();
+    }, [fetchUsers]);
 
-    const handleToggleDisabled = async (id: string, isDisabled: boolean) => {
-        const userRef = doc(db, 'utenti_master', id);
+    const handleRoleChange = async (uid: string, currentRole: AuthUser['role']) => {
+        const newRole = currentRole === 'admin' ? 'Nessuno' : 'admin';
+        setActionLoading(prev => ({ ...prev, [uid]: true }));
+        setFeedback(null);
         try {
-            await updateDoc(userRef, { disabled: !isDisabled });
-            setUtenti(prev => prev.map(u => u.id === id ? { ...u, disabled: !isDisabled } : u));
-            setFeedback({ type: 'success', message: `Utente ${!isDisabled ? 'disabilitato' : 'abilitato'} con successo.` });
-        } catch (error) {
-            console.error("Errore durante l'aggiornamento dell'utente:", error);
-            setFeedback({ type: 'error', message: "Errore durante l'aggiornamento dell'utente." });
+            await manageUsers({ action: 'setRole', payload: { uid, newRole } });
+            setFeedback({ type: 'success', message: `Ruolo per l'utente aggiornato a ${newRole}.` });
+            setUsers(prevUsers => prevUsers.map(u => u.uid === uid ? { ...u, role: newRole } : u));
+        } catch (error: any) {
+            console.error("Errore durante il cambio ruolo:", error);
+            setFeedback({ type: 'error', message: `Errore: ${error.message || 'Errore sconosciuto.'}` });
+        } finally {
+            setActionLoading(prev => ({ ...prev, [uid]: false }));
         }
     };
 
-    const handlePasswordReset = async (email: string) => {
-        // La logica effettiva per l'invio della mail di reset password andrebbe qui.
-        // Potrebbe essere una funzione Firebase Auth o un endpoint custom.
-        console.log(`Invio reset password a: ${email}`);
-        setFeedback({ type: 'success', message: `Richiesta di reset password inviata a ${email}.` });
-        // Simulazione di un'operazione asincrona
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    };
-
-    const columns: GridColDef[] = [
-        { field: 'nome', headerName: 'Nome', flex: 1 },
-        { field: 'email', headerName: 'Email', flex: 1.5 },
+    const columns: GridColDef<AuthUser>[] = [
         {
-            field: 'stato',
-            headerName: 'Stato',
-            width: 120,
-            renderCell: (params) => (
-                <Typography color={!params.row.disabled ? 'success.main' : 'error.main'}>
-                    {!params.row.disabled ? 'Attivo' : 'Disabilitato'}
-                </Typography>
-            ),
-        },
-        { field: 'ruolo', headerName: 'Ruolo', flex: 1, description: 'Ruolo dell\'utente (es. Admin, User)' },
-        {
-            field: 'actions',
-            type: 'actions',
-            headerName: 'Azioni',
+            field: 'role',
+            headerName: 'Amministratore',
             width: 150,
-            cellClassName: 'actions',
-            getActions: ({ id, row }) => {
-                return [
-                    <GridActionsCellItem
-                        key={`toggle-${id}`}
-                        icon={
-                            <Tooltip title={!row.disabled ? 'Disabilita Utente' : 'Abilita Utente'}>
-                                <Switch
-                                    checked={!row.disabled}
-                                    onChange={() => handleToggleDisabled(id as string, row.disabled)}
-                                    color="primary"
-                                />
-                             </Tooltip>
-                        }
-                        label={!row.disabled ? 'Disabilita' : 'Abilita'}
-                    />,
-                    <GridActionsCellItem
-                        key={`reset-${id}`}
-                        icon={<Tooltip title="Invia/Reset Password"><VpnKey /></Tooltip>}
-                        label="Reset Password"
-                        onClick={() => handlePasswordReset(row.email)}
-                        color="inherit"
-                    />,
-                ];
-            },
+            align: 'center',
+            headerAlign: 'center',
+            renderCell: (params) => {
+                const isLoading = actionLoading[params.row.uid];
+                return (
+                    <Tooltip title={params.row.role === 'admin' ? 'Rimuovi ruolo Admin' : 'Imposta come Admin'}>
+                        <Switch
+                            checked={params.row.role === 'admin'}
+                            onChange={() => handleRoleChange(params.row.uid, params.row.role)}
+                            disabled={isLoading}
+                        />
+                    </Tooltip>
+                );
+            }
         },
+        { field: 'email', headerName: 'Email Account', flex: 1.5 },
+        { field: 'uid', headerName: 'User ID', flex: 1 },
     ];
 
     return (
-        <Box>
-            <Typography variant="h6" gutterBottom>Gestione Utenti Applicazione</Typography>
+        <Box sx={{ width: '100%' }}>
+            <Typography variant="h6" component="h2" gutterBottom>
+                Gestione Ruoli Amministratori
+            </Typography>
+            <Typography variant="body2" display="block" sx={{ mb: 2, color: 'text.secondary' }}>
+                Da qui puoi promuovere un utente ad Amministratore o rimuovere i suoi privilegi. Gli amministratori hanno accesso completo al sistema.
+            </Typography>
+            
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            {feedback && 
-                <Alert severity={feedback.type} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>
-                    {feedback.message}
-                </Alert>
-            }
-            {loading && <CircularProgress />}
-            {!loading && 
-                <Box sx={{ height: 'auto', width: '100%' }}>
+            {feedback && <Alert severity={feedback.type} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
+            
+            <Box sx={{ mt: 2 }}>
+                {loading ? (
+                    <CircularProgress sx={{ mx: 'auto', mt: 4, display: 'block' }} />
+                ) : (
                     <DataGrid
-                        rows={utenti || []}
-                        columns={columns}
                         autoHeight
+                        rows={users}
+                        columns={columns}
+                        getRowId={(row) => row.uid}
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
                         initialState={{
-                            pagination: {
-                                paginationModel: { page: 0, pageSize: 10 },
-                            },
-                            sorting: {
-                                sortModel: [{ field: 'nome', sort: 'asc' }],
-                            }
+                            pagination: { paginationModel: { pageSize: 10 } },
+                            sorting: { sortModel: [{ field: 'email', sort: 'asc' }] }
                         }}
-                        pageSizeOptions={[5, 10, 25]}
-                        slots={{ toolbar: GridToolbar }}
+                        pageSizeOptions={[10, 25, 50]}
+                        slots={{ toolbar: CustomToolbar }}
                         disableRowSelectionOnClick
                     />
-                </Box>
-            }
+                )}
+            </Box>
         </Box>
     );
 };

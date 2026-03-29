@@ -1,103 +1,139 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncDataTrigger = exports.manageUsers = void 0;
-const https_1 = require("firebase-functions/v2/https");
-const firestore_1 = require("firebase-functions/v2/firestore");
-const admin = require("firebase-admin");
-// Inizializza l'SDK di Firebase Admin una sola volta all'avvio.
-admin.initializeApp();
-// --- Funzione 1: L' "INTERFONO" (Gestione Utenti su Richiesta) ---
-/**
- * Gestisce le operazioni sugli utenti richieste dall'app Master.
- * Richiede autenticazione come 'admin' per tutte le operazioni.
- * Agisce come dispatcher in base all'azione richiesta.
- */
-exports.manageUsers = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
-    var _a, _b;
-    // 1. CONTROLLO DI SICUREZZA FONDAMENTALE
-    if (((_b = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.role) !== 'admin') {
-        throw new https_1.HttpsError("permission-denied", "Richiesta non autorizzata. Privilegi di Amministratore richiesti.");
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
     }
-    const { action, payload } = request.data;
-    const callingUid = request.auth.uid; // UID dell'admin che esegue l'operazione
-    switch (action) {
-        // AZIONE: Elencare tutti gli utenti
-        case 'listAll':
-            try {
-                const userRecords = await admin.auth().listUsers(1000);
-                const users = userRecords.users.map(user => {
-                    var _a;
-                    return ({
-                        uid: user.uid,
-                        email: user.email || 'N/A',
-                        role: ((_a = user.customClaims) === null || _a === void 0 ? void 0 : _a.role) || 'Nessuno',
-                        disabled: user.disabled,
-                    });
-                });
-                return { users };
-            }
-            catch (error) {
-                console.error("Errore nel recuperare la lista utenti:", error);
-                throw new https_1.HttpsError("internal", "Impossibile recuperare la lista utenti.");
-            }
-        // AZIONE: Impostare un ruolo a un utente (Admin o Tecnico)
-        case 'setRole':
-            const { uid, newRole } = payload;
-            if (!uid || !newRole) {
-                throw new https_1.HttpsError("invalid-argument", "Payload non valido. 'uid' e 'newRole' sono obbligatori.");
-            }
-            // Un admin non può rimuovere il proprio ruolo per errore
-            if (callingUid === uid && newRole !== 'admin') {
-                throw new https_1.HttpsError("failed-precondition", "Un amministratore non può rimuovere il proprio ruolo.");
-            }
-            try {
-                await admin.auth().setCustomUserClaims(uid, { role: newRole });
-                return { message: `Ruolo per l'utente ${uid} aggiornato a ${newRole}.` };
-            }
-            catch (error) {
-                console.error(`Errore nell'impostare il ruolo per ${uid}:`, error);
-                throw new https_1.HttpsError("internal", "Errore durante l'aggiornamento del ruolo.");
-            }
-        // AZIONE: Creare un utente (per la pagina "Accesso App" dei tecnici)
-        case 'createUser':
-            const { email, password } = payload;
-            if (!email || !password) {
-                throw new https_1.HttpsError("invalid-argument", "Email e password sono obbligatori per creare un utente.");
-            }
-            try {
-                const userRecord = await admin.auth().createUser({ email, password });
-                // Opzionale: Imposta subito un ruolo se necessario, es. 'tecnico'
-                // await admin.auth().setCustomUserClaims(userRecord.uid, { role: 'tecnico' });
-                return { uid: userRecord.uid, message: `Utente ${email} creato con successo.` };
-            }
-            catch (error) {
-                console.error(`Errore nella creazione dell'utente ${email}:`, error);
-                // Fornisce un messaggio d'errore più utile al frontend
-                if (error.code === 'auth/email-already-exists') {
-                    throw new https_1.HttpsError('already-exists', 'L\'indirizzo email è già in uso da un altro account.');
-                }
-                throw new https_1.HttpsError("internal", "Impossibile creare l'utente.");
-            }
-        default:
-            throw new https_1.HttpsError("invalid-argument", `Azione '${action}' non riconosciuta.`);
-    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
 });
-// --- Funzione 2: Il "CAMPANELLO" (Sincronizzazione Automatica) ---
-/**
- * Si attiva quando il manifest di sincronizzazione viene aggiornato.
- * Invia una notifica push silenziosa ai dispositivi per avviare il sync.
- */
-exports.syncDataTrigger = (0, firestore_1.onDocumentUpdated)({ document: "config/syncManifest", region: "europe-west1" }, async (event) => {
-    var _a;
-    console.log("Sync Manifest aggiornato. Trigger per la notifica PUSH attivato.");
-    // Dati dopo la modifica
-    const newData = (_a = event.data) === null || _a === void 0 ? void 0 : _a.after.data();
-    console.log("Nuovo stato del manifest:", newData);
-    // TODO: Implementare la logica di invio notifica PUSH silenziosa (FCM)
-    // 1. Recuperare i token FCM dei dispositivi da una collezione (es. 'deviceTokens').
-    // 2. Costruire il messaggio di notifica (deve essere 'data-only' per essere silenzioso).
-    // 3. Inviare il messaggio con admin.messaging().sendToDevice(...).
-    console.log("LOGICA PUSH NON ANCORA IMPLEMENTATA.");
-    return Promise.resolve();
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.manageUsers = void 0;
+const functions = __importStar(require("firebase-functions"));
+const admin = __importStar(require("firebase-admin"));
+try {
+    admin.initializeApp();
+}
+catch (e) {
+    // Inizializzazione già avvenuta
+}
+const db = admin.firestore();
+const logAndThrow = (error, message, code = "internal") => {
+    console.error(`ERRORE CRITICO in Cloud Function: ${message}`, { error: error.message });
+    throw new functions.https.HttpsError(code, message, error.message);
+};
+const listAllUsers = async () => {
+    const allUsers = [];
+    let nextPageToken;
+    do {
+        const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
+        allUsers.push(...listUsersResult.users);
+        nextPageToken = listUsersResult.pageToken;
+    } while (nextPageToken);
+    return allUsers.map(user => {
+        var _a;
+        return ({
+            uid: user.uid,
+            email: user.email || "",
+            ruolo: ((_a = user.customClaims) === null || _a === void 0 ? void 0 : _a.role) || 'utente',
+            disabled: user.disabled,
+        });
+    });
+};
+exports.manageUsers = functions.region("europe-west1").https.onCall(async (data, context) => {
+    var _a, _b;
+    if (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.role) !== 'admin') {
+        throw new functions.https.HttpsError("permission-denied", "Azione non autorizzata.");
+    }
+    const { action, payload } = data;
+    switch (action) {
+        case 'list':
+            try {
+                const allAuthUsers = await listAllUsers();
+                if (!payload || !payload.role)
+                    return { users: allAuthUsers };
+                const { role } = payload;
+                const filteredUsers = role.startsWith('!')
+                    ? allAuthUsers.filter(u => u.ruolo !== role.substring(1))
+                    : allAuthUsers.filter(u => u.ruolo === role);
+                return { users: filteredUsers };
+            }
+            catch (error) {
+                return logAndThrow(error, "Impossibile recuperare la lista utenti.");
+            }
+        case 'createUser': {
+            if (!payload || !payload.email || !payload.nome || !payload.cognome) {
+                throw new functions.https.HttpsError('invalid-argument', "Email, nome e cognome sono richiesti per creare un utente.");
+            }
+            const { email, nome, cognome } = payload;
+            try {
+                const userRecord = await admin.auth().createUser({ email, displayName: `${nome} ${cognome}` });
+                await admin.auth().setCustomUserClaims(userRecord.uid, { role: 'tecnico' });
+                return { uid: userRecord.uid, message: `Utente ${email} creato con successo con ruolo tecnico.` };
+            }
+            catch (error) {
+                if (error.code === 'auth/email-already-exists') {
+                    throw new functions.https.HttpsError('already-exists', `L\'email ${email} è già in uso.`);
+                }
+                return logAndThrow(error, "Impossibile creare l'utente.");
+            }
+        }
+        case 'setRole': {
+            if (!payload || !payload.uid || !payload.role) {
+                throw new functions.https.HttpsError('invalid-argument', "L'UID e il nuovo ruolo sono richiesti.");
+            }
+            const { uid, role } = payload;
+            try {
+                await admin.auth().setCustomUserClaims(uid, { role });
+                await db.collection('users').doc(uid).set({ ruolo: role }, { merge: true });
+                return { message: `Ruolo aggiornato a '${role}' per l'utente ${uid}` };
+            }
+            catch (error) {
+                return logAndThrow(error, "Impossibile aggiornare il ruolo dell'utente.");
+            }
+        }
+        case 'deleteUser': {
+            if (!payload || !payload.uid) {
+                throw new functions.https.HttpsError('invalid-argument', "L'UID dell'utente è richiesto.");
+            }
+            const { uid } = payload;
+            try {
+                await admin.auth().deleteUser(uid);
+                await db.collection('users').doc(uid).delete();
+                return { message: `Utente ${uid} eliminato con successo.` };
+            }
+            catch (error) {
+                return logAndThrow(error, "Impossibile eliminare l'utente.");
+            }
+        }
+        default: {
+            throw new functions.https.HttpsError("unimplemented", `L'azione ('${action}') non è valida.`);
+        }
+    }
 });
 //# sourceMappingURL=index.js.map
