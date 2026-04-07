@@ -80,7 +80,7 @@ const DocumentiList: React.FC<DocumentiListProps> = ({ documenti, onEdit, onDele
             minWidth: 220,
             sortable: false,
             renderCell: (params) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', py: 1 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
                     <RenderScadenzaChip label="Scad. 1" date={params.row.scadenza1} />
                     <RenderScadenzaChip label="Scad. 2" date={params.row.scadenza2} />
                 </Box>
@@ -127,7 +127,20 @@ const DocumentiList: React.FC<DocumentiListProps> = ({ documenti, onEdit, onDele
                 columns={columns}
                 getRowId={(row) => row.id}
                 localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-                sx={{ '& .MuiDataGrid-cell': { py: 1.5 } }}
+                getRowHeight={() => 'auto'} // <-- ECCO LA MODIFICA CHIAVE
+                sx={{
+                    '&.MuiDataGrid-root--densityStandard .MuiDataGrid-cell': {
+                        py: '15px', // Aggiunge padding verticale per dare respiro
+                    },
+                    '& .MuiDataGrid-cell': {
+                        whiteSpace: 'normal !important', // Permette al testo di andare a capo
+                        wordWrap: 'break-word !important',
+                        alignItems: 'flex-start', // Allinea il contenuto in alto
+                    },
+                     '& .MuiDataGrid-columnHeaderTitle': { 
+                        fontWeight: 'bold' 
+                    },
+                }}
                 initialState={{
                     pagination: {
                         paginationModel: { page: 0, pageSize: 25 },

@@ -1,3 +1,5 @@
+export type UserRole = 'Amministratore' | 'Tecnico' | null;
+
 export interface Orari {
   inizio: string;      // e.g., "07:30"
   fine: string;        // e.g., "16:30"

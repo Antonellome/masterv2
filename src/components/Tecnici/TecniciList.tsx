@@ -5,7 +5,7 @@ import {
 } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import type { Tecnico } from '@/models/definitions';
-import { Switch, Tooltip, IconButton, Link, Box, Button, Divider } from '@mui/material';
+import { Switch, Tooltip, IconButton, Link, Box, Button, Divider, CircularProgress } from '@mui/material';
 import Edit from '@mui/icons-material/Edit';
 import Delete from '@mui/icons-material/Delete';
 import Add from '@mui/icons-material/Add';
@@ -31,26 +31,53 @@ function CustomToolbar({ onAdd }: { onAdd: () => void }) {
     );
 }
 
+// 1. MODIFICATA LA FIRMA DELLA FUNZIONE
 interface TecniciListProps {
     tecnici: Tecnico[];
     ditteMap: Map<string, string>;
     categorieMap: Map<string, string>;
     onViewDetails: (tecnico: Tecnico) => void;
-    onStatusChange: (event: React.ChangeEvent<HTMLInputElement>, tecnico: Tecnico) => void;
+    onStatusChange: (id: string, newStatus: boolean) => void; 
     onEdit: (tecnico: Tecnico) => void;
     onDelete: (event: React.MouseEvent, id: string) => void;
     onAdd: () => void; 
+    isSaving?: boolean; // Aggiunto per feedback visivo
 }
 
-const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieMap, onViewDetails, onStatusChange, onEdit, onDelete, onAdd }) => {
+const TecniciList: React.FC<TecniciListProps> = ({ 
+    tecnici, ditteMap, categorieMap, onViewDetails, onStatusChange, onEdit, onDelete, onAdd, isSaving 
+}) => {
 
     const handleExport = (event: React.MouseEvent, tecnico: Tecnico) => {
-        event.stopPropagation(); // Evita che altri click vengano triggerati
+        event.stopPropagation();
         exportSingleTecnico(tecnico, ditteMap, categorieMap);
     };
 
     const allColumns: GridColDef[] = [
-        { field: 'attivo', headerName: 'Stato', width: 65, align: 'center', headerAlign: 'center', renderCell: (params) => (<Tooltip title={params.value ? 'Attivo' : 'Non Attivo'}><Switch size="small" checked={Boolean(params.value)} onChange={(e) => onStatusChange(e, params.row as Tecnico)} onClick={(e) => e.stopPropagation()} color="primary"/></Tooltip>)},
+        // 2. CORRETTO IL PASSAGGIO DEI DATI
+        { 
+            field: 'attivo', 
+            headerName: 'Stato', 
+            width: 75, 
+            align: 'center', 
+            headerAlign: 'center', 
+            renderCell: (params) => (
+                <Tooltip title={params.value ? 'Attivo' : 'Non Attivo'}>
+                    {/* 3. AGGIUNTO IL FEEDBACK DI CARICAMENTO */}
+                    <span>
+                        <Switch 
+                            size="small" 
+                            checked={Boolean(params.value)} 
+                            onChange={(e) => onStatusChange(params.row.id, e.target.checked)} 
+                            onClick={(e) => e.stopPropagation()} 
+                            color="primary" 
+                            disabled={isSaving} // Disabilita durante il salvataggio
+                        />
+                         {isSaving && params.row.id === (tecnici.find(t=>t.attivo !== params.row.attivo)?.id) && <CircularProgress size={20} sx={{position: 'absolute', top: '50%', left: '50%', marginTop: '-10px', marginLeft: '-10px'}}/>}
+                    </span>
+                </Tooltip>
+            )
+        },
         { field: 'cognome', headerName: 'Cognome', flex: 1, renderCell: (params) => (<Link component="button" variant="body2" onClick={() => onViewDetails(params.row as Tecnico)} sx={{ textAlign: 'left', fontWeight: 'bold' }}>{params.value}</Link>)}, 
         { field: 'nome', headerName: 'Nome', flex: 1 },
         { 
@@ -93,8 +120,8 @@ const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieM
             renderCell: (params) => (
                 <Box>
                     <Tooltip title="Esporta/Stampa"><IconButton size="small" onClick={(e) => handleExport(e, params.row as Tecnico)} color="default"><Print /></IconButton></Tooltip>
-                    <Tooltip title="Modifica"><IconButton size="small" onClick={(e) => { e.stopPropagation(); onEdit(params.row as Tecnico); }} color="primary"><Edit /></IconButton></Tooltip>
-                    <Tooltip title="Elimina"><IconButton size="small" onClick={(e) => onDelete(e, params.id as string)} color="default"><Delete /></IconButton></Tooltip>
+                    <Tooltip title="Modifica"><IconButton size="small" onClick={(e) => { e.stopPropagation(); onEdit(params.row as Tecnico); }} color="primary" disabled={isSaving}><Edit /></IconButton></Tooltip>
+                    <Tooltip title="Elimina"><IconButton size="small" onClick={(e) => onDelete(e, params.id as string)} color="default" disabled={isSaving}><Delete /></IconButton></Tooltip>
                 </Box>
             ) 
         }
@@ -107,7 +134,7 @@ const TecniciList: React.FC<TecniciListProps> = ({ tecnici, ditteMap, categorieM
             ...acc, 
            [field.key]: ![
                'scadenzaContratto', 
-               'scadenzaVisita', 
+               'scadenzaVisita',
                'scadenzaPatente',
            ].includes(field.key)
        }), {}),

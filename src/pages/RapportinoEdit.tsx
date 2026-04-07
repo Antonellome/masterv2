@@ -28,7 +28,7 @@ const safeTimestampToDayjs = (value: any) => {
     if (dayjs(value).isValid()){
         return dayjs(value)
     }
-    return null
+    return null;
 };
 
 
@@ -169,21 +169,28 @@ const RapportinoEdit: React.FC<RapportinoEditProps> = ({ isReadOnly = false }) =
                         });
                     } else { showAlert('Rapportino non trovato.', 'error'); navigate('/reportistica'); }
                 } else {
-                    // **LOGICA CORRETTA PER NUOVO RAPPORTINO**
                     const orariDefaultRef = doc(db, 'configurazione', 'orariDefault');
                     const orariDefaultSnap = await getDoc(orariDefaultRef);
 
-                    let oraInizio = dayjs().hour(7).minute(30); // Fallback
-                    let oraFine = dayjs().hour(16).minute(30); // Fallback
-                    let pausa = 60; // Fallback
+                    let oraInizio = dayjs().hour(7).minute(30); 
+                    let oraFine = dayjs().hour(16).minute(30); 
+                    let pausa = 60; 
 
                     if (orariDefaultSnap.exists()) {
                         const orariData = orariDefaultSnap.data() as Orari;
-                        const [startHour, startMinute] = orariData.inizio.split(':').map(Number);
-                        const [endHour, endMinute] = orariData.fine.split(':').map(Number);
-                        oraInizio = dayjs().hour(startHour).minute(startMinute);
-                        oraFine = dayjs().hour(endHour).minute(endMinute);
-                        pausa = orariData.pausa;
+                        // --- FIX: Aggiunto controllo di esistenza prima di usare .split() ---
+                        if (orariData && typeof orariData.inizio === 'string' && orariData.inizio) {
+                            const [startHour, startMinute] = orariData.inizio.split(':').map(Number);
+                            oraInizio = dayjs().hour(startHour).minute(startMinute);
+                        }
+                        if (orariData && typeof orariData.fine === 'string' && orariData.fine) {
+                            const [endHour, endMinute] = orariData.fine.split(':').map(Number);
+                            oraFine = dayjs().hour(endHour).minute(endMinute);
+                        }
+                        if (orariData && typeof orariData.pausa === 'number') {
+                            pausa = orariData.pausa;
+                        }
+                        // --- FINE FIX ---
                     }
 
                     reset({ 

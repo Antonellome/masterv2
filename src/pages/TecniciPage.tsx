@@ -1,8 +1,10 @@
 
 import React, { useState } from 'react';
-import { Box, Tabs, Tab } from '@mui/material';
+import { Box, Tabs, Tab, Typography } from '@mui/material';
+import PeopleIcon from '@mui/icons-material/People';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import GestioneTecnici from '@/components/Tecnici/GestioneTecnici';
-import SincronizzatiApp from '@/components/Tecnici/SincronizzatiApp';
+import GestioneAccessi from '@/components/Tecnici/GestioneAccessi';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -10,7 +12,7 @@ interface TabPanelProps {
   value: number;
 }
 
-function CustomTabPanel(props: TabPanelProps) {
+function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
   return (
@@ -21,16 +23,13 @@ function CustomTabPanel(props: TabPanelProps) {
       aria-labelledby={`tecnici-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+      {value === index && (
+        <Box sx={{ pt: 3 }}>
+          {children}
+        </Box>
+      )}
     </div>
   );
-}
-
-function a11yProps(index: number) {
-  return {
-    id: `tecnici-tab-${index}`,
-    'aria-controls': `tecnici-tabpanel-${index}`,
-  };
 }
 
 const TecniciPage = () => {
@@ -42,18 +41,36 @@ const TecniciPage = () => {
 
   return (
     <Box sx={{ width: '100%' }}>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={value} onChange={handleChange} aria-label="schede tecnici">
-          <Tab label="Gestione Tecnici" {...a11yProps(0)} />
-          <Tab label="Accesso App" {...a11yProps(1)} />
+      <Typography variant="h5" gutterBottom>Gestione Tecnici</Typography>
+      <Typography variant="body2" color="text.secondary">
+        Sezione per la gestione completa dell'anagrafica e degli accessi dei tecnici all'applicazione mobile.
+      </Typography>
+      
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}>
+        <Tabs value={value} onChange={handleChange} aria-label="Tabs gestione tecnici">
+          <Tab 
+            label="Anagrafica Tecnici" 
+            icon={<PeopleIcon />} 
+            iconPosition="start" 
+            id="tecnici-tab-0" 
+            aria-controls="tecnici-tabpanel-0" 
+          />
+          <Tab 
+            label="Accesso App Tecnici" 
+            icon={<LockOpenIcon />} 
+            iconPosition="start" 
+            id="tecnici-tab-1" 
+            aria-controls="tecnici-tabpanel-1" 
+          />
         </Tabs>
       </Box>
-      <CustomTabPanel value={value} index={0}>
+      
+      <TabPanel value={value} index={0}>
         <GestioneTecnici />
-      </CustomTabPanel>
-      <CustomTabPanel value={value} index={1}>
-        <SincronizzatiApp />
-      </CustomTabPanel>
+      </TabPanel>
+      <TabPanel value={value} index={1}>
+        <GestioneAccessi />
+      </TabPanel>
     </Box>
   );
 };

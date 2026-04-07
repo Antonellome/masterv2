@@ -1,7 +1,7 @@
 {
   "firestore": {
     "database": "(default)",
-    "location": "nam5",
+    "location": "eur3",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -11,9 +11,6 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ],
-    "predeploy": [
-      "npm run build"
     ],
     "rewrites": [
       {
@@ -31,7 +28,9 @@
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log"
-      ]
+      ],
+      "region": "europe-west1",
+      "runtime": "nodejs20"
     }
   ],
   "database": {

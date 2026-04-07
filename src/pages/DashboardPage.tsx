@@ -144,8 +144,7 @@ const DashboardPage = () => {
     const { oreTotali30, costoTotale30, rapportiniCreati30, activityLast7Days, attivitaRecenti, presenzeOggi, calendarData } = memoizedData;
 
     return (
-        <Box sx={{ width: '100%' }}>
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>Dashboard</Typography>
+        <Box sx={{ width: '100%', p: 3 }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                 <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} aria-label="dashboard tabs">
                     <Tab label="Riepilogo" />
@@ -157,10 +156,10 @@ const DashboardPage = () => {
 
             <CustomTabPanel value={tabValue} index={0}>
                 <Grid container spacing={3}>
-                    <Grid size={{ xs: 12, sm: 4 }}><StatCard title="Ore Lavorate (30gg)" value={oreTotali30} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><StatCard title="Costo Personale (30gg)" value={costoTotale30} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><StatCard title="Rapportini Creati (30gg)" value={rapportiniCreati30} /></Grid>
-                    <Grid size={{ xs: 12 }}>
+                    <Grid item xs={12} sm={4}><StatCard title="Ore Lavorate (30gg)" value={oreTotali30} /></Grid>
+                    <Grid item xs={12} sm={4}><StatCard title="Costo Personale (30gg)" value={costoTotale30} /></Grid>
+                    <Grid item xs={12} sm={4}><StatCard title="Rapportini Creati (30gg)" value={rapportiniCreati30} /></Grid>
+                    <Grid item xs={12}>
                         <Card>
                             <CardContent>
                                 <Typography variant="h6" gutterBottom>Attività ultima settimana (ore)</Typography>
@@ -218,9 +217,9 @@ const DashboardPage = () => {
                     </FormControl>
                 </Stack>
                 <Grid container spacing={1}>
-                    {Array.from({ length: calendarData.offset }).map((_, index) => <Grid key={`offset-${index}`} size={{ xs: 12 / 7 }} />)}
+                    {Array.from({ length: calendarData.offset }).map((_, index) => <Grid key={`offset-${index}`} item xs={12/7} />)}
                     {calendarData.days.map((dayData) => (
-                        <Grid key={dayData.day} size={{ xs: 12 / 7 }}>
+                        <Grid key={dayData.day} item xs={12/7}>
                             <CalendarDayCard day={dayData.day} missingReports={dayData.missingReports} isFuture={dayData.isFuture} />
                         </Grid>
                     ))}

@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "riso-project-app"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

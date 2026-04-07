@@ -145,7 +145,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                  <LocalizationProvider dateAdapter={AdapterDayjs}>
                     <Grid container spacing={2} sx={{ mt: 1 }}>
                         {fields.map((field) => (
-                            <Grid key={field.name} {...field.gridProps}>
+                            <Grid key={field.name} item {...field.gridProps}>
                                 {renderField(field)}
                             </Grid>
                         ))}

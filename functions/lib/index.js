@@ -33,107 +33,144 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.manageUsers = void 0;
-const functions = __importStar(require("firebase-functions"));
+exports.getMasterData = exports.manageAccess = exports.setAdminClaim = void 0;
 const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-functions/v2/firestore");
+const https_1 = require("firebase-functions/v2/https");
+const firebase_functions_1 = require("firebase-functions");
 try {
     admin.initializeApp();
 }
 catch (e) {
-    // Inizializzazione già avvenuta
+    firebase_functions_1.logger.info("L'app di admin è già inizializzata.");
 }
 const db = admin.firestore();
-const logAndThrow = (error, message, code = "internal") => {
-    console.error(`ERRORE CRITICO in Cloud Function: ${message}`, { error: error.message });
-    throw new functions.https.HttpsError(code, message, error.message);
+const auth = admin.auth();
+const fetchCollection = async (collectionName) => {
+    const snapshot = await db.collection(collectionName).get();
+    return snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
 };
-const listAllUsers = async () => {
-    const allUsers = [];
-    let nextPageToken;
-    do {
-        const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
-        allUsers.push(...listUsersResult.users);
-        nextPageToken = listUsersResult.pageToken;
-    } while (nextPageToken);
-    return allUsers.map(user => {
-        var _a;
-        return ({
-            uid: user.uid,
-            email: user.email || "",
-            ruolo: ((_a = user.customClaims) === null || _a === void 0 ? void 0 : _a.role) || 'utente',
-            disabled: user.disabled,
-        });
-    });
-};
-exports.manageUsers = functions.region("europe-west1").https.onCall(async (data, context) => {
-    var _a, _b;
-    if (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.role) !== 'admin') {
-        throw new functions.https.HttpsError("permission-denied", "Azione non autorizzata.");
+exports.setAdminClaim = (0, firestore_1.onDocumentCreated)({
+    document: "amministratori/{uid}",
+    region: "europe-west1",
+}, async (event) => {
+    const { uid } = event.params;
+    const snapshot = event.data;
+    if (!snapshot) {
+        firebase_functions_1.logger.warn(`Evento di creazione per 'amministratori/${uid}' senza dati. Uscita.`);
+        return;
     }
-    const { action, payload } = data;
+    firebase_functions_1.logger.info(`Tentativo di impostare il claim 'admin' per l'utente ${uid}`);
+    try {
+        await auth.setCustomUserClaims(uid, { role: 'admin' });
+        firebase_functions_1.logger.info(`Successo! Il claim 'admin' è stato impostato per l'utente ${uid}.`);
+        await db.collection('amministratori').doc(uid).update({
+            claimImpostato: true,
+            dataImpostazione: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return { message: `Claim 'admin' impostato per l'utente ${uid}` };
+    }
+    catch (error) {
+        firebase_functions_1.logger.error(`ERRORE nell'impostare il claim 'admin' per l'utente ${uid}:`, error);
+        const errorMessage = (error instanceof Error) ? error.message : "Errore sconosciuto";
+        await db.collection('amministratori').doc(uid).update({
+            erroreClaim: true,
+            messaggioErrore: errorMessage
+        });
+        return { error: errorMessage };
+    }
+});
+exports.manageAccess = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    var _a;
+    if (!((_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role) || request.auth.token.role !== 'admin') {
+        throw new https_1.HttpsError("permission-denied", "Azione non autorizzata. Solo gli amministratori possono eseguire questa operazione.");
+    }
+    const { action, payload } = request.data;
     switch (action) {
-        case 'list':
+        case 'createAdmin': {
+            if (!payload || !payload.email || !payload.nome) {
+                throw new https_1.HttpsError('invalid-argument', "Dati mancanti: richiesti 'email' e 'nome'.");
+            }
+            const { email, nome } = payload;
             try {
-                const allAuthUsers = await listAllUsers();
-                if (!payload || !payload.role)
-                    return { users: allAuthUsers };
-                const { role } = payload;
-                const filteredUsers = role.startsWith('!')
-                    ? allAuthUsers.filter(u => u.ruolo !== role.substring(1))
-                    : allAuthUsers.filter(u => u.ruolo === role);
-                return { users: filteredUsers };
-            }
-            catch (error) {
-                return logAndThrow(error, "Impossibile recuperare la lista utenti.");
-            }
-        case 'createUser': {
-            if (!payload || !payload.email || !payload.nome || !payload.cognome) {
-                throw new functions.https.HttpsError('invalid-argument', "Email, nome e cognome sono richiesti per creare un utente.");
-            }
-            const { email, nome, cognome } = payload;
-            try {
-                const userRecord = await admin.auth().createUser({ email, displayName: `${nome} ${cognome}` });
-                await admin.auth().setCustomUserClaims(userRecord.uid, { role: 'tecnico' });
-                return { uid: userRecord.uid, message: `Utente ${email} creato con successo con ruolo tecnico.` };
-            }
-            catch (error) {
-                if (error.code === 'auth/email-already-exists') {
-                    throw new functions.https.HttpsError('already-exists', `L\'email ${email} è già in uso.`);
+                let userRecord;
+                try {
+                    userRecord = await auth.getUserByEmail(email);
+                    firebase_functions_1.logger.info(`Utente ${email} trovato (UID: ${userRecord.uid}). Procedo con la promozione.`);
                 }
-                return logAndThrow(error, "Impossibile creare l'utente.");
-            }
-        }
-        case 'setRole': {
-            if (!payload || !payload.uid || !payload.role) {
-                throw new functions.https.HttpsError('invalid-argument', "L'UID e il nuovo ruolo sono richiesti.");
-            }
-            const { uid, role } = payload;
-            try {
-                await admin.auth().setCustomUserClaims(uid, { role });
-                await db.collection('users').doc(uid).set({ ruolo: role }, { merge: true });
-                return { message: `Ruolo aggiornato a '${role}' per l'utente ${uid}` };
+                catch (error) {
+                    if (error.code === 'auth/user-not-found') {
+                        firebase_functions_1.logger.info(`Utente ${email} non trovato. Procedo con la creazione.`);
+                        userRecord = await auth.createUser({ email, emailVerified: false, disabled: false });
+                        firebase_functions_1.logger.info(`Utente ${email} creato con UID: ${userRecord.uid}.`);
+                    }
+                    else {
+                        throw error;
+                    }
+                }
+                const adminDocRef = db.collection('amministratori').doc(userRecord.uid);
+                const adminDoc = await adminDocRef.get();
+                if (adminDoc.exists) {
+                    firebase_functions_1.logger.warn(`Il documento amministratore per UID ${userRecord.uid} esiste già.`);
+                }
+                else {
+                    await adminDocRef.set({
+                        nome: nome,
+                        email: email,
+                        ruolo: 'admin',
+                        abilitato: true,
+                        dataCreazione: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                firebase_functions_1.logger.info(`Documento amministratore per ${nome} (${email}) creato/verificato.`);
+                return { success: true, message: `Privilegi di amministratore concessi a ${nome}.` };
             }
             catch (error) {
-                return logAndThrow(error, "Impossibile aggiornare il ruolo dell'utente.");
+                firebase_functions_1.logger.error(`Errore durante la concessione dei privilegi a ${email}:`, error);
+                throw new https_1.HttpsError("internal", `Impossibile concedere i privilegi: ${error.message}`);
             }
         }
-        case 'deleteUser': {
-            if (!payload || !payload.uid) {
-                throw new functions.https.HttpsError('invalid-argument', "L'UID dell'utente è richiesto.");
+        case 'toggleAbilitato': {
+            if (!payload || !payload.uid || typeof payload.abilitato !== 'boolean') {
+                throw new https_1.HttpsError('invalid-argument', "Dati mancanti o non validi. Richiesto 'uid' e 'abilitato'.");
             }
-            const { uid } = payload;
+            const { uid, abilitato } = payload;
             try {
-                await admin.auth().deleteUser(uid);
-                await db.collection('users').doc(uid).delete();
-                return { message: `Utente ${uid} eliminato con successo.` };
+                await auth.updateUser(uid, { disabled: !abilitato });
+                firebase_functions_1.logger.info(`Stato AUTH per l'utente ${uid} aggiornato a: ${abilitato ? 'abilitato' : 'disabilitato'}.`);
+                // SOLUZIONE DEFINITIVA: Uso .set con { merge: true } per creare il documento se non esiste.
+                await db.collection('tecnici').doc(uid).set({ abilitato: abilitato }, { merge: true });
+                firebase_functions_1.logger.info(`Documento Firestore per tecnico ${uid} aggiornato/creato con stato: ${abilitato}.`);
+                return { success: true, message: `Stato tecnico ${uid} aggiornato con successo.` };
             }
             catch (error) {
-                return logAndThrow(error, "Impossibile eliminare l'utente.");
+                firebase_functions_1.logger.error(`Errore durante l'aggiornamento dello stato per il tecnico ${uid}:`, error);
+                throw new https_1.HttpsError("internal", `Impossibile aggiornare lo stato dell'utente: ${error.message}`);
             }
         }
         default: {
-            throw new functions.https.HttpsError("unimplemented", `L'azione ('${action}') non è valida.`);
+            throw new https_1.HttpsError("unimplemented", `L'azione '${action}' non è supportata da manageAccess.`);
         }
+    }
+});
+exports.getMasterData = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    var _a;
+    if (!((_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role)) {
+        throw new https_1.HttpsError("permission-denied", "Autenticazione richiesta per leggere i dati.");
+    }
+    if (request.auth.token.role !== 'admin' && request.auth.token.role !== 'tecnico') {
+        throw new https_1.HttpsError("permission-denied", "Permessi insufficienti. Solo un amministratore o un tecnico può leggere i dati anagrafici.");
+    }
+    try {
+        const collectionsToFetch = ['clienti', 'ditte', 'navi', 'luoghi', 'categorie', 'tipi-giornata', 'tecnici', 'veicoli'];
+        const results = await Promise.all(collectionsToFetch.map(fetchCollection));
+        const allData = {};
+        collectionsToFetch.forEach((name, index) => { allData[name] = results[index]; });
+        return allData;
+    }
+    catch (error) {
+        firebase_functions_1.logger.error("Errore critico durante il recupero dei dati anagrafici:", error);
+        throw new https_1.HttpsError("internal", "Impossibile recuperare i dati anagrafici.");
     }
 });
 //# sourceMappingURL=index.js.map

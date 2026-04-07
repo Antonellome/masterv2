@@ -1,16 +1,16 @@
-// src/components/ProtectedRoute.tsx
+
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthProvider'; // CORRETTO: import da AuthProvider
+import { useAuth } from '@/contexts/AuthProvider';
 import { Box, CircularProgress } from '@mui/material';
 
-const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
+const ProtectedRoute = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-            <CircularProgress />
-        </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
     );
   }
 
@@ -18,7 +18,7 @@ const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
 
-  return children ? <>{children}</> : <Outlet />;
+  return <Outlet />;
 };
 
 export default ProtectedRoute;

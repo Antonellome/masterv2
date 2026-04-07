@@ -3,13 +3,12 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useMe
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
   User
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/firebase';
-import type { IAuthContext, AuthUser } from './AuthContext.types';
+import { auth } from '@/firebase';
+import { UserRole } from '@/models/definitions';
+import type { IAuthContext } from './AuthContext.types';
 
 const AuthContext = createContext<IAuthContext | undefined>(undefined);
 
@@ -22,137 +21,90 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<AuthUser>(null);
+    const [user, setUser] = useState<User | null>(null);
+    const [userRole, setUserRole] = useState<UserRole>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: User | null) => {
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
+                // Non impostare loading a true qui per evitare di bloccare l'UI durante il refresh del token
                 try {
-                    // 1. Forza l'aggiornamento del token per ottenere i custom claims più recenti
-                    const tokenResult = await firebaseUser.getIdTokenResult(true);
-                    
-                    // 2. Recupera i dati dal documento Firestore
-                    const userDocRef = doc(db, "utenti_master", firebaseUser.uid);
-                    const userDoc = await getDoc(userDocRef);
+                    const idTokenResult = await firebaseUser.getIdTokenResult(true);
+                    const claims = idTokenResult.claims;
+                    const role = claims.role as string;
 
-                    let userData: Partial<AuthUser> = {};
-                    if (userDoc.exists()) {
-                        const data = userDoc.data();
-                        userData = {
-                            nome: data.nome,
-                            cognome: data.cognome
-                        };
-                    }
-                    
-                    // 3. Combina l'utente Firebase con i claims e i dati di Firestore
-                    const userWithRole: AuthUser = {
-                        ...firebaseUser,
-                        ...userData, // Aggiunge nome e cognome
-                        role: tokenResult.claims.role || 'guest', // Aggiunge il ruolo dai claims
-                    };
-
-                    setUser(userWithRole);
-
-                } catch (error) {
-                    console.error("Errore nel recuperare i dati dell'utente:", error);
-                    // In caso di errore, imposta l'utente base per non bloccare il flusso
+                    setUserRole(role === 'admin' ? 'Amministratore' : 'Tecnico');
                     setUser(firebaseUser);
+
+                } catch (e) {
+                    console.error("AuthProvider: Errore nell'ottenere il token o i claims.", e);
+                    setError("Impossibile verificare i permessi dell'utente.");
+                    setUser(firebaseUser); // Manteniamo l'utente loggato ma con ruolo nullo
+                    setUserRole(null);
+                } finally {
+                    setLoading(false); // Disattiva il loading iniziale solo dopo aver gestito l'utente
                 }
             } else {
                 setUser(null);
+                setUserRole(null);
+                setLoading(false);
             }
-            setLoading(false);
         });
+        
         return () => unsubscribe();
     }, []);
 
     const login = useCallback(async (email: string, pass: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        if (!email || !pass) {
-          setError("Email e password sono obbligatori.");
-          setLoading(false);
-          return;
+        setError(null);
+        setLoading(true);
+        try {
+          await signInWithEmailAndPassword(auth, email, pass);
+          // Il successo viene ora gestito da onAuthStateChanged, ma dobbiamo fermare il loading qui
+          // per sbloccare la UI della pagina di login.
+          setLoading(false); 
+        } catch (err: unknown) {
+          const error = err as { code?: string };
+          let errorMessage = "Credenziali non valide o errore sconosciuto.";
+          switch (error.code) {
+            case 'auth/user-not-found':
+            case 'auth/wrong-password':
+            case 'auth/invalid-email':
+            case 'auth/invalid-login-credentials':
+              errorMessage = "Credenziali non valide. Controlla email e password.";
+              break;
+            case 'auth/user-disabled':
+              errorMessage = "Questo account utente è stato disabilitato.";
+              break;
+          }
+          setError(errorMessage);
+          setLoading(false); // Assicura che il loading si fermi anche in caso di errore
+          throw new Error(errorMessage);
         }
-        await signInWithEmailAndPassword(auth, email, pass);
-      } catch (err: unknown) {
-        console.error("ERRORE REALE DA FIREBASE:", err);
-        const error = err as { code?: string };
-        switch (error.code) {
-          case 'auth/user-not-found':
-            setError("Nessun utente trovato con questa email.");
-            break;
-          case 'auth/wrong-password':
-            setError("Password errata. Riprova.");
-            break;
-          case 'auth/invalid-email':
-            setError("L'indirizzo email non è valido.");
-            break;
-          case 'auth/user-disabled':
-            setError("Questo account utente è stato disabilitato.");
-            break;
-          case 'auth/invalid-login-credentials':
-            setError("Credenziali non valide. Controlla email e password.");
-            break;
-          default:
-            setError("Credenziali non valide o errore sconosciuto.");
-            break;
-        }
-      } finally {
-        setLoading(false);
-      }
     }, []);
 
-    const signup = useCallback(async (email: string, pass: string, nome: string, cognome: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-        const user = userCredential.user;
-        
-        await setDoc(doc(db, 'utenti_master', user.uid), {
-          uid: user.uid,
-          nome,
-          cognome,
-          email,
-          ruolo: 'utente', // Ruolo di default, da modificare via admin
-          disabled: false
-        });
-
-      } catch (_e: unknown) {
-        const error = _e as { code?: string };
-        if (error.code === 'auth/email-already-in-use') {
-            setError("Questa email è già registrata.");
-        } else {
-            setError("Errore durante la registrazione. Riprova.");
-        }
-        throw error;
-      } finally {
-        setLoading(false);
-      }
-    }, []);
-    
     const logout = useCallback(async () => {
       setError(null);
+      setLoading(true); // Mostra un feedback durante il logout
       try {
         await signOut(auth);
+        // onAuthStateChanged gestirà la pulizia dello stato
       } catch (_e: unknown) {
         setError("Errore durante il logout.");
+        setLoading(false); // Assicura che il loading si fermi se il logout fallisce
       }
     }, []);
 
     const value = useMemo(() => ({
         user,
+        userRole,
         loading,
         error,
         login,
-        signup,
         logout,
         setError
-    }), [user, loading, error, login, signup, logout]);
+    }), [user, userRole, loading, error, login, logout]);
 
     return (
         <AuthContext.Provider value={value}>

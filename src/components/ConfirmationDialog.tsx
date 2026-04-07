@@ -1,45 +1,52 @@
+
 import React from 'react';
 import {
-    Button,
     Dialog,
     DialogActions,
     DialogContent,
     DialogContentText,
-    DialogTitle
+    DialogTitle,
+    Button
 } from '@mui/material';
 
 interface ConfirmationDialogProps {
     open: boolean;
-    onClose: () => void;
-    onConfirm: () => void;
     title: string;
-    description: React.ReactNode;
+    content: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    confirmText?: string;
+    cancelText?: string;
 }
 
-const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
-    open,
-    onClose,
-    onConfirm,
-    title,
-    description
+const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({ 
+    open, 
+    title, 
+    content, 
+    onConfirm, 
+    onCancel,
+    confirmText = 'Conferma',
+    cancelText = 'Annulla' 
 }) => {
     return (
         <Dialog
             open={open}
-            onClose={onClose}
-            aria-labelledby="confirm-dialog-title"
-            aria-describedby="confirm-dialog-description"
+            onClose={onCancel}
+            aria-labelledby="confirmation-dialog-title"
+            aria-describedby="confirmation-dialog-description"
         >
-            <DialogTitle id="confirm-dialog-title">{title}</DialogTitle>
+            <DialogTitle id="confirmation-dialog-title">{title}</DialogTitle>
             <DialogContent>
-                <DialogContentText id="confirm-dialog-description">
-                    {description}
+                <DialogContentText id="confirmation-dialog-description">
+                    {content}
                 </DialogContentText>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose}>Annulla</Button>
-                <Button onClick={onConfirm} color="error">
-                    Conferma
+                <Button onClick={onCancel} color="primary">
+                    {cancelText}
+                </Button>
+                <Button onClick={onConfirm} color="primary" autoFocus>
+                    {confirmText}
                 </Button>
             </DialogActions>
         </Dialog>

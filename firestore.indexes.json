@@ -1,1 +1,18 @@
-{}
+{
+  "indexes": [
+    {
+      "collectionGroup": "tecnici",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cognome",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nome",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ]
+}
