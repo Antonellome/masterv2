@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "riso-project-app",
+  "private_key_id": "8230bf29697f290c7e4cd442eb102d91602447a9",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDjVc3mIVu+sbQC\n1KexUG4p9YYJkQT1wNq1qr4LVrtyWHlRWzWI7n2mSldTAwlTx1+vtcsvNWZmCEuG\nkEtjyBECrdXZ9Jxd639FbHt0ttZA++7OnCjMaRloiHjeVMyNMSRWRphdjgdhKGTA\n+MWBC0yCmPG0NWVL3pFLJ7VNxT0P7or0eQ3PM6e/nC79M3jnGFaFdQglAiUmg4U0\nS+er1g0NdkRhFIe4p0ne0Tro/4U6B/4rs+WMuqlKDkX/NJEdVIrVJ/HXVCaqy/R4\nS3OGR0KxuryAy+t5AEa5aH2sqdN0SWmL1skgG2lM4gm7n9oNWDCcm7jRB3hyyr1B\nY6aWvJy5AgMBAAECggEAHvZqyrM0aa6OU+xewpmvx2s3TEpCIK6ZmzCcHbM8aICA\nVYJUske5OVLaveWl+ZEoCSh7efyN68upbbRtcDOpjXHbtInKWkhe1zfFQMo+OC+Y\nAO/n5p9R5JjhzXZDPd+5kT6gNe3IN4Vm45l+XOsLCqaGFQNIvqKbq17HJMZ+YJLd\nBIPeSFGAm7pG6Zur7NDwVzRS0vQkVOiqziGKu/NP18cyvsi/62hVrGl1Hy0LxFfV\nipY8uHrLx7lN25SDggcK3y+KG3b6DdVFALd/wYaidsVHX1CO/s6g0KUuUNbzkCwz\n4UTuvMhS4fVrBzMxNzBL5VC6F96acy9LhXspXkfvuQKBgQD1nbn7rK+TPp5uv/+2\nW0iKnzY0UB/AyqPpdBn8PMWD2tWQtEudXAj4i1RaE4vmBZf3ulCC4tdozCOQpcN5\nDeDp4yZUIsreCFZGQ740OXvcrFqjI2I5zfuGRVtuCifny8FcPzoTlISWc5OX9xka\nSHLWwDfnUaKPumaBn0z8J+9pCwKBgQDs8jmvTBvFp73VPH9CgONwHlMwjAI/Y3lJ\nEkSYKTK6jc0VeaI7+zaFgLZ7SZoVcUBN9ZxOkR8vq5og/V4TkhpoRD/fWq24sZ9M\n3WgfF2F0NMM2xhkJRpdRmKWre5SqduvblTUO+n50e5IZ/QUo5miPj70H6mivibUX\nTTuU4ZmTywKBgQCWY709HL9kqTLZHTa1sa75MgM+hNDseydiCnTevVczJQsfT0X9\nVB0qEiXUAaPndAVY6fviKIM858HfD6Bgvt64Vx1g5uzQhspMu636zDfLJr1YppG+\nUyFvVYhmGFHW3CvJD+2/j3CfrqTwp5v3O+UVGR0hxhqDZt7c/21j+A/fgQKBgQCF\nk6B1dICLkx7voWVUxnhxcocPbT6vIZL0YLoO1drlVJ9zJdkR23NHG+LD6iBVSj0o\nNfhiSmm8ZA9F3dA1VD5S3XbsoaAh6PCXUpIqRPIJot0SeecPVZ5kv5tV6xtKZjRc\n2+bHhOvZGviocf2AqzPzCuNUHQ/bNdTDSCT4r532tQKBgQDQxZ9pS2R3krp9l22V\nDpdulkbiLT0VZoxVmXZt40KnpdaUf0JFOk/X7HGXmq4guXGvyluIOW2rmRrSzfS8\nRK7JN6XaynILQsrlzOjdLsMtJ2i3ETQobJV3UlsT7jzE0Ap0uXZE06g3azsRXEG1\nkEy7lDkt9tp4w+wLdKuLeWyEcA==\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@riso-project-app.iam.gserviceaccount.com",
+  "client_id": "114820186595442442369",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40riso-project-app.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

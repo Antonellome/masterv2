@@ -35,7 +35,7 @@ L'architettura del sistema è stata finalizzata per privilegiare l'efficienza, l
 
 1.  **Limite a Due Cloud Functions (Regola Ferrea):**
     *   `manageAccess` (Callable): Per la sicurezza e la gestione degli accessi. **[COMPLETATA]**
-    *   `syncDataTrigger` (Trigger): Motore asincrono per **TUTTA** la logica di business pesante (es. Rapportini, Notifiche). **[DA IMPLEMENTARE]**
+    *   `syncDataTrigger` (Trigger): Motore asincrono per **TUTTA** la logica di business pesante (es. Rapportini, Notifiche). **[IN CORSO]**
 
 2.  **Lettura Diretta & Sistema "Sync Manifest":**
     *   **Lettura Diretta:** I dati "anagrafici" e "di stato" (es. `tecnici`, `anagrafiche`, `checkin_giornalieri`) vengono letti direttamente da Firestore tramite l'hook `useData`. Questo approccio è **corretto e definitivo**, garantendo bassi costi e latenza minima.
@@ -47,43 +47,29 @@ L'architettura del sistema è stata finalizzata per privilegiare l'efficienza, l
 
 - **Fase 0-4 [COMPLETATE]**
 
-- **Fase 5: Implementazione Funzionalità 'Presenze' (ex Check-in) [COMPLETATA]**
-  - **Obiettivo Raggiunto:** Creata una dashboard (`CheckinVisivo.tsx`) che mostra la dislocazione giornaliera della forza lavoro in tabelle separate per "Navi" e "Luoghi", rispettando l'architettura di lettura diretta.
+- **Fase 5: Implementazione Funzionalità 'Presenze' [COMPLETATA]**
+  - **Obiettivo Raggiunto:** Creata una dashboard (`CheckinVisivo.tsx`) che mostra la dislocazione giornaliera della forza lavoro, rispettando l'architettura di lettura diretta.
 
-- **Fase 6: Implementazione del "Sync Manifest" e `syncDataTrigger` [DA ESEGUIRE]**
-  - **Obiettivo:** Costruire il motore di business asincrono dell'applicazione per la gestione di Rapportini e Notifiche.
+- **Fase 6: Implementazione del "Sync Manifest" e `syncDataTrigger` per Notifiche [COMPLETATA]**
+  - **Obiettivo Raggiunto:** Costruito il motore di business asincrono per la gestione delle Notifiche, dal pannello admin fino al backend.
 
   - **Piano di Azione Dettagliato:**
 
-    1.  **Definire la Struttura del `sync_manifest` (Modello Dati):**
-        -   **Azione:** Modificare il file `src/models/definitions.ts`.
-        -   **Dettagli:** Aggiungere l'interfaccia `SyncManifest` per definire la struttura del documento.
-            ```typescript
-            export interface SyncManifest {
-              lastNotificationTimestamp: Timestamp;
-              rapportiniStateVersion: string; // Es. un hash o un timestamp
-            }
-            ```
+    1.  **Definire la Struttura del `sync_manifest` (Modello Dati): [COMPLETATO]**
+        -   **Stato:** L'interfaccia `SyncManifest` è già presente in `src/models/definitions.ts`.
 
-    2.  **Creazione del Documento Manifest in Firestore:**
-        -   **Azione:** Creazione manuale (una tantum) del documento nella console di Firebase.
-        -   **Dettagli:** Percorso: `system/sync_manifest`. Campi iniziali: `lastNotificationTimestamp` impostato a un timestamp attuale e `rapportiniStateVersion` a "initial".
+    2.  **Creazione del Documento Manifest in Firestore: [COMPLETATO (manuale)]**
+        -   **Stato:** Il documento `system/sync_manifest` è stato creato e verificato.
 
-    3.  **Implementare la Cloud Function `syncDataTrigger` (Scheletro Iniziale):**
-        -   **Azione:** Modificare il file `functions/src/index.ts`.
-        -   **Dettagli:** Creare lo scheletro della funzione trigger. Inizialmente si concentrerà sulla logica delle Notifiche.
+    3.  **Implementare la Cloud Function `syncDataTrigger` (Scheletro Iniziale): [COMPLETATO]**
+        -   **Stato:** Scheletro della funzione creato e integrato in `functions/src/index.ts`.
 
-    4.  **Sviluppare la Logica per le Notifiche (Primo Incarico del Trigger):**
-        -   **Flusso Dati:** L'App Master scrive un documento di notifica in una collezione "di servizio" (`notifiche_outbox`).
-        -   **Azione del Trigger:** La `syncDataTrigger` si attiva `onWrite` su `notifiche_outbox/{docId}`.
-        -   **Logica del Trigger:**
-            1.  Legge la notifica dall'outbox.
-            2.  Esegue la logica necessaria (validazione, arricchimento dati).
-            3.  Sposta la notifica processata nella collezione finale di lettura (`notifiche`).
-            4.  **Aggiorna il campo `lastNotificationTimestamp` nel documento `system/sync_manifest`.**
-            5.  Elimina il documento dalla `notifiche_outbox`.
+    4.  **Sviluppare la Logica per le Notifiche (Primo Incarico del Trigger): [COMPLETATO]**
+        -   **Stato:** La funzione `syncDataTrigger` ora processa le notifiche dalla `notifiche_outbox`, le sposta in `notifiche`, aggiorna il manifest e pulisce l'outbox. L'App Master (`InviaNotificaDialog.tsx`) è stata aggiornata per usare questo flusso.
 
-    5.  **Integrazione App Mobile (Lavoro Futuro):**
-        -   L'app dei tecnici verrà modificata per ascoltare **solo ed esclusivamente** il documento `system/sync_manifest`.
-        -   Quando rileverà un cambiamento nel `lastNotificationTimestamp`, eseguirà una query mirata per scaricare solo le notifiche più recenti di quel timestamp.
-
+- **Fase 7: Integrazione Notifiche su App Mobile (Lavoro Futuro) [DA ESEGUIRE]**
+    - **Obiettivo:** Far sì che l'app dei tecnici riceva e visualizzi le notifiche inviate dall'App Master.
+    - **Piano di Azione:**
+        1. L'app dei tecnici verrà modificata per ascoltare **solo ed esclusivamente** il documento `system/sync_manifest`.
+        2. Quando rileverà un cambiamento nel `lastNotificationUpdate`, eseguirà una query mirata per scaricare solo le notifiche più recenti di quel timestamp.
+        3. Implementare l'interfaccia utente per visualizzare le notifiche ricevute.

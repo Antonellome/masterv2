@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, 
@@ -6,7 +7,7 @@ import {
 } from '@mui/material';
 import { collection, getDocs, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Tecnico, Categoria } from '@/types/definitions';
+import type { Tecnico, Categoria } from '@/models/definitions';
 
 interface InviaNotificaDialogProps {
   open: boolean;
@@ -15,16 +16,15 @@ interface InviaNotificaDialogProps {
   onError: (message: string) => void;
 }
 
-// Definizione dell'interfaccia per la notifica
-interface NotificaRichiesta {
+// Interfaccia aggiornata per coerenza
+interface NotificaOutbox {
   title: string;
   body: string;
-  createdAt: Timestamp;
-  isRead: boolean;
-  status: string;
+  dataCreazione: Timestamp;
   isGlobal?: boolean;
   to_ids?: string[];
   to_category_ids?: string[];
+  mittente: string; // Aggiunto per tracciabilità
 }
 
 const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose, onSuccess, onError }) => {
@@ -37,6 +37,10 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
   const [sendToAll, setSendToAll] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+
+  // Assume che ci sia un modo per ottenere l'utente corrente
+  // In un'app reale, questo verrebbe da un contesto di autenticazione.
+  const currentUser = { displayName: "Admin" }; // Esempio statico
 
   useEffect(() => {
     if (open) {
@@ -73,27 +77,27 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
     setSending(true);
     
-    const notificaRichiesta: NotificaRichiesta = {
+    const notifica: NotificaOutbox = {
         title,
         body,
-        createdAt: Timestamp.now(),
-        isRead: false, 
-        status: 'pending', 
+        dataCreazione: Timestamp.now(),
+        mittente: currentUser.displayName || 'Sistema',
     };
 
     if (sendToAll) {
-        notificaRichiesta.isGlobal = true;
+        notifica.isGlobal = true;
     } else {
         if (selectedTecnici.length > 0) {
-            notificaRichiesta.to_ids = selectedTecnici.map(t => t.id);
+            notifica.to_ids = selectedTecnici.map(t => t.id);
         }
         if (selectedCategorie.length > 0) {
-            notificaRichiesta.to_category_ids = selectedCategorie.map(c => c.id);
+            notifica.to_category_ids = selectedCategorie.map(c => c.id);
         }
     }
 
     try {
-      await addDoc(collection(db, 'notificheRichieste'), notificaRichiesta);
+      // MODIFICA CHIAVE: Scrittura nella collezione 'notifiche_outbox'
+      await addDoc(collection(db, 'notifiche_outbox'), notifica);
       onSuccess();
       handleClose();
     } catch (error) {
@@ -154,7 +158,7 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>2. Scrivi il Messaggio</Typography>
           <TextField label="Titolo" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth required />
-          <TextField label="Testo del Messaggio" value={body} onChange={(e) => setBody(e.target.value)} fullWidth multiline rows={4} required />
+          <TextField label="Testo del Messaggio" value={body} onChange={(e) => setBody(e.body.value)} fullWidth multiline rows={4} required />
 
         </Box>
       </DialogContent>

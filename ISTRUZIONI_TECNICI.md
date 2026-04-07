@@ -1,123 +1,158 @@
 
-# Direttive di Implementazione per App Tecnici: Sistema di Conferma Lettura Notifiche
+# MANUALE OPERATIVO COMPLETO PER LO SVILUPPO DELL'APP TECNICI
+**Versione: 2.0 (Edizione Definitiva)**
 
 **A: Team di Sviluppo App Tecnici**
 
-**DA: Gemini, IA Architetto del Sistema**
+**DA: Gemini, IA Architetto del Sistema R.I.S.O.**
 
-**OGGETTO: Aggiornamento Critico del Modello Dati e Implementazione Funzionalità di Conferma Lettura**
+**OGGETTO: Specifiche Tecniche e Architetturali per l'Integrazione con l'Ecosistema Master**
 
 ---
 
-## 1. Contesto e Obiettivo
+## 1. Visione d'Insieme e Architettura Fondamentale
 
-L'attuale sistema di notifica è stato potenziato per consentire un tracciamento granulare e affidabile delle conferme di lettura. Il precedente flag booleano `isRead` è stato **deprecato e sostituito** con una struttura dati più potente.
+L'app per i tecnici è un componente cruciale dell'ecosistema R.I.S.O. e deve operare in perfetta simbiosi con l'applicazione Master. L'architettura si basa su principi di efficienza, robustezza e coerenza dei dati. I pattern fondamentali sono:
 
-L'obiettivo di questo documento è fornire le istruzioni **esatte e vincolanti** per aggiornare l'app dei tecnici al fine di garantire la compatibilità con la nuova architettura del backend.
+1.  **Accesso ai Dati tramite Cloud Function:** I dati anagrafici "statici" (clienti, navi, luoghi, etc.) non vengono letti direttamente da Firestore. Devono essere recuperati tramite una singola chiamata alla Cloud Function `getMasterData` per garantire efficienza e consistenza.
 
-## 2. Modifica Architetturale: Da `isRead` a `readBy`
+2.  **Flussi di Lavoro Asincroni tramite "Outbox":** Per tutte le operazioni che modificano lo stato del sistema (creazione di rapportini, invio di notifiche), l'app client non scrive mai direttamente nelle collezioni finali. L'app invia una "richiesta di elaborazione" in una collezione dedicata (`_outbox`). Sarà sempre una Cloud Function a validare, processare e archiviare il dato finale. Questo garantisce la coerenza e l'integrità dei dati, anche in scenari offline o con connettività instabile.
 
-Il modello dati del documento di notifica (`notificheRichieste`) è cambiato come segue:
+---
 
-*   **CAMPO DEPRECATO:** `isRead` (Boolean)
-*   **NUOVO CAMPO:** `readBy` (Map)
+## 2. Funzionalità Core da Implementare
 
-Il nuovo campo `readBy` è una mappa (o oggetto in Firestore) in cui:
-- Ogni **chiave** è l'**UID** dell'utente (tecnico) che ha letto la notifica.
-- Ogni **valore** è un oggetto contenente il **nome del tecnico** e il **Timestamp** della lettura.
+### 2.1. Creazione dei Rapportini di Intervento (Flusso Asincrono Mandatorio)
 
-### Struttura del campo `readBy`
+Questa è la funzionalità più critica. La creazione di un rapportino da parte di un tecnico **deve** seguire un flusso asincrono per garantire l'assegnazione di un numero progressivo univoco e ufficiale, gestito centralmente dal backend.
 
-'''json
-"readBy": {
-  "UID_TECNICO_1": {
-    "name": "Mario Rossi",
-    "readAt": "2024-07-31T10:00:00Z" // Esempio di Timestamp
-  },
-  "UID_TECNICO_2": {
-    "name": "Luca Verdi",
-    "readAt": "2024-07-31T10:05:12Z"
-  }
+#### **Il Perché del Flusso Asincrono**
+
+L'assegnazione del numero di rapportino (es. `2024-0123`) è un'operazione critica e transazionale. Per evitare numeri duplicati o mancanti (race conditions), questa logica è affidata **esclusivamente** a una Cloud Function sul backend. L'app del tecnico, quindi, non assegna un numero; **richiede** al backend di crearne uno e di formalizzare il rapportino.
+
+#### **Logica di Implementazione (Vincolante)**
+
+1.  **Costruzione dell'Oggetto:** L'app deve costruire un oggetto che rispetti l'interfaccia `RapportinoUnico` (definita sotto).
+    -   **ATTENZIONE:** Il campo `numero` nell'oggetto `RapportinoHeader` deve essere lasciato **vuoto o nullo**. Sarà il backend a compilarlo.
+2.  **Invio all'Outbox:** L'oggetto `RapportinoUnico` completo deve essere inviato come un nuovo documento nella collezione `rapportini_outbox`.
+3.  **Elaborazione Backend:** Una Cloud Function (invisibile all'app client) ascolterà questa outbox, prenderà in carico il rapportino, eseguirà la transazione per assegnargli un numero univoco, e lo salverà nella collezione finale `rapportini`. A quel punto, il rapportino diventerà visibile nell'App Master.
+
+#### Modello Dati `RapportinoUnico` (Vincolante)
+Il modello dati per l'oggetto da inviare a `rapportini_outbox` è il seguente:
+
+```typescript
+// Interfaccia ausiliaria
+export interface TecnicoLite {
+  id: string;
+  nome: string;
 }
-'''
 
-## 3. Implementazione Obbligatoria nell'App Tecnici
+export interface RapportinoHeader {
+  id: string; // ID generato localmente (es. UUID)
+  numero: string; // LASCIARE VUOTO. Verrà compilato dal backend.
+  dataIntervento: number; // Timestamp Unix
+  idCliente: string;
+  idDestinazione: string;
+  clienteNome: string;
+  destinazioneNome: string;
+  destinazioneIndirizzo: string;
+}
 
-È necessario modificare la logica che attualmente gestisce la marcatura di una notifica come "letta". La precedente funzione che impostava `isRead: true` deve essere **completamente sostituita** con la seguente logica.
+export interface Intervento {
+  id: string; // ID generato localmente
+  descrizione: string;
+  oreLavorate: number;
+  tecnico: TecnicoLite;
+  materialiUtilizzati?: { nome: string; quantita: number }[];
+}
 
-### Logica da Implementare
+export interface Firma {
+  nomeCliente: string;
+  firmaUrl: string; // URL a immagine firma (es. da `putDataUrl` di Firebase Storage)
+  timestamp: number;
+}
 
-All'apertura di una notifica o della schermata del centro notifiche, per ogni notifica non ancora letta dall'utente corrente, è necessario eseguire un'operazione di aggiornamento sul documento Firestore corrispondente.
+// Modello Principale da inviare all'outbox
+export interface RapportinoUnico {
+  header: RapportinoHeader;
+  interventi: Intervento[];
+  noteFinali?: string;
+  firma?: Firma;
+  stato: 'aperto' | 'chiuso' | 'annullato'; // L'app invia sempre come 'chiuso'
+  partecipanti: string[]; // Array degli UID dei tecnici
+}
+```
 
-L'aggiornamento non deve sovrascrivere la mappa `readBy`, ma **aggiungere una nuova entry** utilizzando la notazione a punti.
+### 2.2. Gestione delle Notifiche (Lettura e Conferma)
 
-### Snippet di Codice (React / TypeScript / Firebase v9+)
+L'app riceve notifiche dal sistema e deve confermarne la lettura.
 
-Questa funzione `markAsRead` è l'implementazione di riferimento. **DEVE** essere utilizzata per garantire il corretto funzionamento del sistema.
+-   **Ricezione:** L'app viene notificata di nuovi messaggi tramite una **notifica push (FCM)**. La notifica push conterrà l'ID del documento da leggere nella collezione `notifiche`.
+-   **Conferma di Lettura:** Quando il tecnico apre la notifica, l'app **deve** invocare la funzione `markNotificationAsRead` per aggiornare lo stato di lettura centralmente.
 
-'''typescript
+#### Funzione `markNotificationAsRead` (Implementazione di Riferimento)
+```typescript
 import { doc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { firestoreDb } from "./firebase-config"; // Assicurati di importare la tua istanza db
 
-/**
- * Marca una notifica come letta dall'utente attualmente autenticato.
- *
- * Questa funzione aggiorna il documento della notifica in Firestore, aggiungendo
- * l'UID, il nome e il timestamp di lettura dell'utente alla mappa `readBy`.
- * La funzione è sicura e non esegue l'aggiornamento se la notifica
- * è già stata segnata come letta da questo utente.
- *
- * @param notificationId L'ID del documento della notifica da aggiornare.
- */
 export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
     const auth = getAuth();
     const user = auth.currentUser;
+    if (!user) { throw new Error("Utente non autenticato"); }
 
-    if (!user) {
-        console.error("Nessun utente autenticato. Impossibile marcare la notifica come letta.");
+    const notificationRef = doc(firestoreDb, 'notifiche', notificationId);
+
+    // Per evitare scritture inutili, controlla se è già stato letto
+    const notificationSnap = await getDoc(notificationRef);
+    if (notificationSnap.exists() && notificationSnap.data().readBy?.[user.uid]) {
+        console.log("Notifica già segnata come letta.");
         return;
     }
 
-    const notificationRef = doc(firestoreDb, 'notificheRichieste', notificationId);
-
-    try {
-        const notificationSnap = await getDoc(notificationRef);
-        if (!notificationSnap.exists()) {
-            console.error("La notifica non esiste.");
-            return;
+    await updateDoc(notificationRef, {
+        [`readBy.${user.uid}`]: {
+            name: user.displayName || "Nome non disponibile",
+            readAt: serverTimestamp()
         }
-
-        const notificationData = notificationSnap.data();
-        const readByMap = notificationData.readBy || {};
-
-        // Controlla se l'utente ha già letto la notifica per evitare scritture inutili
-        if (readByMap[user.uid]) {
-            console.log(`Notifica ${notificationId} già letta dall'utente ${user.uid}.`);
-            return;
-        }
-
-        // Prepara il campo da aggiornare usando la notazione a punti
-        const fieldToUpdate = `readBy.${user.uid}`;
-        
-        await updateDoc(notificationRef, {
-            [fieldToUpdate]: {
-                name: user.displayName || "Nome non disponibile", // Usa il displayName dell'utente
-                readAt: serverTimestamp() // Usa il timestamp del server per coerenza
-            }
-        });
-
-        console.log(`Notifica ${notificationId} marcata come letta da ${user.displayName}.`);
-
-    } catch (error) {
-        console.error(`Errore durante l'aggiornamento della notifica ${notificationId}:`, error);
-        throw new Error("Impossibile completare l'operazione di lettura.");
-    }
+    });
 };
-'''
+```
 
-### Utilizzo Consigliato
+### 2.3. Gestione delle Presenze (Check-in)
 
-Si consiglia di invocare `markNotificationAsRead(notifica.id)` all'interno di un `useEffect` nella pagina del centro notifiche, iterando su tutte le notifiche non ancora lette dall'utente corrente.
+-   **Logica:** Al check-in, l'app deve creare un nuovo documento nella collezione `checkin_giornalieri`.
+-   **ID Documento:** `YYYY-MM-DD_UID_TECNICO` (previene check-in multipli).
+-   **Struttura Dati:** Seguire l'interfaccia `CheckinGiornaliero`.
 
-L'implementazione di questa funzionalità è **mandatoria** per l'allineamento con l'ecosistema R.I.S.O. aggiornato.
+```typescript
+interface CheckinGiornaliero {
+  id: string; // YYYY-MM-DD_UID_TECNICO
+  data: firebase.firestore.Timestamp;
+  idTecnico: string;
+  nomeTecnico: string;
+  idLuogo?: string; 
+  nomeLuogo?: string; 
+  idNave?: string;
+  nomeNave?: string;
+  tipo: 'luogo' | 'nave';
+}
+```
+
+---
+
+## 3. Interazione con il Backend e Collezioni
+
+-   **`getMasterData` (Cloud Function Callable):** Usare per recuperare tutti i dati anagrafici.
+
+-   **Collezioni di **SCRITTURA** (Richieste al backend):
+    -   `rapportini_outbox`: Per inviare nuovi rapportini da elaborare.
+    -   `checkin_giornalieri`: Per registrare le presenze.
+
+-   **Collezioni di **LETTURA/AGGIORNAMENTO**:
+    -   `tecnici`: Per leggere i profili.
+    -   `notifiche`: Per leggere i dettagli delle notifiche ricevute.
+    -   `notifiche/{docId}`: Per aggiornare la mappa `readBy`.
+
+---
+**Fine del Manuale Operativo.** Seguire scrupolosamente queste direttive è essenziale per la stabilità e la coerenza dell'intero ecosistema.
