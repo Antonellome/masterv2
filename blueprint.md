@@ -31,50 +31,74 @@
 
 ## Stato Attuale e Visione Architetturale
 
-L'applicazione è stabile. Il backend è stato rifattorizzato con successo su Cloud Functions v2. La sfida principale si è rivelata essere la gestione delle incoerenze dei dati tra Firebase Authentication e Firestore, unita a problemi di caching aggressivo durante il deploy.
+L'applicazione è stabile. Il backend è stato rifattorizzato con successo su Cloud Functions v2. Il frontend è stato unificato e la base di codice è stata messa in sicurezza.
 
-### Lezione Appresa: La Resilienza è la Chiave
+### Lezione Appresa: La Resilienza e la Sicurezza sono Fondamentali
 
-La battaglia con la funzione `manageAccess` ha insegnato una lezione fondamentale: **il codice deve essere resiliente alle incoerenze dei dati.**
+1.  **Resilienza dei Dati:** L'uso di `.set({ ... }, { merge: true })` è un **principio architetturale non negoziabile** per tutte le operazioni di aggiornamento, garantendo la creazione di documenti mancanti e prevenendo errori di sincronizzazione tra Auth e Firestore.
+2.  **Bonifica e Sicurezza del Repository:** È stata eseguita una profonda operazione di pulizia della cronologia Git per rimuovere credenziali di servizio esposte (`gcloud-service-key.json`). È stato implementato un file `.gitignore` robusto per prevenire future inclusioni di file sensibili e cartelle di build, garantendo la sicurezza e l'integrità del repository.
 
-- **Il Problema:** Un utente poteva esistere in Authentication ma non avere un documento corrispondente in Firestore. Il metodo `.update()` falliva, creando un errore di sincronizzazione.
-- **La Soluzione Definitiva:** L'uso di `.set({ abilitato: ... }, { merge: true })` è diventato un **principio architetturale non negoziabile** per tutte le operazioni di aggiornamento stato. Questo garantisce che se un documento non esiste, viene creato, sanando automaticamente l'incoerenza.
-- **La Strategia "Terra Bruciata":** Per superare i problemi di caching di Firebase, è stata adottata una procedura di deploy forzato che prevede la cancellazione manuale della cache di compilazione (`functions/lib`) prima di ogni deploy critico.
+### Visione Frontend Unificata [COMPLETATA]
 
-### Visione Frontend Unificata
-
-La separazione tra anagrafica e gestione accessi ha creato confusione. La nuova direzione è chiara:
-
-- **Pagina `Tecnici` Unificata:** Questa pagina diventerà il centro di controllo unico per tutto ciò che riguarda i tecnici. Conterrà sia i dati anagrafici sia lo switch per l'abilitazione all'app mobile. Non ci saranno più tab o sezioni separate.
+La pagina `Tecnici` è ora il centro di controllo unico per l'anagrafica e la gestione degli accessi, eliminando la precedente confusione.
 
 ---
 
 ## Reset Architetturale e Nuovo Vocabolario
-
-### Il Nuovo Vocabolario Unico
 
 | Termine | Descrizione | Collezione Firestore | Sezione nell'App Master |
 | :--- | :--- | :--- | :--- |
 | **Amministratore** | Utente ufficio con pieni poteri sull'App Master. | `amministratori` | `Impostazioni > Amministratori` |
 | **Tecnico** | Anagrafica dell'operaio con stato di accesso integrato. | `tecnici` | **`Tecnici` (Pagina Principale Unificata)** |
 
-## Architettura Applicativa
-
-### Flusso 1: Check-in Giornaliero
-- **Scopo:** Tracciamento rapido della posizione di inizio lavoro dei tecnici.
-- **App Master:** Pagina "Presenze" > tab "Check-in".
-- **Regola Dati (RISCHIO COSTI):** La policy TTL per l'auto-eliminazione dei documenti dopo 24 ore è fondamentale. **STATO: NON VERIFICABILE DAL CODICE.** Se non attiva, i costi aumenteranno.
+---
 
 ## Architettura Backend (Cloud Functions v2)
 
-### Funzioni di Gestione (Callable)
 - **`setAdminClaim`**: Imposta i custom claims. **Stato: COMPLETATO (v2)**.
 - **`manageAccess`**: Gestisce l'abilitazione/disabilitazione dei tecnici. **Stato: COMPLETATO (v2) e RESILIENTE**.
-- **`getMasterData`**: Recupera tutti i dati anagrafici in una sola chiamata. **Stato: COMPLETATO (v2) e OTTIMIZZATO PER I COSTI**.
+- **`getMasterData`**: Recupera tutti i dati anagrafici. **Stato: COMPLETATO (v2)**.
+
+---
+
+## Piano di Allineamento Architetturale Post-Fix [DA ESEGUIRE]
+
+**Premessa:** È stato creato un hook `useData` per risolvere un bug critico e centralizzare il fetching dei dati. Questo hook attualmente legge i dati direttamente da Firestore (lettura client-side). Il `chat_log.txt` prevede una gestione più centralizzata tramite Cloud Functions. Questo piano delinea i passi per completare l'allineamento.
+
+1.  **Anagrafiche e Tecnici (Gestione Centralizzata):**
+    *   **Problema:** Attualmente i dati di `tecnici` e `anagrafiche` vengono letti da ogni client. Sebbene efficiente per la lettura, la gestione delle modifiche (CRUD) è decentralizzata.
+    *   **Soluzione (`chat_log.txt`):** Centralizzare la logica di business. La funzione `getMasterData` (già v2) è il punto di partenza. Verrà estesa per diventare l'endpoint unico per recuperare **tutti** i dati anagrafici necessari, garantendo che il client riceva sempre un set di dati coerente e validato dal backend.
+    *   **Azione:** Modificare l'hook `useData` affinché, invece di fare snapshot diretti, invochi la Cloud Function `getMasterData` per ricevere un pacchetto di dati completo (`tecnici`, `anagrafiche`, etc.).
+
+2.  **Rapportini (Logica di Business su Backend):
+    *   **Problema:** La logica dei rapportini (es. calcoli, validazioni) è attualmente implicita nel frontend. L'hook `useData` legge i dati grezzi.
+    *   **Soluzione (`chat_log.txt`):** La Cloud Function `syncDataTrigger` (da implementare) deve diventare il motore della logica di business. Quando un rapportino viene creato o modificato (dall'app dei tecnici), questo trigger dovrebbe eseguire tutte le operazioni necessarie (es. aggiornare totali, inviare notifiche, validare dati) e salvare il risultato pulito in Firestore.
+    *   **Azione:** Implementare la funzione `syncDataTrigger`. L'app Master (tramite `useData`) continuerà a leggere la collezione `rapportini`, ma questa conterrà dati già processati e validati dal backend, non più dati grezzi.
+
+---
 
 ## Programma di Lavoro Dettagliato
 
-- **Fase 0-2 [COMPLETATE]**
-- **Fase 3: Refactoring Frontend MASTER [IN CORSO]** - Allineare l'interfaccia alla visione della Pagina `Tecnici` Unificata.
-- **Fase 4: Refactoring Frontend TECNICI**
+- **Fase 0-4 [COMPLETATE]**
+- **Fase 5: Implementazione Funzionalità 'Presenze' (ex Check-in) [IN CORSO]**
+  - **Obiettivo:** Creare una dashboard giornaliera per monitorare la dislocazione della forza lavoro.
+  - **Flusso Dati:** L'app dei tecnici invia un check-in selezionando da una lista predefinita.
+  - **Fonte della Verità:** La collezione `anagrafiche` è l'unica fonte per la lista di navi e luoghi. Questo garantisce coerenza dei dati.
+  - **Piano di Azione:
+**
+    1.  **Pagina `PresenzePage.tsx` (App Master):**
+        - **Layout:** Pagina divisa in due sezioni.
+        - **Header:** Mostra la data odierna.
+        - **Sezione 1 - Filtri:** Aggiungere un `TextField` per il nome del tecnico e due menu a tendina (`Select`) per `nave` e `luogo`, popolati dalla collezione `anagrafiche`.
+        - **Sezione 2 - Riepilogo Aggregato:** Creare una tabella che mostri, per ogni `nave/luogo`, il **conteggio** dei tecnici presenti.
 
+    2.  **Backend (Nuova Cloud Function):**
+        - **Creare la funzione `submitCheckIn` (Callable):** Riceverà l'ID dell'anagrafica (`anagraficaId`). Il nome del tecnico e l'ID verranno recuperati dal contesto di autenticazione per sicurezza.
+        - **Logica:** Salverà un nuovo documento nella collezione `checkins`.
+        - **Struttura Documento:** `{ tecnicoId: string, tecnicoNome: string, anagraficaId: string, anagraficaNome: string, timestamp: Timestamp }`. Il `anagraficaNome` verrà aggiunto per denormalizzazione, semplificando le letture.
+
+    3.  **Regole di Sicurezza e Dati:**
+        - **Firestore Rules:** Aggiornare `firestore.rules` per permettere la scrittura dei check-in solo ai diretti interessati e la lettura solo agli amministratori.
+        - **TTL (Time-To-Live):** Impostare una policy TTL sulla collezione `checkins` per l'**eliminazione automatica dei documenti dopo 24 ore**. Questo è FONDAMENTALE per la gestione dei costi.
+
+    4.  **Integrazione App Mobile (Fase Successiva):** L'app dei tecnici dovrà recuperare la lista dalla collezione `anagrafiche` per popolare un menu a tendina e, alla selezione, invocare la funzione `submitCheckIn` con l'ID scelto.
