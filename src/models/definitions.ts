@@ -45,3 +45,9 @@ export interface Anagrafica {
   nome: string;
   tipo: 'nave' | 'luogo'; 
 }
+
+// Definisce la struttura per il documento SyncManifest nella collezione 'system'
+export interface SyncManifest {
+    lastNotificationTimestamp: Timestamp;
+    rapportiniStateVersion: string;
+}
