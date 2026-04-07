@@ -1,0 +1,11 @@
+
+{
+    "fields": {
+        "lastNotificationTimestamp": {
+            "timestampValue": "2024-01-01T00:00:00Z"
+        },
+        "rapportiniStateVersion": {
+            "stringValue": "initial"
+        }
+    }
+}
