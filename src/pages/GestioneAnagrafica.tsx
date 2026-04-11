@@ -1,30 +1,53 @@
-import React, { useState } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Tecnico } from '@/models/definitions';
-import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
+import { useData } from '@/hooks/useData'; // CORREZIONE: Percorso di importazione corretto
+import { anagraficheConfig, AnagraficaConfig } from '@/config/anagrafiche.config';
 
 import { Box, Button, Typography, CircularProgress } from '@mui/material';
-import TecniciList from '@/components/Anagrafiche/TecniciList';
-import TecnicoForm from '@/components/Anagrafiche/TecnicoForm';
+import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
+import GenericForm from '@/components/Anagrafiche/GenericForm';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 
-interface GestioneAnagraficaProps {
-    collectionName: 'tecnici' | 'ditte' | 'categorieTecnici'; 
-    ItemComponent: React.FC<unknown>; 
-    FormComponent: React.FC<unknown>;
-    columns: unknown[];
-    label: string;
-}
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 
-const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ label }) => {
-    const { tecnici, ditte, categorie, loading, refreshData } = useData();
-    
+const GestioneAnagrafica: React.FC = () => {
+    const { anagraficaId } = useParams<{ anagraficaId: string }>();
+    const { refreshData } = useData();
+
+    const [config, setConfig] = useState<AnagraficaConfig | null>(null);
+    const [data, setData] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const [selectedItem, setSelectedItem] = useState<Tecnico | null>(null);
+    const [selectedItem, setSelectedItem] = useState<any | null>(null);
 
-    const handleOpenForm = (item: Tecnico | null = null) => {
+    useEffect(() => {
+        if (anagraficaId && anagraficheConfig[anagraficaId]) {
+            const currentConfig = anagraficheConfig[anagraficaId];
+            setConfig(currentConfig);
+            fetchData(currentConfig.collectionName);
+        } else {
+            setLoading(false);
+        }
+    }, [anagraficaId]);
+
+    const fetchData = useCallback(async (collectionName: string) => {
+        setLoading(true);
+        try {
+            const querySnapshot = await getDocs(collection(db, collectionName));
+            const items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setData(items);
+        } catch (error) {
+            console.error("Errore nel caricamento dati: ", error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const handleOpenForm = (item: any | null = null) => {
         setSelectedItem(item);
         setFormOpen(true);
     };
@@ -32,10 +55,13 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ label }) => {
     const handleCloseForm = () => {
         setSelectedItem(null);
         setFormOpen(false);
-        refreshData();
+        if (config) {
+            fetchData(config.collectionName);
+            refreshData([config.collectionName]); 
+        }
     };
 
-    const handleOpenConfirm = (item: Tecnico) => {
+    const handleOpenConfirm = (item: any) => {
         setSelectedItem(item);
         setConfirmOpen(true);
     };
@@ -45,12 +71,19 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ label }) => {
         setConfirmOpen(false);
     };
 
-    const handleSave = async (itemData: Partial<Tecnico>) => {
+    const handleSave = async (itemData: any) => {
+        if (!config) return;
+        
+        const dataToSave = {
+            ...itemData,
+            tipo: config.anagraficaType,
+        };
+
         try {
             if (selectedItem?.id) {
-                await updateDoc(doc(db, 'tecnici', selectedItem.id), itemData);
+                await updateDoc(doc(db, config.collectionName, selectedItem.id), dataToSave);
             } else {
-                await addDoc(collection(db, 'tecnici'), itemData);
+                await addDoc(collection(db, config.collectionName), dataToSave);
             }
             handleCloseForm();
         } catch (error) {
@@ -59,51 +92,81 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ label }) => {
     };
 
     const handleDelete = async () => {
-        if (selectedItem?.id) {
+        if (selectedItem?.id && config) {
             try {
-                await deleteDoc(doc(db, 'tecnici', selectedItem.id));
+                await deleteDoc(doc(db, config.collectionName, selectedItem.id));
                 handleCloseConfirm();
-                refreshData();
+                fetchData(config.collectionName);
+                refreshData([config.collectionName]);
             } catch (error) {
                 console.error("Errore nell'eliminazione: ", error);
             }
         }
     };
 
+    const columns = useMemo<GridColDef[]>(() => {
+        if (!config) return [];
+        return [
+            ...config.columns,
+            {
+                field: 'actions',
+                type: 'actions',
+                headerName: 'Azioni',
+                width: 100,
+                cellClassName: 'actions',
+                getActions: ({ row }) => [
+                    <GridActionsCellItem
+                        icon={<EditIcon />}
+                        label="Modifica"
+                        onClick={() => handleOpenForm(row)}
+                    />,
+                    <GridActionsCellItem
+                        icon={<DeleteIcon />}
+                        label="Elimina"
+                        onClick={() => handleOpenConfirm(row)}
+                    />,
+                ],
+            },
+        ];
+    }, [config, handleOpenForm, handleOpenConfirm]);
+
+    if (!anagraficaId) return <Typography>Seleziona un'anagrafica dal menu.</Typography>;
+    if (loading) return <CircularProgress />;
+    if (!config) return <Typography>Configurazione per "{anagraficaId}" non trovata.</Typography>;
+
     return (
-        <Box>
+        <Box sx={{ height: 'calc(100vh - 200px)', width: '100%' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h5">{label}</Typography>
-                <Button variant="contained" onClick={() => handleOpenForm()}>Aggiungi</Button>
+                <Typography variant="h5">{config.title}</Typography>
+                <Button variant="contained" onClick={() => handleOpenForm()}>Aggiungi Nuovo</Button>
             </Box>
 
-            {loading ? <CircularProgress /> : 
-                <TecniciList 
-                    tecnici={tecnici}
-                    ditte={ditte}
-                    categorie={categorie}
-                    onRowClick={handleOpenForm}
-                    onEdit={handleOpenForm} 
-                    onDelete={handleOpenConfirm}
-                />
-            }
-
-            <TecnicoForm
-                open={formOpen}
-                onClose={handleCloseForm}
-                onSave={handleSave}
-                tecnico={selectedItem}
-                categorie={categorie}
-                ditte={ditte}
+            <DataGrid
+                rows={data}
+                columns={columns}
                 loading={loading}
+                autoHeight
+                getRowHeight={() => 'auto'}
+                sx={{ backgroundColor: 'background.paper', '& .MuiDataGrid-cell': { py: 1 } }}
             />
+
+            {formOpen && (
+                <GenericForm
+                    open={formOpen}
+                    onClose={handleCloseForm}
+                    onSave={handleSave}
+                    item={selectedItem}
+                    fields={config.fields}
+                    title={`${(selectedItem ? 'Modifica' : 'Aggiungi')} ${config.title.replace('Gestione ', '').slice(0, -1)}`}
+                />
+            )}
 
             <ConfirmationDialog
                 open={confirmOpen}
                 onClose={handleCloseConfirm}
                 onConfirm={handleDelete}
                 title={`Conferma Eliminazione`}
-                description={`Sei sicuro di voler eliminare ${selectedItem?.nome}? L'azione è irreversibile.`}
+                description={`Sei sicuro di voler eliminare questo elemento? L'azione è irreversibile.`}
             />
         </Box>
     );

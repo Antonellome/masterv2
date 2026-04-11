@@ -1,4 +1,3 @@
-
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthProvider';
@@ -23,10 +22,11 @@ import SincronizzazionePage from '@/pages/SincronizzazionePage';
 import SettingsPage from '@/pages/SettingsPage';
 import RapportinoEdit from '@/pages/RapportinoEdit';
 import RapportinoPrintPage from '@/pages/RapportinoPrint';
+import RapportiniList from '@/pages/RapportiniList';
 
 // Pagine Anagrafiche Dinamiche
 import AnagrafichePage from '@/pages/AnagrafichePage';
-import AnagraficaDetailPage from '@/pages/AnagraficaDetailPage';
+import GestioneAnagrafica from '@/pages/GestioneAnagrafica';
 
 const AppFeatureProviders = ({ children }: { children: React.ReactNode }) => (
   <NotificationProvider>
@@ -63,8 +63,11 @@ const AppRoutes = () => {
           <Route path="/dashboard" element={<Navigate to="/" replace />} />
           <Route path="/anagrafiche" element={<AnagrafichePage />}>
             <Route index element={<Navigate to="clienti" replace />} />
-            <Route path=":anagraficaType" element={<AnagraficaDetailPage />} />
+            <Route path=":anagraficaId" element={<GestioneAnagrafica />} />
           </Route>
+          <Route path="/rapportini" element={<RapportiniList />} />
+          <Route path="/rapportino/edit/new" element={<RapportinoEdit />} />
+          <Route path="/rapportino/edit/:id" element={<RapportinoEdit />} />
           <Route path="/tecnici" element={<TecniciPage />} />
           <Route path="/documenti" element={<DocumentiPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
@@ -73,8 +76,6 @@ const AppRoutes = () => {
           <Route path="/scadenze" element={<ScadenzePage />} />
           <Route path="/sincronizzazione" element={<SincronizzazionePage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/rapportini/nuovo" element={<RapportinoEdit />} />
-          <Route path="/rapportini/:id" element={<RapportinoEdit />} />
         </Route>
       </Route>
 

@@ -1,37 +1,62 @@
-import { useState, useEffect, useRef } from 'react';
+
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Cliente, Tecnico, Rapportino } from '@/models/definitions';
+import type { Cliente, Tecnico, Rapportino, TipoGiornata, Nave, Luogo, Veicolo } from '@/models/definitions';
 
-export const useData = () => {
-  const [clienti, setClienti] = useState<Cliente[]>([]);
-  const [tecnici, setTecnici] = useState<Tecnico[]>([]);
-  const [rapportini, setRapportini] = useState<Rapportino[]>([]);
+// Definizione di un tipo per l'oggetto restituito dall'hook
+export interface UseDataReturn {
+  clienti: Cliente[];
+  tecnici: Tecnico[];
+  // Rimosso: rapportini: Rapportino[];
+  tipiGiornata: TipoGiornata[];
+  navi: Nave[];
+  luoghi: Luogo[];
+  veicoli: Veicolo[];
+  loading: boolean;
+  error: string | null;
+}
+
+// Collezione di anagrafiche da caricare
+const collectionsToLoad: { key: keyof Omit<UseDataReturn, 'loading' | 'error' | 'rapportini'>, name: string }[] = [
+  { key: 'clienti', name: 'clienti' },
+  { key: 'tecnici', name: 'tecnici' },
+  // Rimosso: { key: 'rapportini', name: 'rapportini' },
+  { key: 'tipiGiornata', name: 'tipiGiornata' },
+  { key: 'navi', name: 'navi' },
+  { key: 'luoghi', name: 'luoghi' },
+  { key: 'veicoli', name: 'veicoli' },
+];
+
+export const useData = (): UseDataReturn => {
+  const [data, setData] = useState<Omit<UseDataReturn, 'loading' | 'error'>>({
+    clienti: [],
+    tecnici: [],
+    rapportini: [], // Mantenuto per compatibilità strutturale, ma non più caricato qui
+    tipiGiornata: [],
+    navi: [],
+    luoghi: [],
+    veicoli: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Usiamo i ref per tenere traccia se ogni collezione ha completato il primo caricamento
-  const initialLoadStatus = useRef({
-    clienti: false,
-    tecnici: false,
-    rapportini: false,
-  });
+  const initialLoadStatus = useRef(
+    Object.fromEntries(collectionsToLoad.map(c => [c.key, false]))
+  );
 
   useEffect(() => {
-    const collections = [
-      { name: 'clienti', setter: setClienti, type: 'clienti' as const },
-      { name: 'tecnici', setter: setTecnici, type: 'tecnici' as const },
-      { name: 'rapportini', setter: setRapportini, type: 'rapportini' as const },
-    ];
-
-    const unsubs = collections.map(({ name, setter, type }) => {
+    const unsubs = collectionsToLoad.map(({ key, name }) => {
       return onSnapshot(collection(db, name), snapshot => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setter(data as any);
+        const collectionData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        // Se non è ancora stato segnato come caricato, fallo ora e controlla se tutti gli altri lo sono.
-        if (!initialLoadStatus.current[type]) {
-          initialLoadStatus.current[type] = true;
+        setData(prevData => ({
+          ...prevData,
+          [key]: collectionData as any,
+        }));
+        
+        if (!initialLoadStatus.current[key]) {
+          initialLoadStatus.current[key] = true;
           const allLoaded = Object.values(initialLoadStatus.current).every(Boolean);
           if (allLoaded) {
             setLoading(false);
@@ -41,9 +66,8 @@ export const useData = () => {
       }, err => {
         console.error(`Errore caricamento ${name}:`, err);
         setError(`Errore nel caricamento di ${name}.`);
-        // Anche in caso di errore su una collezione, sblocchiamo il caricamento per non bloccare l'app
-        if (!initialLoadStatus.current[type]) {
-            initialLoadStatus.current[type] = true;
+        if (!initialLoadStatus.current[key]) {
+            initialLoadStatus.current[key] = true;
             const allLoaded = Object.values(initialLoadStatus.current).every(Boolean);
             if (allLoaded) {
                 setLoading(false);
@@ -57,5 +81,9 @@ export const useData = () => {
     };
   }, []);
 
-  return { clienti, tecnici, rapportini, loading, error };
+  return useMemo(() => ({
+    ...(data as Omit<UseDataReturn, 'loading' | 'error'>),
+    loading,
+    error,
+  }), [data, loading, error]);
 };

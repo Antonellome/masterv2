@@ -7,8 +7,7 @@ import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
     Grid, TextField, Autocomplete, IconButton 
 } from '@mui/material';
-import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs, { Dayjs as DayjsType } from 'dayjs';
 import 'dayjs/locale/it';
 import AddIcon from '@mui/icons-material/Add';
@@ -105,7 +104,7 @@ const RapportiniList = () => {
         }));
         setRapportini(rapportiniList);
     } catch (error) {
-        console.error("Errore durante il fetch dei dati:", error);
+        console.error("Errore during il fetch dei dati:", error);
     } finally {
         setLoading(false);
     }
@@ -139,14 +138,13 @@ const RapportiniList = () => {
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
       <Box sx={{ p: { xs: 2, md: 3} }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
           <Typography variant="h4">Elenco Rapportini</Typography>
           <Button 
             variant="contained" 
             startIcon={<AddIcon />} 
-            onClick={() => navigate('/rapportini/nuovo')}
+            onClick={() => navigate('/rapportino/edit/new')}
           >
             Crea Rapportino
           </Button>
@@ -155,57 +153,21 @@ const RapportiniList = () => {
         <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
             <Typography variant="h6" gutterBottom>Filtri</Typography>
             <Grid container spacing={2} alignItems="center">
-                <Grid
-                  size={{
-                    xs: 12,
-                    sm: 6,
-                    md: 3
-                  }}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                <Grid
-                  size={{
-                    xs: 12,
-                    sm: 6,
-                    md: 3
-                  }}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                <Grid
-                  size={{
-                    xs: 12,
-                    sm: 6,
-                    md: 3
-                  }}>
+                <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={date => handleFilterChange('dataDa', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={date => handleFilterChange('dataA', date)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                <Grid item xs={12} sm={6} md={3}>
                     <Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, val) => handleFilterChange('tecnico', val)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                 <Grid
-                   size={{
-                     xs: 12,
-                     sm: 6,
-                     md: 3
-                   }}>
+                 <Grid item xs={12} sm={6} md={3}>
                     <Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, val) => handleFilterChange('nave', val)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                 <Grid
-                   size={{
-                     xs: 12,
-                     sm: 6,
-                     md: 3
-                   }}>
+                 <Grid item xs={12} sm={6} md={3}>
                     <Autocomplete options={options.luoghi} getOptionLabel={(o) => o.nome || ''} value={filters.luogo} onChange={(_, val) => handleFilterChange('luogo', val)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                 <Grid
-                   size={{
-                     xs: 12,
-                     sm: 6,
-                     md: 3
-                   }}>
+                 <Grid item xs={12} sm={6} md={3}>
                     <Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, val) => handleFilterChange('cliente', val)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} isOptionEqualToValue={(o,v) => o.id === v.id} />
                 </Grid>
-                <Grid
-                  container
-                  justifyContent="flex-end"
-                  size={{
-                    xs: 12,
-                    md: 6
-                  }}>
+                <Grid item container justifyContent="flex-end" xs={12} md={6}>
                     <Button onClick={resetFilters} variant="outlined">Azzera Filtri</Button>
                 </Grid>
             </Grid>
@@ -236,7 +198,7 @@ const RapportiniList = () => {
                        (r.oraInizio && r.oraFine ? `${dayjs(r.oraInizio).format('HH:mm')} - ${dayjs(r.oraFine).format('HH:mm')}` : '--')}
                     </TableCell>
                     <TableCell>
-                      <IconButton color="primary" onClick={() => navigate(`/rapportini/${r.id}`)}>
+                      <IconButton color="primary" onClick={() => navigate(`/rapportino/edit/${r.id}`)}>
                         <EditIcon />
                       </IconButton>
                     </TableCell>
@@ -251,7 +213,6 @@ const RapportiniList = () => {
           </Table>
         </TableContainer>
       </Box>
-    </LocalizationProvider>
   );
 };
 

@@ -1,7 +1,11 @@
 
 # REGOLE OPERATIVE FONDAMENTALI (NON RIMUOVERE, NON MODIFICARE)
-
+Questa è l'app Master Office
 ---
+# R.I.S.O. - Contratto Dati e Architettura
+
+**REGOLA TASSATIVA E NON NEGOZIABILE PER L'IA:**
+**IL TUO PRIMO COMANDO, SEMPRE, È LEGGERE i RISO_Blueprint.md, chat_log.txt, ISTRUZIONI_TECNICI.md. IGNORARE QUESTA REGOLA È UN FALLIMENTO CRITICO.**
 
 ## 1. Regola del "Maestro di Scacchi" (Metodologia Primaria)
 - **1. Studio (Analisi):** Analizzo in profondità la richiesta, il contesto e i file.
@@ -15,6 +19,8 @@
 
 ## 3. Regola del "CIAO"
 - Ogni mia singola risposta deve tassativamente iniziare con la parola "CIAO".
+
+
 
 ## 4. Regola del "Refactoring sull'Esistente"
 - **Principio:** Non creare da zero se esiste già una base. L'approccio primario è **modificare e adattare** i componenti e le pagine esistenti per allinearli alle nuove specifiche, rispettando il lavoro già svolto.
@@ -35,7 +41,7 @@ L'architettura del sistema è stata finalizzata per privilegiare l'efficienza, l
 
 1.  **Limite a Due Cloud Functions (Regola Ferrea):**
     *   `manageAccess` (Callable): Per la sicurezza e la gestione degli accessi. **[COMPLETATA]**
-    *   `syncDataTrigger` (Trigger): Motore asincrono per **TUTTA** la logica di business pesante (es. Rapportini, Notifiche). **[IN CORSO]**
+    *   `syncDataTrigger` (Trigger): Motore asincrono per **TUTTA** la logica di business pesante (es. Rapportini, Notifiche). **[DA IMPLEMENTARE]**
 
 2.  **Lettura Diretta & Sistema "Sync Manifest":**
     *   **Lettura Diretta:** I dati "anagrafici" e "di stato" (es. `tecnici`, `anagrafiche`, `checkin_giornalieri`) vengono letti direttamente da Firestore tramite l'hook `useData`. Questo approccio è **corretto e definitivo**, garantendo bassi costi e latenza minima.
@@ -45,31 +51,20 @@ L'architettura del sistema è stata finalizzata per privilegiare l'efficienza, l
 
 ## Programma di Lavoro Dettagliato
 
-- **Fase 0-4 [COMPLETATE]**
-
-- **Fase 5: Implementazione Funzionalità 'Presenze' [COMPLETATA]**
-  - **Obiettivo Raggiunto:** Creata una dashboard (`CheckinVisivo.tsx`) che mostra la dislocazione giornaliera della forza lavoro, rispettando l'architettura di lettura diretta.
-
-- **Fase 6: Implementazione del "Sync Manifest" e `syncDataTrigger` per Notifiche [COMPLETATA]**
-  - **Obiettivo Raggiunto:** Costruito il motore di business asincrono per la gestione delle Notifiche, dal pannello admin fino al backend.
-
-  - **Piano di Azione Dettagliato:**
-
-    1.  **Definire la Struttura del `sync_manifest` (Modello Dati): [COMPLETATO]**
-        -   **Stato:** L'interfaccia `SyncManifest` è già presente in `src/models/definitions.ts`.
-
-    2.  **Creazione del Documento Manifest in Firestore: [COMPLETATO (manuale)]**
-        -   **Stato:** Il documento `system/sync_manifest` è stato creato e verificato.
-
-    3.  **Implementare la Cloud Function `syncDataTrigger` (Scheletro Iniziale): [COMPLETATO]**
-        -   **Stato:** Scheletro della funzione creato e integrato in `functions/src/index.ts`.
-
-    4.  **Sviluppare la Logica per le Notifiche (Primo Incarico del Trigger): [COMPLETATO]**
-        -   **Stato:** La funzione `syncDataTrigger` ora processa le notifiche dalla `notifiche_outbox`, le sposta in `notifiche`, aggiorna il manifest e pulisce l'outbox. L'App Master (`InviaNotificaDialog.tsx`) è stata aggiornata per usare questo flusso.
+- **Fase 0-6 [COMPLETATE]**
 
 - **Fase 7: Integrazione Notifiche su App Mobile (Lavoro Futuro) [DA ESEGUIRE]**
     - **Obiettivo:** Far sì che l'app dei tecnici riceva e visualizzi le notifiche inviate dall'App Master.
-    - **Piano di Azione:**
-        1. L'app dei tecnici verrà modificata per ascoltare **solo ed esclusivamente** il documento `system/sync_manifest`.
-        2. Quando rileverà un cambiamento nel `lastNotificationUpdate`, eseguirà una query mirata per scaricare solo le notifiche più recenti di quel timestamp.
-        3. Implementare l'interfaccia utente per visualizzare le notifiche ricevute.
+
+- **Fase 8: Refactoring e Potenziamento Modulo Rapportini [IN PAUSA]**
+    - **Obiettivo:** Risolvere le criticità correnti e potenziare il modulo di gestione rapportini, allineandolo all'architettura definitiva e migliorando l'esperienza utente.
+
+- **Fase 9: Piano di Risanamento - Modulo Presenze [DA ESEGUIRE]**
+    - **Obiettivo:** Correggere gli errori architetturali e di implementazione commessi in precedenza nel modulo Presenze, allineando la UI e la logica al contratto dati corretto.
+
+- **Fase 10: Refactoring Modulo Gestione Accessi [IN CORSO - PRIORITÀ ATTUALE]**
+    - **Obiettivo:** Implementare l'interfaccia di gestione degli amministratori e candidati, allineandola alle specifiche di sicurezza e architetturali definite nel file `RISO_Blueprint.md`.
+    - **Task Specifico:** Rifattorizzare il componente `src/components/Settings/GestioneAmministratori.tsx` per:
+        1. Caricare e visualizzare gli utenti dalle collezioni `amministratori` e `utenti_master`.
+        2. Invocare la Cloud Function `manageAccess` per tutte le operazioni (creazione, promozione, revoca, eliminazione).
+        3. Implementare la regola di sicurezza che impedisce all'amministratore loggato di modificare il proprio stato.

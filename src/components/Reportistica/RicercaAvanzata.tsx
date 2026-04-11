@@ -1,52 +1,44 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, getDocs, doc, deleteDoc, Timestamp } from 'firebase/firestore';
+
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { doc, deleteDoc, Timestamp, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
 import {
     Paper, Typography, Button, CircularProgress, Box, TextField, Autocomplete, Grid,
-    Toolbar, IconButton, Tooltip, Snackbar, Alert
+    Snackbar, Alert, Chip
 } from '@mui/material';
-import { DataGrid, GridToolbar, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid';
+import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
-import { RapportinoSchema } from '@/models/rapportino.schema';
 import { formatOreLavoro } from '@/utils/formatters';
 import { useNavigate } from 'react-router-dom';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
-
-// Definizioni di tipo locali per evitare errori di importazione
-interface Tecnico { id: string; nome?: string; cognome?: string; }
-interface Cliente { id: string; nome?: string; }
-interface Nave { id: string; nome?: string; clienteId?: string; }
-interface Luogo { id: string; nome?: string; }
+import { useData } from '@/hooks/useData';
+import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
 
 dayjs.locale('it');
 
-// TIPO DATI PIATTO (da Blueprint)
+// --- INTERFACCE ---
 interface FlatRapportino {
     id: string;
     dataFormatted: string;
-    tecnicoNome: string;
+    tecniciNomi: string[];
+    tipoGiornataNome: string;
     naveNome: string;
+    luogoNome: string;
     clienteNome: string;
     ore: string;
     data: Date | null;
-    tecnicoId?: string;
-    naveId?: string;
-    clienteId?: string;
-}
-
-// ... (interfacce FilterOptions e FilterState rimangono invariate) ...
-interface FilterOptions {
-    tecnici: Tecnico[];
-    clienti: Cliente[];
-    navi: Nave[];
-    luoghi: Luogo[];
+    tecnicoIds: string[];
+    naveId?: string | null;
+    clienteId?: string | null;
+    tipoGiornataId?: string | null;
+    luogoId?: string | null;
 }
 
 interface FilterState {
@@ -55,249 +47,203 @@ interface FilterState {
     tecnico: Tecnico | null;
     nave: Nave | null;
     cliente: Cliente | null;
+    luogo: Luogo | null;
+    tipoGiornata: TipoGiornata | null;
 }
 
-// --- COMPONENTE BARRA AZIONI (Logica esterna alla griglia, da Blueprint) ---
-interface ActionsToolbarProps {
-    selectedId: string | null;
-    onEdit: () => void;
-    onPrint: () => void;
-    onDelete: () => void;
-}
-
-const ActionsToolbar: React.FC<ActionsToolbarProps> = ({ selectedId, onEdit, onPrint, onDelete }) => {
-    const hasSelection = !!selectedId;
-
-    return (
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 1, bgcolor: 'background.paper' }}>
-            <Toolbar variant="dense">
-                 <Typography sx={{ flex: '1 1 100%' }} variant="h6" component="div">
-                    Rapportini
-                </Typography>
-                <Tooltip title="Modifica Rapportino">
-                    <span>
-                        <IconButton onClick={onEdit} disabled={!hasSelection}>
-                            <EditIcon />
-                        </IconButton>
-                    </span>
-                </Tooltip>
-                <Tooltip title="Stampa Rapportino">
-                     <span>
-                        <IconButton onClick={onPrint} disabled={!hasSelection}>
-                            <PrintIcon />
-                        </IconButton>
-                    </span>
-                </Tooltip>
-                <Tooltip title="Elimina Rapportino">
-                     <span>
-                        <IconButton onClick={onDelete} disabled={!hasSelection} color="error">
-                            <DeleteIcon />
-                        </IconButton>
-                    </span>
-                </Tooltip>
-            </Toolbar>
-        </Box>
-    );
-};
-
-
+// --- COMPONENTE PRINCIPALE ---
 const RicercaAvanzata: React.FC = () => {
-    const [rapportini, setRapportini] = useState<FlatRapportino[]>([]);
-    const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
-    
-    // --- STATI ---
-    const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null });
-    const [options, setOptions] = useState<FilterOptions>({ tecnici: [], clienti: [], navi: [], luoghi: [] });
-    const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
-    
-    // Stati per la logica di eliminazione
-    const [isConfirmOpen, setConfirmOpen] = useState(false);
-    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const forceRefresh = () => setRefreshTrigger(t => t + 1);
+    const { tipiGiornata, tecnici, clienti, navi, luoghi, loading: anagraficheLoading, error: anagraficheError } = useData();
+    const [rapportini, setRapportini] = useState<Rapportino[]>([]);
+    const [rapportiniLoading, setRapportiniLoading] = useState(true);
+    const [rapportiniError, setRapportiniError] = useState<string | null>(null);
 
-    // --- CARICAMENTO E PRE-ELABORAZIONE DATI (da Blueprint) ---
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            // ... (stessa logica di fetch e creazione mappe) ...
-            const [rapportiniSnap, tecniciSnap, naviSnap, clientiSnap] = await Promise.all([
-                getDocs(collection(db, "rapportini")),
-                getDocs(collection(db, "tecnici")),
-                getDocs(collection(db, "navi")),
-                getDocs(collection(db, "clienti")),
-            ]);
+        const unsub = onSnapshot(collection(db, 'rapportini'), snapshot => {
+            const rapportiniData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rapportino));
+            setRapportini(rapportiniData);
+            setRapportiniLoading(false);
+        }, err => {
+            console.error("Errore caricamento rapportini:", err);
+            setRapportiniError("Errore nel caricamento dei rapportini.");
+            setRapportiniLoading(false);
+        });
 
-            const allTecnici = tecniciSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Tecnico));
-            const allNavi = naviSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Nave));
-            const allClienti = clientiSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Cliente));
+        return () => unsub();
+    }, []);
+
+
+    // Hooks chiamati sempre e nello stesso ordine
+    const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null });
+    const [rowToDelete, setRowToDelete] = useState<string | null>(null);
+    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
+
+    const flatRapportini = useMemo((): FlatRapportino[] => {
+        const tecniciMap = new Map(tecnici.map((t) => [t.id, t]));
+        const naviMap = new Map(navi.map((n) => [n.id, n]));
+        const clientiMap = new Map(clienti.map((c) => [c.id, c]));
+        const tipiGiornataMap = new Map(tipiGiornata.map((tg) => [tg.id, tg]));
+        const luoghiMap = new Map(luoghi.map((l) => [l.id, l]));
+
+        return rapportini.map((rapportino) => {
+            const tecnicoIds = rapportino.presenze || [];
+            const tecniciNomi = tecnicoIds.map(id => {
+                const t = tecniciMap.get(id);
+                return t ? `${t.cognome} ${t.nome}`.trim() : `ID Sconosciuto: ${id}`;
+            });
+
+            const tipoGiornataObj = rapportino.tipoGiornataId ? tipiGiornataMap.get(rapportino.tipoGiornataId) : null;
+            const tipoGiornataNome = tipoGiornataObj?.nome || "N/D";
             
-            setOptions({
-                 tecnici: [...allTecnici].sort((a, b) => (a.cognome || "").localeCompare(b.cognome || "")),
-                 clienti: [...allClienti].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")),
-                 navi: [...allNavi].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")),
-                 luoghi: []
-            });
+            const naveObj = rapportino.naveId ? naviMap.get(rapportino.naveId) : null;
+            const naveNome = naveObj?.nome || "N/D";
 
-            const tecniciMap = new Map(allTecnici.map((t) => [t.id, t]));
-            const naviMap = new Map(allNavi.map((n) => [n.id, n]));
-            const clientiMap = new Map(allClienti.map((c) => [c.id, c]));
+            const luogoObj = rapportino.luogoId ? luoghiMap.get(rapportino.luogoId) : null;
+            const luogoNome = luogoObj?.nome || "N/D";
+            
+            const clienteId = naveObj?.clienteId;
+            const clienteObj = clienteId ? clientiMap.get(clienteId) : null;
+            const clienteNome = clienteObj?.nome || "N/D";
+            
+            const ore = formatOreLavoro(rapportino.oreLavoro ?? 0);
 
-            const flatRapportiniList: FlatRapportino[] = rapportiniSnap.docs.map((doc) => {
-                 const data = doc.data() as RapportinoSchema;
-                    
-                const tecnico = data.tecnicoId ? tecniciMap.get(data.tecnicoId) : null;
-                const nave = data.naveId ? naviMap.get(data.naveId) : null;
-                const cliente = (nave?.clienteId ? clientiMap.get(nave.clienteId) : null) || (data.clienteId ? clientiMap.get(data.clienteId) : null);
+            return {
+                id: rapportino.id,
+                dataFormatted: rapportino.data instanceof Timestamp ? dayjs(rapportino.data.toDate()).format("DD/MM/YYYY") : "Data non valida",
+                tecniciNomi,
+                tipoGiornataNome,
+                naveNome,
+                luogoNome,
+                clienteNome,
+                ore,
+                data: rapportino.data instanceof Timestamp ? rapportino.data.toDate() : null,
+                tecnicoIds,
+                naveId: rapportino.naveId,
+                clienteId: clienteId,
+                tipoGiornataId: rapportino.tipoGiornataId,
+                luogoId: rapportino.luogoId,
+            };
+        });
+    }, [rapportini, tipiGiornata, tecnici, navi, clienti, luoghi]);
 
-                const nomeTecnico = tecnico ? `${tecnico.cognome} ${tecnico.nome}`.trim() : (data.tecnicoId ? "Tecnico Cancellato" : "--");
-                const totalOre = data.oreLavorate || 0;
+    const filteredRapportini = useMemo(() => {
+        return flatRapportini.filter(r => {
+           if (filters.dataDa && (!r.data || dayjs(r.data).isBefore(filters.dataDa, 'day'))) return false;
+           if (filters.dataA && (!r.data || dayjs(r.data).isAfter(filters.dataA, 'day'))) return false;
+           if (filters.tecnico && !r.tecnicoIds.includes(filters.tecnico.id)) return false;
+           if (filters.nave && r.naveId !== filters.nave.id) return false;
+           if (filters.cliente && r.clienteId !== filters.cliente.id) return false;
+           if (filters.tipoGiornata && r.tipoGiornataId !== filters.tipoGiornata.id) return false;
+           if (filters.luogo && r.luogoId !== filters.luogo.id) return false;
+           return true;
+       });
+   }, [flatRapportini, filters]);
 
-                return {
-                    id: doc.id,
-                    dataFormatted: data.data instanceof Timestamp ? dayjs(data.data.toDate()).format("DD/MM/YYYY") : "--",
-                    tecnicoNome: nomeTecnico,
-                    naveNome: nave?.nome || "--",
-                    clienteNome: cliente?.nome || "--",
-                    ore: formatOreLavoro(totalOre),
-                    data: data.data instanceof Timestamp ? data.data.toDate() : null,
-                    tecnicoId: tecnico?.id,
-                    naveId: nave?.id,
-                    clienteId: cliente?.id,
-                };
-            });
-            setRapportini(flatRapportiniList);
-            setLoading(false);
-        };
-        fetchData().catch(console.error);
-    }, [refreshTrigger]);
-
-    // --- GESTIONE AZIONI --- 
-    const selectedId = selectionModel.length > 0 ? (selectionModel[0] as string) : null;
-
-    const handleEdit = () => {
-        if (selectedId) navigate(`/rapportini/${selectedId}`);
-    };
-    const handlePrint = () => {
-        if (selectedId) window.open(`/rapportini/stampa/${selectedId}`, '_blank');
-    };
-    const handleDeleteRequest = () => {
-        if (selectedId) setConfirmOpen(true);
-    };
+    const handleDeleteRequest = useCallback((id: string) => setRowToDelete(id), []);
     const handleConfirmDelete = async () => {
-        if (!selectedId) return;
+        if (!rowToDelete) return;
         try {
-            await deleteDoc(doc(db, 'rapportini', selectedId));
-            setSnackbar({ open: true, message: 'Rapportino eliminato con successo!', severity: 'success' });
-            forceRefresh(); // Ricarica i dati
+            await deleteDoc(doc(db, 'rapportini', rowToDelete));
+            setSnackbar({ open: true, message: 'Rapportino eliminato!', severity: 'success' });
         } catch (error) {
             console.error("Errore eliminazione", error);
-            setSnackbar({ open: true, message: 'Errore durante l\'eliminazione.', severity: 'error' });
+            setSnackbar({ open: true, message: "Errore durante l'eliminazione.", severity: 'error' });
         }
-        setConfirmOpen(false);
+        setRowToDelete(null);
     };
-
-    // --- GESTIONE FILTRI E DATI FILTRATI ---
+    const handleRowClick = (params: GridRowParams) => {
+        // Ignora i click sulla colonna delle azioni per non interferire con i pulsanti
+        if (params.field === 'actions') {
+            return;
+        }
+        navigate(`/rapportini/${params.id}`);
+    };
+    const handleEdit = (id: string) => navigate(`/rapportini/${id}`);
+    const handlePrint = (id: string) => window.open(`/rapportini/stampa/${id}`, '_blank');
     const handleFilterChange = useCallback(<K extends keyof FilterState>(filterName: K, value: FilterState[K]) => {
         setFilters(prev => ({ ...prev, [filterName]: value }));
     }, []);
-    const resetFilters = useCallback(() => {
-        setFilters({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null });
-    }, []);
+    const resetFilters = useCallback(() => setFilters({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null }), []);
 
-    const filteredRapportini = useMemo(() => {
-         return rapportini.filter(r => {
-            if (filters.dataDa && (!r.data || dayjs(r.data).isBefore(filters.dataDa, 'day'))) return false;
-            if (filters.dataA && (!r.data || dayjs(r.data).isAfter(filters.dataA, 'day'))) return false;
-            if (filters.tecnico && r.tecnicoId !== filters.tecnico.id) return false;
-            if (filters.nave && r.naveId !== filters.nave.id) return false;
-            if (filters.cliente && r.clienteId !== filters.cliente.id) return false;
-            return true;
-        });
-    }, [rapportini, filters]);
-
-    // --- COLONNE STUPIDE (da Blueprint) ---
-    const columns: GridColDef<FlatRapportino>[] = [
-        { field: 'dataFormatted', headerName: 'Data', width: 110 },
-        { field: 'tecnicoNome', headerName: 'Tecnico', flex: 1.5 },
+    const columns: GridColDef<FlatRapportino>[] = useMemo(() => [
+        { field: 'dataFormatted', headerName: 'Data', width: 110, sortable: true },
+        { 
+            field: 'tecniciNomi', 
+            headerName: 'Tecnici', 
+            flex: 1.5, 
+            renderCell: params => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {Array.isArray(params.value) && params.value.map((nome: string, index: number) => <Chip key={index} label={nome} size="small" variant="outlined" />)}
+                </Box>
+            ) 
+        },
+        { field: 'tipoGiornataNome', headerName: 'Tipo Giornata', flex: 1 },
         { field: 'naveNome', headerName: 'Nave', flex: 1 },
+        { field: 'luogoNome', headerName: 'Luogo', flex: 1 },
         { field: 'clienteNome', headerName: 'Cliente', flex: 1 },
-        { field: 'ore', headerName: 'Ore Totali', width: 120, align: 'right', headerAlign: 'right' },
-    ];
-  
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><CircularProgress /></Box>;
-
-    // --- RENDER ---
-    return (
-        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-            <Box sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', p: { xs: 1, sm: 2 }, gap: 2 }}>
+        { field: 'ore', headerName: 'Tot. Ore', width: 100, align: 'right', headerAlign: 'right' },
+        {
+            field: 'actions',
+            type: 'actions',
+            headerName: 'Azioni',
+            width: 100,
+            getActions: ({ id }) => [
+                <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={(e) => { e.stopPropagation(); handleEdit(id as string);}} />,
+                <GridActionsCellItem icon={<PrintIcon />} label="Stampa" onClick={(e) => { e.stopPropagation(); handlePrint(id as string);}} />,
+                <GridActionsCellItem icon={<DeleteIcon color="error" />} label="Elimina" onClick={(e) => { e.stopPropagation(); handleDeleteRequest(id as string);}} />,
+            ],
+        },
+    ], [handleEdit, handlePrint, handleDeleteRequest]);
+    
+    const renderContent = () => {
+        if (anagraficheLoading || rapportiniLoading) {
+            return <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><CircularProgress /></Box>;
+        }
+        if (anagraficheError || rapportiniError) {
+            return <Alert severity="error">{anagraficheError || rapportiniError}</Alert>;
+        }
+        return (
+            <>
                 <Paper elevation={2} sx={{ p: 2, flexShrink: 0 }}>
-                    <Typography variant="h6" component="h2" sx={{ mb: 2 }}>Filtri di Ricerca</Typography>
+                    <Typography variant="h6" sx={{ mb: 2 }}>Filtri Ricerca</Typography>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 3
-                            }}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 3
-                            }}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 3
-                            }}><Autocomplete options={options.tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 3
-                            }}><Autocomplete options={options.navi} getOptionLabel={(o) => o.nome || ''} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 3
-                            }}><Autocomplete options={options.clienti} getOptionLabel={(o) => o.nome || ''} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
-                        <Grid
-                            sx={{ display: 'flex', alignItems: 'center' }}
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 3
-                            }}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
+                        <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={tecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`.trim()} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={navi} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={luoghi} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={clienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={tipiGiornata} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera</Button></Grid>
                     </Grid>
                 </Paper>
 
                 <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-                     <ActionsToolbar 
-                        selectedId={selectedId}
-                        onEdit={handleEdit}
-                        onPrint={handlePrint}
-                        onDelete={handleDeleteRequest}
-                    />
                     <DataGrid
                         rows={filteredRapportini}
                         columns={columns}
+                        loading={anagraficheLoading || rapportiniLoading}
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
                         slots={{ toolbar: GridToolbar }}
                         slotProps={{ toolbar: { showQuickFilter: true } }}
                         initialState={{ pagination: { paginationModel: { pageSize: 25 } }, sorting: { sortModel: [{ field: 'dataFormatted', sort: 'desc' }] } }}
                         pageSizeOptions={[10, 25, 50, 100]}
-                        rowSelectionModel={selectionModel}
-                        onRowSelectionModelChange={setSelectionModel}
                         density="compact"
+                        onRowClick={handleRowClick}
+                        sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }} 
                     />
                 </Paper>
+            </>
+        );
+    };
 
-                 <ConfirmationDialog open={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmDelete} title="Conferma Eliminazione" description={`Sei sicuro di voler eliminare il rapportino selezionato? L'azione è irreversibile.`} />
-                 {snackbar && <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(null)}><Alert onClose={() => setSnackbar(null)} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>}
+    return (
+        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
+            <Box sx={{ height: 'calc(100vh - 120px)', width: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1, sm: 2 }, gap: 2 }}>
+                {renderContent()}
+                <ConfirmationDialog open={!!rowToDelete} onClose={() => setRowToDelete(null)} onConfirm={handleConfirmDelete} title="Conferma Eliminazione" description={"Sei sicuro di voler eliminare il rapportino selezionato? L'azione è irreversibile."} />
+                {snackbar && <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(null)}><Alert onClose={() => setSnackbar(null)} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>}
             </Box>
         </LocalizationProvider>
     );

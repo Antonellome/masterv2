@@ -3,9 +3,9 @@ import React, { useMemo, useState } from 'react';
 import { Box, Typography, CircularProgress, Alert, Card, CardContent, Tabs, Tab, List, ListItem, ListItemText, ListItemAvatar, Avatar, Select, MenuItem, FormControl, InputLabel, SelectChangeEvent, Stack } from '@mui/material';
 import Grid from '@mui/material/Grid'; // Importazione esplicita per chiarezza
 import { useFirestoreData } from '@/hooks/useFirestoreData';
-import { collection, Query } from 'firebase/firestore';
+import { collection, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Rapportino, Tecnico, TipoGiornata, Nave, Luogo } from '../models/definitions';
+import type { Rapportino, Tecnico, TipoGiornata, Nave, Luogo, Checkin } from '../models/definitions';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';
 import isBetween from 'dayjs/plugin/isBetween';
@@ -63,22 +63,29 @@ const DashboardPage = () => {
     const [selectedMonth, setSelectedMonth] = useState(dayjs().month());
     const [selectedYear, setSelectedYear] = useState(dayjs().year());
 
-    const rapportiniQuery = useMemo(() => collection(db, 'rapportini') as Query<Rapportino>, []);
-    const tecniciQuery = useMemo(() => collection(db, 'tecnici') as Query<Tecnico>, []);
-    const tipiGiornataQuery = useMemo(() => collection(db, 'tipiGiornata') as Query<TipoGiornata>, []);
-    const naviQuery = useMemo(() => collection(db, 'navi') as Query<Nave>, []);
-    const luoghiQuery = useMemo(() => collection(db, 'luoghi') as Query<Luogo>, []);
+    // Hook per i dati principali
+    const { data: rapportini, loading: lRapportini } = useFirestoreData<Rapportino>(collection(db, 'rapportini'));
+    const { data: tecnici, loading: lTecnici } = useFirestoreData<Tecnico>(collection(db, 'tecnici'));
+    const { data: tipiGiornata, loading: lTipiGiornata } = useFirestoreData<TipoGiornata>(collection(db, 'tipiGiornata'));
+    const { data: navi, loading: lNavi } = useFirestoreData<Nave>(collection(db, 'navi'));
+    const { data: luoghi, loading: lLuoghi } = useFirestoreData<Luogo>(collection(db, 'luoghi'));
+    
+    // NUOVO: Hook per i check-in di oggi
+    const checkinsQuery = useMemo(() => {
+        const startOfDay = Timestamp.fromDate(dayjs().startOf('day').toDate());
+        const endOfDay = Timestamp.fromDate(dayjs().endOf('day').toDate());
+        return query(
+            collection(db, 'checkin_giornalieri'), 
+            where('data', '>=', startOfDay),
+            where('data', '<=', endOfDay)
+        );
+    }, []);
+    const { data: checkinsOggi, loading: lCheckins } = useFirestoreData<Checkin>(checkinsQuery);
 
-    const { data: rapportini, loading: lRapportini } = useFirestoreData<Rapportino>(rapportiniQuery);
-    const { data: tecnici, loading: lTecnici } = useFirestoreData<Tecnico>(tecniciQuery);
-    const { data: tipiGiornata, loading: lTipiGiornata } = useFirestoreData<TipoGiornata>(tipiGiornataQuery);
-    const { data: navi, loading: lNavi } = useFirestoreData<Nave>(naviQuery);
-    const { data: luoghi, loading: lLuoghi } = useFirestoreData<Luogo>(luoghiQuery);
-
-    const isLoading = lRapportini || lTecnici || lTipiGiornata || lNavi || lLuoghi;
+    const isLoading = lRapportini || lTecnici || lTipiGiornata || lNavi || lLuoghi || lCheckins;
 
     const memoizedData = useMemo(() => {
-        if (isLoading || !rapportini || !tecnici || !tipiGiornata || !navi || !luoghi) return null;
+        if (isLoading || !rapportini || !tecnici || !tipiGiornata || !navi || !luoghi || !checkinsOggi) return null;
 
         const today = dayjs();
         const thirtyDaysAgo = today.subtract(30, 'day');
@@ -105,9 +112,12 @@ const DashboardPage = () => {
             .sort((a, b) => b.date.valueOf() - a.date.valueOf()).slice(0, 5)
             .map(r => ({ id: r.id, tecnico: tecniciMap.get(r.tecnicoId) || 'N/A', data: r.date.format('DD/MM/YYYY'), destinazione: r.naveId ? naviMap.get(r.naveId) : (r.luogoId ? luoghiMap.get(r.luogoId) : 'Nessuna'), descrizione: r.breveDescrizione }));
 
-        const presenzeOggi = new Set<string>();
-        rapportiniWithDate.filter(r => r.date.isSame(today, 'day')).forEach(r => {
-            if (r.tecnicoId) presenzeOggi.add(tecniciMap.get(r.tecnicoId) || 'Sconosciuto');
+        // LOGICA CORRETTA: Usa i check-in per le presenze di oggi
+        const presenzeOggi = new Map<string, string>(); // Mappa per garantire l'unicità del tecnico
+        checkinsOggi.forEach(c => {
+            if (!presenzeOggi.has(c.tecnicoId)) {
+                presenzeOggi.set(c.tecnicoId, `${c.tecnicoNome} @ ${c.anagraficaNome}`);
+            }
         });
 
         const activeTechnicians = tecnici.filter(t => t.attivo).length;
@@ -133,10 +143,10 @@ const DashboardPage = () => {
             rapportiniCreati30: rapportiniUltimi30Giorni.length,
             activityLast7Days,
             attivitaRecenti,
-            presenzeOggi: Array.from(presenzeOggi),
+            presenzeOggi: Array.from(presenzeOggi.values()), // Converte i valori della mappa in un array
             calendarData: { days: calendarDays, offset: (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1) }, // Offset corretto per la settimana che inizia di lunedì
         };
-    }, [isLoading, rapportini, tecnici, tipiGiornata, navi, luoghi, selectedMonth, selectedYear]);
+    }, [isLoading, rapportini, tecnici, tipiGiornata, navi, luoghi, checkinsOggi, selectedMonth, selectedYear]);
 
     if (isLoading) return <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>;
     if (!memoizedData) return <Box sx={{ p: 3 }}><Alert severity="warning">Dati non sufficienti per la dashboard. Verifica le anagrafiche.</Alert></Box>;
@@ -192,11 +202,11 @@ const DashboardPage = () => {
 
             <CustomTabPanel value={tabValue} index={2}>
                 <Card><CardContent>
-                    <Typography variant="h6" gutterBottom>Tecnici con attività registrata oggi</Typography>
+                    <Typography variant="h6" gutterBottom>Tecnici con check-in di oggi</Typography>
                     <List>
                         {presenzeOggi.length > 0 ? presenzeOggi.map((nome, index) => (
                             <ListItem key={index}><ListItemText primary={nome} /></ListItem>
-                        )) : <Typography sx={{ p: 2 }}>Nessuna presenza registrata per oggi.</Typography>}
+                        )) : <Typography sx={{ p: 2 }}>Nessun check-in registrato per oggi.</Typography>}
                     </List>
                 </CardContent></Card>
             </CustomTabPanel>

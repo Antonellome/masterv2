@@ -39,7 +39,7 @@ export interface Checkin {
   timestamp: Timestamp;
 }
 
-// Definisce la struttura per il documento Anagrafica nella collezione 'anagrafiche'
+// Definisce la struttura per il documento Anagrafica (unificato per navi e luoghi)
 export interface Anagrafica {
   id: string;
   nome: string;
@@ -50,4 +50,21 @@ export interface Anagrafica {
 export interface SyncManifest {
     lastNotificationTimestamp: Timestamp;
     rapportiniStateVersion: string;
+}
+
+// Definisce la struttura dei dati di check-in arricchiti per l'UI
+export interface CheckinData {
+    id: string;
+    data: Timestamp;
+    tecnicoId: string;
+    anagraficaId: string;
+    tecnico?: Tecnico;
+    anagrafica?: Anagrafica;
+}
+
+// Definisce la struttura per l'oggetto filtri usato nella sezione Checkin
+export interface FiltriCheckin {
+  ricercaTecnico: string;
+  luoghiSelezionati: string[];
+  naviSelezionate: string[];
 }
