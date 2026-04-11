@@ -1,9 +1,10 @@
+
 # R.I.S.O. - Contratto Dati e Architettura
 
 **REGOLA TASSATIVA E NON NEGOZIABILE PER L'IA:**
 **IL TUO PRIMO COMANDO, SEMPRE, È LEGGERE QUESTO FILE. IGNORARE QUESTA REGOLA È UN FALLIMENTO CRITICO.**
 
-**Versione:** 3.5
+**Versione:** 3.6
 **Ultimo Aggiornamento:** 24 Maggio 2024
 **Scopo:** Questo documento è la **Fonte di Verità Assoluta** e il **contratto dati** ufficiale tra l'App Tecnici e l'App Master Office.
 
@@ -86,6 +87,9 @@
         - **Da `admin` a `candidato`:** Disattivando lo switch, viene chiamata l'azione `demoteToCandidate`. La funzione sposta il documento da `amministratori` a `utenti_master` e imposta il custom claim `admin: false`.
     - **CANCELLAZIONE:** Un pulsante "Elimina" chiama l'azione `deleteUser`, che rimuove il documento dalla sua collezione (`amministratori` or `utenti_master`) e disabilita l'utente in Firebase Auth per sicurezza.
 - **Regola di Sicurezza Fondamentale:** Sia la Cloud Function che l'interfaccia utente implementano un controllo critico: **un amministratore non può revocare i propri privilegi né eliminare il proprio account**. Lo `Switch` e il pulsante "Elimina" sono disabilitati sulla riga dell'utente attualmente loggato.
+- **Funzionalità Aggiuntive e Correzioni (Maggio 2024):**
+    - **Invio Email di Reset Password:** La funzionalità è stata implementata **lato client** utilizzando l'SDK Firebase Auth (`sendPasswordResetEmail`), correggendo un precedente approccio errato basato su Cloud Function. Questa è la modalità corretta e sicura.
+    - **UI/UX:** L'icona per l'invio dell'email è stata cambiata in `MailOutline` con colore `primary` per una migliore coerenza visiva. Sono stati risolti errori di sintassi minori nel JSX per garantire la stabilità del componente.
 
 ---
 

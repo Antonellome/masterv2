@@ -2,7 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from "firebase/auth";
 import { useAuth } from '@/contexts/AuthProvider';
+import { auth, db } from '@/firebase';
 import {
   Box, Typography, CircularProgress, Alert, Button, Dialog,
   DialogActions, DialogContent, DialogContentText, DialogTitle,
@@ -15,24 +17,23 @@ import {
 import { itIT } from '@mui/x-data-grid/locales';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { db } from '@/firebase';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 
 const functions = getFunctions(undefined, 'europe-west1');
 const manageAccess = httpsCallable(functions, 'manageAccess');
 
-// 1. Change terminology in the interface
 interface User {
   id: string;
   nome: string;
   email: string;
-  ruolo: 'admin' | 'user'; // Changed from 'candidato'
+  ruolo: 'admin' | 'user';
 }
 
 function CustomToolbar({ onAddNew }: { onAddNew: () => void }) {
   return (
     <GridToolbarContainer>
       <Button color="primary" startIcon={<AddIcon />} onClick={onAddNew}>
-        Aggiungi Utente 
+        Aggiungi Utente
       </Button>
       <Box sx={{ flexGrow: 1 }} />
       <GridToolbarColumnsButton />
@@ -47,9 +48,9 @@ function CustomToolbar({ onAddNew }: { onAddNew: () => void }) {
 const GestioneAmministratori = () => {
   const { user: currentUser } = useAuth();
   const [amministratori, setAmministratori] = useState<User[]>([]);
-  const [utentiMaster, setUtentiMaster] = useState<User[]>([]); // Renamed from 'candidati' for clarity
+  const [utentiMaster, setUtentiMaster] = useState<User[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(true);
-  const [loadingUsers, setLoadingUsers] = useState(true); // Renamed for clarity
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -72,9 +73,8 @@ const GestioneAmministratori = () => {
     });
 
     setLoadingUsers(true);
-    // Listen to 'utenti_master' which represents regular users
     const unsubUsers = onSnapshot(collection(db, 'utenti_master'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), ruolo: 'user' } as User)); // Set ruolo to 'user'
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), ruolo: 'user' } as User));
       setUtentiMaster(data);
       setLoadingUsers(false);
     }, (err) => {
@@ -89,32 +89,39 @@ const GestioneAmministratori = () => {
     };
   }, []);
 
-  // 2. Fix the Race Condition with robust merging logic
   const utenti = useMemo(() => {
     const adminIds = new Set(amministratori.map(admin => admin.id));
-    // Filter out users from the master list if they are already admins
     const filteredUsers = utentiMaster.filter(user => !adminIds.has(user.id));
-    // Combine the two lists, with admins taking precedence
     return [...amministratori, ...filteredUsers];
   }, [amministratori, utentiMaster]);
+
+  const handleSendPasswordReset = async (email: string) => {
+    setIsSaving(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setFeedback({ type: 'success', message: `Email di reset inviata con successo a ${email}.` });
+    } catch (err: any) {
+      console.error("Errore invio email di reset:", err);
+      let message = "Impossibile inviare l'email di reset.";
+      if (err.code === 'auth/user-not-found') {
+          message = "Nessun utente trovato con questo indirizzo email.";
+      }
+      setFeedback({ type: 'error', message });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleToggleRuolo = async (user: User, nuovoRuolo: 'admin' | 'user') => {
     if (user.id === currentUser?.uid) {
       setFeedback({ type: 'error', message: 'Non puoi modificare il tuo stesso ruolo.' });
       return;
     }
-
     setIsSaving(true);
-    // The backend function still uses 'demoteToCandidate', I'll keep that for now to avoid breaking changes there.
-    // The user doesn't see this.
     const action = nuovoRuolo === 'admin' ? 'promoteToAdmin' : 'demoteToCandidate';
     const nomeAzione = nuovoRuolo === 'admin' ? 'Promozione' : 'Revoca';
-
     try {
-      const result: any = await manageAccess({
-        action: action,
-        payload: { uid: user.id }
-      });
+      const result: any = await manageAccess({ action, payload: { uid: user.id } });
       setFeedback({ type: 'success', message: result.data.message || `${nomeAzione} completata.` });
     } catch (err: any) {
       console.error(`ERRORE [${nomeAzione} Fallita]:`, err);
@@ -124,18 +131,14 @@ const GestioneAmministratori = () => {
     }
   };
 
-  const handleCreateUser = async () => { // Renamed from handleCreateCandidate
+  const handleCreateUser = async () => {
     if (!newUser.nome || !newUser.email) {
       setFeedback({ type: 'error', message: "Nome e email sono obbligatori." });
       return;
     }
     setIsSaving(true);
     try {
-      // The backend function is named 'createCandidate', which is fine.
-      const result: any = await manageAccess({
-        action: 'createCandidate',
-        payload: newUser,
-      });
+      const result: any = await manageAccess({ action: 'createCandidate', payload: newUser });
       setFeedback({ type: 'success', message: result.data.message || 'Utente creato con successo.' });
       handleCloseDialog();
     } catch (err: any) {
@@ -153,18 +156,15 @@ const GestioneAmministratori = () => {
   const confirmDelete = async () => {
     const userToDelete = deleteConfirm.user;
     if (!userToDelete) return;
-
     if (userToDelete.id === currentUser?.uid) {
       setFeedback({ type: 'error', message: 'Non puoi eliminare te stesso.' });
       setDeleteConfirm({ open: false, user: null });
       return;
     }
-
     setIsSaving(true);
     try {
-      // Determine the collection based on the user's role
       const fromCollection = userToDelete.ruolo === 'admin' ? 'amministratori' : 'utenti_master';
-      const result: any = await manageAccess({ action: 'deleteUser', payload: { uid: userToDelete.id, fromCollection: fromCollection } });
+      const result: any = await manageAccess({ action: 'deleteUser', payload: { uid: userToDelete.id, fromCollection } });
       setFeedback({ type: 'success', message: result.data.message || 'Utente eliminato.' });
     } catch (err: any) {
       console.error(err);
@@ -188,10 +188,7 @@ const GestioneAmministratori = () => {
       headerName: 'Ruolo',
       width: 150,
       renderCell: (params) => (
-        <Chip
-          label={params.value === 'admin' ? 'Amministratore' : 'Utente'} // 3. Update Label
-          color={params.value === 'admin' ? 'primary' : 'default'}
-        />
+        <Chip label={params.value === 'admin' ? 'Amministratore' : 'Utente'} color={params.value === 'admin' ? 'primary' : 'default'} />
       )
     },
     {
@@ -219,20 +216,29 @@ const GestioneAmministratori = () => {
     {
       field: 'actions',
       headerName: 'Azioni',
-      width: 100,
+      width: 150,
       align: 'center',
       headerAlign: 'center',
       sortable: false,
       renderCell: (params) => {
         const isCurrentUser = params.row.id === currentUser?.uid;
         return (
-          <Tooltip title={isCurrentUser ? 'Non puoi eliminare te stesso' : 'Elimina utente'}>
-            <span>
-              <IconButton color="error" onClick={() => openDeleteConfirmation(params.row)} disabled={isSaving || isCurrentUser}>
-                <DeleteIcon />
-              </IconButton>
-            </span>
-          </Tooltip>
+          <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <Tooltip title="Invia email di reset password">
+              <span>
+                <IconButton color="primary" onClick={() => handleSendPasswordReset(params.row.email)} disabled={isSaving}>
+                  <MailOutlineIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={isCurrentUser ? 'Non puoi eliminare te stesso' : 'Elimina utente'}>
+              <span>
+                <IconButton color="error" onClick={() => openDeleteConfirmation(params.row)} disabled={isSaving || isCurrentUser}>
+                  <DeleteIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
         );
       }
     }
@@ -246,7 +252,7 @@ const GestioneAmministratori = () => {
   return (
     <Box>
       <Typography variant="h6" gutterBottom>Gestione Utenti</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Aggiungi nuovi utenti o promuovili ad amministratori.</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Aggiungi nuovi utenti (nessun privilegio) e promuovili ad amministratori.</Typography>
 
       <Box sx={{ height: 600, width: '100%' }}>
         <DataGrid
@@ -262,30 +268,12 @@ const GestioneAmministratori = () => {
         />
       </Box>
 
-      {/* 4. Update Dialog Title and Text */}
       <Dialog open={openNewUserDialog} onClose={handleCloseDialog} maxWidth="xs" fullWidth>
         <DialogTitle>Aggiungi Nuovo Utente</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>L'utente verrà aggiunto alla lista e potrà essere promosso ad amministratore.</DialogContentText>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Nome e Cognome"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={newUser.nome}
-            onChange={(e) => setNewUser({ ...newUser, nome: e.target.value })}
-          />
-          <TextField
-            margin="dense"
-            label="Indirizzo Email"
-            type="email"
-            fullWidth
-            variant="standard"
-            value={newUser.email}
-            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-          />
+          <TextField autoFocus margin="dense" label="Nome e Cognome" type="text" fullWidth variant="standard" value={newUser.nome} onChange={(e) => setNewUser({ ...newUser, nome: e.target.value })} />
+          <TextField margin="dense" label="Indirizzo Email" type="email" fullWidth variant="standard" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog} disabled={isSaving}>Annulla</Button>
@@ -305,12 +293,7 @@ const GestioneAmministratori = () => {
       </Dialog>
 
       {feedback && (
-        <Snackbar
-          open
-          autoHideDuration={6000}
-          onClose={() => setFeedback(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
+        <Snackbar open autoHideDuration={6000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
           <Alert onClose={() => setFeedback(null)} severity={feedback.type} sx={{ width: '100%' }}>
             {feedback.message}
           </Alert>

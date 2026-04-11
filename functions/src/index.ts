@@ -25,14 +25,8 @@ export const manageAccess = onCall({ region: "europe-west1" }, async (request) =
         throw new HttpsError("unauthenticated", "Devi essere autenticato.");
     }
 
-    // L'azione 'createCandidate' può essere eseguita da un admin.
-    // Le altre azioni richiedono privilegi di admin.
-    if (action !== 'createCandidate' && !(await isUserAdmin(callingUid))) {
+    if (!(await isUserAdmin(callingUid))) {
          throw new HttpsError("permission-denied", "Non hai i permessi per eseguire questa operazione.");
-    }
-    // Anche per creare candidati serve essere admin
-    if (action === 'createCandidate' && !(await isUserAdmin(callingUid))) {
-        throw new HttpsError("permission-denied", "Solo gli amministratori possono creare nuovi utenti candidati.");
     }
 
     logger.info(`Azione '${action}' richiesta da admin ${callingUid}`, { payload });
@@ -44,7 +38,6 @@ export const manageAccess = onCall({ region: "europe-west1" }, async (request) =
             case "promoteToAdmin":
                 return await promoteToAdmin(payload);
             case "demoteToCandidate":
-                 // Aggiungiamo qui il controllo di sicurezza fondamentale
                 if (payload.uid === callingUid) {
                     throw new HttpsError("permission-denied", "Un amministratore non può revocare i propri privilegi.");
                 }
@@ -75,7 +68,6 @@ async function createCandidate(payload: { email: string; nome: string; }) {
         throw new HttpsError("invalid-argument", "Email e nome sono obbligatori.");
     }
     
-    // Controlliamo se esiste già un utente con questa email in Auth, admin o utenti_master
     try {
         const user = await auth.getUserByEmail(email);
         const isAdmin = await db.collection("amministratori").doc(user.uid).get();
@@ -85,12 +77,10 @@ async function createCandidate(payload: { email: string; nome: string; }) {
         }
     } catch (error: any) {
         if (error.code !== 'auth/user-not-found') {
-            throw error; // Rilancia se è un errore diverso da "utente non trovato"
+            throw error; 
         }
-        // Se l'utente non esiste in Auth, va bene, continuiamo
     }
 
-    // Creiamo il record in utenti_master
     await db.collection("utenti_master").add({ nome, email, dataCreazione: admin.firestore.FieldValue.serverTimestamp() });
     return { status: "success", message: `Candidato ${nome} creato con successo.` };
 }
@@ -108,7 +98,6 @@ async function promoteToAdmin(payload: { uid: string; }) {
 
     const { nome, email } = candidateDoc.data() as { nome: string; email: string };
 
-    // Crea un utente in Firebase Auth se non esiste
     let user: admin.auth.UserRecord;
     try {
         user = await auth.getUserByEmail(email);
@@ -122,19 +111,17 @@ async function promoteToAdmin(payload: { uid: string; }) {
 
     const adminRef = db.collection("amministratori").doc(user.uid);
 
-    // Eseguiamo l'operazione in una transazione per atomicità
     await db.runTransaction(async (transaction) => {
         transaction.delete(candidateRef);
         transaction.set(adminRef, {
             nome,
             email,
             ruolo: 'admin',
-            abilitato: true, // Sempre abilitato quando promosso
+            abilitato: true,
             dataCreazione: admin.firestore.FieldValue.serverTimestamp()
         });
     });
 
-    // Imposta i custom claims per l'accesso
     await auth.setCustomUserClaims(user.uid, { admin: true });
 
     return { status: "success", message: `${nome} è stato promosso ad amministratore.` };
@@ -159,7 +146,6 @@ async function demoteToCandidate(payload: { uid: string; }) {
         transaction.set(candidateRef, { nome, email, dataCreazione: admin.firestore.FieldValue.serverTimestamp() });
     });
 
-    // Rimuovi i custom claims
     await auth.setCustomUserClaims(uid, { admin: false });
 
     return { status: "success", message: `Amministratore ${nome} revocato a candidato.` };
@@ -172,13 +158,10 @@ async function deleteUser(payload: { uid: string }, fromCollection: 'amministrat
         throw new HttpsError("invalid-argument", "Collezione di origine non valida.");
     }
 
-    // Elimina da Firestore
     await db.collection(fromCollection).doc(uid).delete();
 
-    // Disabilita da Auth (safe delete) invece di eliminare per evitare perdita dati
     try {
         await auth.updateUser(uid, { disabled: true });
-        // Rimuovi anche i claims per sicurezza
         await auth.setCustomUserClaims(uid, null);
     } catch (error: any) {
         logger.warn(`L'utente ${uid} era in Firestore ma non in Auth. Pulizia completata.`);
@@ -192,6 +175,3 @@ async function isUserAdmin(uid: string): Promise<boolean> {
     const adminDoc = await db.collection("amministratori").doc(uid).get();
     return adminDoc.exists;
 }
-
-
-// Le altre funzioni (processOutboxNotification, etc.) rimangono invariate sotto

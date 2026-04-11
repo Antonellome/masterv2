@@ -62,9 +62,6 @@ L'architettura del sistema è stata finalizzata per privilegiare l'efficienza, l
 - **Fase 9: Piano di Risanamento - Modulo Presenze [DA ESEGUIRE]**
     - **Obiettivo:** Correggere gli errori architetturali e di implementazione commessi in precedenza nel modulo Presenze, allineando la UI e la logica al contratto dati corretto.
 
-- **Fase 10: Refactoring Modulo Gestione Accessi [IN CORSO - PRIORITÀ ATTUALE]**
+- **Fase 10: Refactoring Modulo Gestione Accessi [COMPLETATA]**
     - **Obiettivo:** Implementare l'interfaccia di gestione degli amministratori e candidati, allineandola alle specifiche di sicurezza e architetturali definite nel file `RISO_Blueprint.md`.
-    - **Task Specifico:** Rifattorizzare il componente `src/components/Settings/GestioneAmministratori.tsx` per:
-        1. Caricare e visualizzare gli utenti dalle collezioni `amministratori` e `utenti_master`.
-        2. Invocare la Cloud Function `manageAccess` per tutte le operazioni (creazione, promozione, revoca, eliminazione).
-        3. Implementare la regola di sicurezza che impedisce all'amministratore loggato di modificare il proprio stato.
+    - **Stato:** Finalizzato. Il componente `GestioneAmministratori.tsx` ora gestisce correttamente la visualizzazione, creazione, promozione, revoca ed eliminazione degli utenti tramite la Cloud Function `manageAccess`. È stata implementata la funzionalità di reset password (lato client, come da best practice Firebase) e sono state applicate le regole di sicurezza che impediscono a un admin di modificare se stesso. L'interfaccia è stata rifinita correggendo bug ed errori di sintassi.
