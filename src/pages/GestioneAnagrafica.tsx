@@ -2,11 +2,11 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { useData } from '@/hooks/useData'; // CORREZIONE: Percorso di importazione corretto
+import { useData } from '@/hooks/useData'; 
 import { anagraficheConfig, AnagraficaConfig } from '@/config/anagrafiche.config';
 
 import { Box, Button, Typography, CircularProgress } from '@mui/material';
-import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridActionsCellItem, GridRenderCellParams } from '@mui/x-data-grid';
 import GenericForm from '@/components/Anagrafiche/GenericForm';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 
@@ -19,20 +19,11 @@ const GestioneAnagrafica: React.FC = () => {
 
     const [config, setConfig] = useState<AnagraficaConfig | null>(null);
     const [data, setData] = useState<any[]>([]);
+    const [clienti, setClienti] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
-
-    useEffect(() => {
-        if (anagraficaId && anagraficheConfig[anagraficaId]) {
-            const currentConfig = anagraficheConfig[anagraficaId];
-            setConfig(currentConfig);
-            fetchData(currentConfig.collectionName);
-        } else {
-            setLoading(false);
-        }
-    }, [anagraficaId]);
 
     const fetchData = useCallback(async (collectionName: string) => {
         setLoading(true);
@@ -46,6 +37,27 @@ const GestioneAnagrafica: React.FC = () => {
             setLoading(false);
         }
     }, []);
+
+    useEffect(() => {
+        const fetchClients = async () => {
+            try {
+                const querySnapshot = await getDocs(collection(db, 'clienti'));
+                const items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setClienti(items);
+            } catch (error) {
+                console.error("Errore nel caricamento clienti: ", error);
+            }
+        };
+
+        if (anagraficaId && anagraficheConfig[anagraficaId]) {
+            const currentConfig = anagraficheConfig[anagraficaId];
+            setConfig(currentConfig);
+            fetchData(currentConfig.collectionName);
+            fetchClients();
+        } else {
+            setLoading(false);
+        }
+    }, [anagraficaId, fetchData]);
 
     const handleOpenForm = (item: any | null = null) => {
         setSelectedItem(item);
@@ -106,8 +118,26 @@ const GestioneAnagrafica: React.FC = () => {
 
     const columns = useMemo<GridColDef[]>(() => {
         if (!config) return [];
+
+        const enhancedColumns = config.columns.map(col => {
+            if (col.field === 'clienteId') {
+                return {
+                    ...col,
+                    headerName: 'Cliente',
+                    renderCell: (params: GridRenderCellParams) => {
+                        const clienteId = params.value as string;
+                        // MODIFICA: Ritorna una stringa vuota se non c'è un cliente
+                        if (!clienteId) return '';
+                        const cliente = clienti.find(c => c.id === clienteId);
+                        return cliente ? cliente.nome : ''; // E anche qui
+                    }
+                };
+            }
+            return col;
+        });
+
         return [
-            ...config.columns,
+            ...enhancedColumns,
             {
                 field: 'actions',
                 type: 'actions',
@@ -128,7 +158,7 @@ const GestioneAnagrafica: React.FC = () => {
                 ],
             },
         ];
-    }, [config, handleOpenForm, handleOpenConfirm]);
+    }, [config, clienti, handleOpenForm, handleOpenConfirm]);
 
     if (!anagraficaId) return <Typography>Seleziona un'anagrafica dal menu.</Typography>;
     if (loading) return <CircularProgress />;
