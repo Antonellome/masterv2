@@ -31,7 +31,8 @@ const ReportisticaPage = () => {
           <Tab label="Analisi Ore Lavorate" />
         </Tabs>
         <Tooltip title="Nuovo Rapportino">
-          <IconButton onClick={() => navigate('/rapportini/edit/new')} sx={{ ml: 2, backgroundColor: 'primary.main', color: 'white', '&:hover': { backgroundColor: 'primary.dark' } }}>
+          {/* CORREZIONE DEFINITIVA: Il percorso corretto è /rapportino/edit/new */}
+          <IconButton onClick={() => navigate('/rapportino/edit/new')} sx={{ ml: 2, backgroundColor: 'primary.main', color: 'white', '&:hover': { backgroundColor: 'primary.dark' } }}>
             <AddIcon />
           </IconButton>
         </Tooltip>
