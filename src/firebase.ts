@@ -18,20 +18,25 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-/* 
-// Blocco di debug disattivato per testare la modalità produzione
+// Logica di App Check separata per sviluppo e produzione
 if (import.meta.env.DEV) {
+  // AMBIENTE DI SVILUPPO (ANTEPRIMA)
+  // Attiva la modalità di debug di App Check. Questo è il modo corretto e sicuro per lo sviluppo.
+  // Genererà un token di debug nella console del browser.
   self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  console.log("Firebase App Check in modalità DEBUG. Cerca il token nella console.");
+  console.log("Firebase App Check in modalità DEBUG. Cerca il token nella console del browser.");
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider('6Ld84bMsAAAAAP_4_qsKx2a4MSgmc82Gg5k8-C6k'), // Chiave fittizia per localhost, ma il debug token la bypasserà
+    isTokenAutoRefreshEnabled: true
+  });
+} else {
+  // AMBIENTE DI PRODUZIONE (SITO ONLINE)
+  // Usa la chiave reCAPTCHA V3 che hai configurato per il tuo dominio di produzione.
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider('6Lfm5bMsAAAAAATbPGU1PmyLyR8QNNFvQsRMu-RC'), 
+    isTokenAutoRefreshEnabled: true
+  });
 }
-*/
-
-// Inizializza App Check con la tua chiave reCAPTCHA V3
-// Ora questo blocco verrà eseguito sempre, sia in dev che in prod.
-initializeAppCheck(app, {
-  provider: new ReCaptchaV3Provider('6Lfm5bMsAAAAAATbPGU1PmyLyR8QNNFvQsRMu-RC'), 
-  isTokenAutoRefreshEnabled: true
-});
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
