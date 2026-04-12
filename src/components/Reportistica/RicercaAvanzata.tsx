@@ -153,13 +153,12 @@ const RicercaAvanzata: React.FC = () => {
         setRowToDelete(null);
     };
     const handleRowClick = (params: GridRowParams) => {
-        // Ignora i click sulla colonna delle azioni per non interferire con i pulsanti
         if (params.field === 'actions') {
             return;
         }
-        navigate(`/rapportini/${params.id}`);
+        navigate(`/rapportino/edit/${params.id}`);
     };
-    const handleEdit = (id: string) => navigate(`/rapportini/${id}`);
+    const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
     const handlePrint = (id: string) => window.open(`/rapportini/stampa/${id}`, '_blank');
     const handleFilterChange = useCallback(<K extends keyof FilterState>(filterName: K, value: FilterState[K]) => {
         setFilters(prev => ({ ...prev, [filterName]: value }));
