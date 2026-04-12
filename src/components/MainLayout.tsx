@@ -23,12 +23,13 @@ import {
 import {
     Menu as MenuIcon, People, EventNote, Notifications, EventBusy, 
     LocalShipping, Description, ExitToApp, Home as HomeIcon, 
-    Settings as SettingsIcon, Archive as ArchiveIcon, Refresh as RefreshIcon, Dns
+    Settings as SettingsIcon, Archive as ArchiveIcon, Refresh as RefreshIcon, Dns,
+    SentimentSatisfiedAltOutlined as SentimentSatisfiedAltOutlinedIcon
 } from '@mui/icons-material';
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/firebase';
-import { useAuth } from '@/contexts/AuthProvider'; // CORRETTO
+import { useAuth } from '@/contexts/AuthProvider';
 import { useScadenze } from '@/hooks/useScadenze';
 import { useRefresh } from '@/contexts/RefreshContext';
 import Logo from '@/components/Logo';
@@ -41,6 +42,11 @@ const pulse = keyframes`
   0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
   70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
   100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+`;
+
+const wink = keyframes`
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1, 0.1); }
 `;
 
 const menuItems = [
@@ -203,9 +209,11 @@ const MainLayout = () => {
                     </Box>
 
                     <Box sx={{ mr: 2 }}>
-                        <IconButton size="large" aria-label="account of current user" aria-haspopup="true" onClick={handleMenu} color="inherit">
-                            <Avatar src={user?.photoURL || undefined} alt={user?.displayName || ''} />
-                        </IconButton>
+                        <Tooltip title="Logout">
+                            <IconButton size="large" aria-label="account of current user" aria-haspopup="true" onClick={handleMenu} color="inherit">
+                                <Avatar sx={{ bgcolor: 'primary.main', color: 'common.white'}} src={user?.photoURL || undefined} alt={user?.displayName || ''} />
+                            </IconButton>
+                        </Tooltip>
                         <Menu id="menu-appbar" anchorEl={anchorEl} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} keepMounted transformOrigin={{ vertical: 'top', horizontal: 'right' }} open={Boolean(anchorEl)} onClose={handleClose}>
                             <MenuItem onClick={handleLogout}>
                                 <ListItemIcon><ExitToApp fontSize='small' /></ListItemIcon>
@@ -214,20 +222,40 @@ const MainLayout = () => {
                         </Menu>
                     </Box>
                     
-                    <Typography 
-                        variant="caption" 
-                        sx={{
-                            position: 'absolute',
-                            bottom: 2,
-                            right: 16,
-                            fontFamily: 'Dancing Script, cursive',
-                            fontStyle: 'italic',
-                            color: '#007FFF', // Blu Elettrico
-                            fontSize: '1rem',
+                    <Tooltip 
+                        componentsProps={{
+                            tooltip: {
+                                sx: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                                    backdropFilter: 'blur(4px)',
+                                },
+                            },
                         }}
+                        title={
+                            <SentimentSatisfiedAltOutlinedIcon sx={{ fontSize: '2rem', color: '#007FFF', animation: `${wink} 2s ease-in-out infinite` }} />
+                        }
                     >
-                        by AS
-                    </Typography>
+                        <Box
+                            sx={{
+                                position: 'absolute',
+                                bottom: 2,
+                                right: 16,
+                                cursor: 'default'
+                            }}
+                        >
+                            <Typography 
+                                variant="caption" 
+                                sx={{
+                                    fontFamily: 'Dancing Script, cursive',
+                                    fontStyle: 'italic',
+                                    color: '#007FFF', // Blu Elettrico
+                                    fontSize: '1rem',
+                                }}
+                            >
+                                by AS
+                            </Typography>
+                        </Box>
+                    </Tooltip>
                 </Toolbar>
             </AppBar>
             
@@ -243,11 +271,9 @@ const MainLayout = () => {
                     flexGrow: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    // RIMOSSO overflow: 'hidden' 
                 }}
             >
                 <Toolbar sx={{ minHeight: `${appBarHeight} !important` }} />
-                {/* AGGIUNTO overflowY per consentire lo scorrimento del contenuto */}
                 <Box sx={{ flexGrow: 1, p: 3, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
                     <Outlet />
                 </Box>
