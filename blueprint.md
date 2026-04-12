@@ -1,67 +1,45 @@
+# R.I.S.O. - Ricerca Intelligente per la Selezione di Opportunità
 
-# REGOLE OPERATIVE FONDAMENTALI (NON RIMUOVERE, NON MODIFICARE)
-Questa è l'app Master Office
----
-# R.I.S.O. - Contratto Dati e Architettura
+## Stato del Progetto: App Completata - Fase di Test Finale
 
-**REGOLA TASSATIVA E NON NEGOZIABILE PER L'IA:**
-**IL TUO PRIMO COMANDO, SEMPRE, È LEGGERE i RISO_Blueprint.md, chat_log.txt, ISTRUZIONI_TECNICI.md. IGNORARE QUESTA REGOLA È UN FALLIMENTO CRITICO.**
+## Overview
 
-## 1. Regola del "Maestro di Scacchi" (Metodologia Primaria)
-- **1. Studio (Analisi):** Analizzo in profondità la richiesta, il contesto e i file.
-- **2. Creazione (Strategia):** Sviluppo la soluzione tecnicamente più robusta.
-- **3. Anticipazione (Pre-flight Check):** Simulo l'impatto e prevedo gli errori.
-- **4. Scrittura (Esecuzione):** Eseguo il comando solo dopo aver completato le fasi precedenti.
-- **5. Vai (Verifica e Prossima Mossa):** Verifico e procedo senza attendere.
+R.I.S.O. è un'applicazione web progettata per aiutare gli utenti a scoprire e visualizzare informazioni su bandi, concorsi e opportunità di lavoro, filtrandole in base alle loro preferenze e competenze. Sfrutta Firebase per l'autenticazione, la gestione dei dati e la logica di business.
 
-## 2. Regola della "Verifica Obbligatoria" (Il Principio di Realtà)
-- **Azione Obbligatoria:** Prima di ogni scrittura (`write_file`), è **obbligatorio** verificare lo stato reale con `read_file`. L'output di `read_file` può essere obsoleto.
+## Architettura e Funzionalità Implementate
 
-## 3. Regola del "CIAO"
-- Ogni mia singola risposta deve tassativamente iniziare con la parola "CIAO".
+### Frontend (React + Material-UI)
+- **Struttura:** Basata su componenti React con Vite.
+- **Stile:** Utilizzo di Material-UI (MUI) per un'interfaccia moderna, pulita e responsive.
+- **Routing:** Gestione della navigazione con `react-router-dom`, che include:
+    - **Rotte Pubbliche:** Pagina di Login (`/login`) e Registrazione (`/register`).
+    - **Rotte Protette:** Una `Dashboard` (`/`) accessibile solo agli utenti autenticati.
+- **Gestione Stato:** Centralizzazione dello stato di autenticazione tramite un `AuthProvider` con `useContext`.
+- **Componenti UI:**
+    - `LoginPage.tsx`: Form di accesso.
+    - `RegisterPage.tsx`: Form di registrazione.
+    - `Dashboard.tsx`: Pagina principale post-login.
+    - `Navbar.tsx`: Barra di navigazione contestuale (mostra opzioni diverse se l'utente è loggato o meno).
+    - `ProtectedRoute.tsx`: Wrapper per le rotte che richiedono autenticazione.
 
+### Backend e Infrastruttura (Firebase)
+- **Autenticazione:**
+    - Sistema di login e registrazione con Email/Password.
+    - Gli utenti sono gestiti nel servizio Firebase Authentication.
+- **Database:**
+    - Cloud Firestore per la persistenza dei dati (es. 'giornate').
+- **Sicurezza:**
+    - **Firebase App Check:** Integrazione con reCAPTCHA v3 per proteggere le chiamate al backend.
+    - **Enforcement Attivo:** App Check è in modalità 'enforced' per i servizi di Authentication e Cloud Functions, simulando l'ambiente di produzione.
+- **Cloud Functions:**
+    - Logica di business lato server (es. la procedura di 'sterilizzazione' ora rimossa).
 
+## Fase Attuale: Test Finale
 
-## 4. Regola del "Refactoring sull'Esistente"
-- **Principio:** Non creare da zero se esiste già una base. L'approccio primario è **modificare e adattare** i componenti e le pagine esistenti per allinearli alle nuove specifiche, rispettando il lavoro già svolto.
+L'applicazione è considerata completa nelle sue funzionalità principali. L'obiettivo attuale è verificare il corretto funzionamento di tutti i flussi in un ambiente il più vicino possibile a quello di produzione, con tutte le misure di sicurezza attive.
 
-## 5. Regola della "Struttura Intoccabile" (Corollario alla Regola #4)
-- **Principio Assoluto:** La struttura di navigazione e l'alberatura delle pagine esistenti sono un punto fermo. Il lavoro consiste nel **correggere, potenziare e rifattorizzare** la logica e i componenti *all'interno* di queste pagine.
-- **Divieto:** È vietato spostare, rimuovere o accorpare pagine principali. L'architettura informativa corrente dell'applicazione è il riferimento immutabile.
-
----
-
-# R.I.S.O. - Blueprint di Progetto
-
-*Per un approfondimento dettagliato delle decisioni architetturali, consultare il file `chat_log.txt`.*
-
-## Architettura Definitiva (Come da `chat_log.txt`)
-
-L'architettura del sistema è stata finalizzata per privilegiare l'efficienza, la manutenibilità e il controllo dei costi, basandosi su due principi fondamentali.
-
-1.  **Limite a Due Cloud Functions (Regola Ferrea):**
-    *   `manageAccess` (Callable): Per la sicurezza e la gestione degli accessi. **[COMPLETATA]**
-    *   `syncDataTrigger` (Trigger): Motore asincrono per **TUTTA** la logica di business pesante (es. Rapportini, Notifiche). **[DA IMPLEMENTARE]**
-
-2.  **Lettura Diretta & Sistema "Sync Manifest":**
-    *   **Lettura Diretta:** I dati "anagrafici" e "di stato" (es. `tecnici`, `anagrafiche`, `checkin_giornalieri`) vengono letti direttamente da Firestore tramite l'hook `useData`. Questo approccio è **corretto e definitivo**, garantendo bassi costi e latenza minima.
-    *   **Sync Manifest:** Per la logica di business complessa (Rapportini, Notifiche), le app client **non** ascoltano intere collezioni. Ascoltano invece un **singolo documento-manifest** (`system/sync_manifest`). La `syncDataTrigger` esegue il lavoro pesante in background e aggiorna un "codice" nel manifest. Il client, vedendo il codice cambiare, sa esattamente quali nuovi dati scaricare in modo mirato.
-
----
-
-## Programma di Lavoro Dettagliato
-
-- **Fase 0-6 [COMPLETATE]**
-
-- **Fase 7: Integrazione Notifiche su App Mobile (Lavoro Futuro) [DA ESEGUIRE]**
-    - **Obiettivo:** Far sì che l'app dei tecnici riceva e visualizzi le notifiche inviate dall'App Master.
-
-- **Fase 8: Refactoring e Potenziamento Modulo Rapportini [IN PAUSA]**
-    - **Obiettivo:** Risolvere le criticità correnti e potenziare il modulo di gestione rapportini, allineandolo all'architettura definitiva e migliorando l'esperienza utente.
-
-- **Fase 9: Piano di Risanamento - Modulo Presenze [DA ESEGUIRE]**
-    - **Obiettivo:** Correggere gli errori architetturali e di implementazione commessi in precedenza nel modulo Presenze, allineando la UI e la logica al contratto dati corretto.
-
-- **Fase 10: Refactoring Modulo Gestione Accessi [COMPLETATA]**
-    - **Obiettivo:** Implementare l'interfaccia di gestione degli amministratori e candidati, allineandola alle specifiche di sicurezza e architetturali definite nel file `RISO_Blueprint.md`.
-    - **Stato:** Finalizzato. Il componente `GestioneAmministratori.tsx` ora gestisce correttamente la visualizzazione, creazione, promozione, revoca ed eliminazione degli utenti tramite la Cloud Function `manageAccess`. È stata implementata la funzionalità di reset password (lato client, come da best practice Firebase) e sono state applicate le regole di sicurezza che impediscono a un admin di modificare se stesso. L'interfaccia è stata rifinita correggendo bug ed errori di sintassi.
+**Test da Eseguire:**
+- [X] Flusso di login e logout con App Check attivo.
+- [ ] Corretta visualizzazione dei dati nella Dashboard.
+- [ ] Funzionamento dei filtri e della ricerca (se presenti).
+- [ ] Comportamento responsive su diverse dimensioni di schermo.

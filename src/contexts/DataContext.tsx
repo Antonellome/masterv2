@@ -53,59 +53,6 @@ const getRealCollectionName = (name: CollectionName): string => {
     return name;
 };
 
-// --- FASE 1: STERILIZZAZIONE E RICOSTRUZIONE ---
-const SEED_DATA: Omit<TipoGiornata, 'id'>[] = [
-    { nome: 'Lavoro Ordinario', fatturabile: true },
-    { nome: 'Straordinario', fatturabile: true },
-    { nome: 'Trasferta', fatturabile: true },
-    { nome: 'Ferie', fatturabile: false },
-    { nome: 'Permesso', fatturabile: false },
-    { nome: 'Malattia', fatturabile: false },
-    { nome: 'N/D', fatturabile: false },
-];
-
-// Flag per assicurare che la riparazione venga eseguita una sola volta per sessione
-let repairDone = false;
-
-const runSterilizationAndRebuild = async () => {
-    if (repairDone) return;
-    console.log("--- INIZIO PROCEDURA DI STERILIZZAZIONE E RICOSTRUZIONE DATI ---");
-    try {
-        const batch = writeBatch(db);
-
-        // 1. Leggi e cancella TUTTO da 'giornate'
-        const giornateSnap = await getDocs(collection(db, 'giornate'));
-        if (!giornateSnap.empty) {
-            console.log(`Trovati ${giornateSnap.size} documenti in 'giornate'. Eliminazione in corso...`);
-            giornateSnap.docs.forEach(d => batch.delete(d.ref));
-        }
-
-        // 2. Leggi e cancella TUTTO da 'tipi-giornata' (collezione errata)
-        const tipiGiornataSnap = await getDocs(collection(db, 'tipi-giornata'));
-        if (!tipiGiornataSnap.empty) {
-            console.log(`Trovati ${tipiGiornataSnap.size} documenti nella collezione errata 'tipi-giornata'. Eliminazione in corso...`);
-            tipiGiornataSnap.docs.forEach(d => batch.delete(d.ref));
-        }
-
-        // 3. Ricostruisci dati puliti in 'giornate'
-        console.log("Ricostruzione della collezione 'giornate' con dati standard puliti...");
-        SEED_DATA.forEach(data => {
-            const newDocRef = doc(collection(db, 'giornate'));
-            batch.set(newDocRef, data);
-        });
-
-        // 4. Esegui tutte le operazioni in un'unica transazione atomica
-        await batch.commit();
-        console.log(`--- PROCEDURA COMPLETATA: ${giornateSnap.size + tipiGiornataSnap.size} documenti eliminati, ${SEED_DATA.length} documenti ricreati. ---`);
-        
-    } catch (error) {
-        console.error("--- ERRORE CRITICO DURANTE LA STERILIZZAZIONE: ---", error);
-    } finally {
-        repairDone = true; // Imposta il flag per non ripetere l'operazione
-    }
-};
-
-
 export const DataProvider = ({ children }: { children: ReactNode }) => {
     const { user, userRole } = useAuth();
     const [data, setData] = useState<AllData>({ 
@@ -129,9 +76,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             setLoading(true);
             setError(null);
             
-            // Esegui la sterilizzazione e ricostruzione PRIMA di ogni altra cosa
-            await runSterilizationAndRebuild();
-
             try {
                  const allData: Partial<AllData> = {};
                 const fetchPromises = COLLECTION_NAMES.map(async (name) => {
@@ -155,7 +99,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         initializeAndFetchData();
     }, [user, userRole, refreshTrigger]);
 
-    // ... (funzioni CRUD invariate) ...
     const addDocument = useCallback(async <T extends object>(collectionName: CollectionName, data: T): Promise<string> => {
         const realCollectionName = getRealCollectionName(collectionName);
         try {
