@@ -99,18 +99,29 @@ const DashboardPage = () => {
         const rapportiniWithDate = rapportini.map(r => ({ ...r, date: dayjs((r.data as any).toDate()) }));
 
         const rapportiniUltimi30Giorni = rapportiniWithDate.filter(r => r.date.isAfter(thirtyDaysAgo));
-        const oreTotali30 = rapportiniUltimi30Giorni.reduce((sum, r) => sum + (r.oreLavorate || 0), 0);
-        const costoTotale30 = rapportiniUltimi30Giorni.reduce((sum, r) => sum + (r.oreLavorate || 0) * (tipiGiornataMap.get(r.giornataId)?.costoOrario || 0), 0);
+        const oreTotali30 = rapportiniUltimi30Giorni.reduce((sum, r) => sum + (r.oreLavoro || 0), 0);
+        const costoTotale30 = rapportiniUltimi30Giorni.reduce((sum, r) => {
+            const costoOrario = tipiGiornataMap.get(r.tipoGiornataId)?.costoOrario || 0;
+            return sum + (r.oreLavoro || 0) * costoOrario;
+        }, 0);
 
         const activityLast7Days = Array.from({ length: 7 }, (_, i) => ({ date: today.subtract(6 - i, 'day').format('DD/MM'), ore: 0 }));
         rapportiniWithDate.filter(r => r.date.isAfter(sevenDaysAgo)).forEach(r => {
             const dayData = activityLast7Days.find(d => d.date === r.date.format('DD/MM'));
-            if (dayData) dayData.ore += r.oreLavorate || 0;
+            if (dayData) {
+                dayData.ore += r.oreLavoro || 0;
+            }
         });
 
         const attivitaRecenti = [...rapportiniWithDate]
             .sort((a, b) => b.date.valueOf() - a.date.valueOf()).slice(0, 5)
-            .map(r => ({ id: r.id, tecnico: tecniciMap.get(r.tecnicoId) || 'N/A', data: r.date.format('DD/MM/YYYY'), destinazione: r.naveId ? naviMap.get(r.naveId) : (r.luogoId ? luoghiMap.get(r.luogoId) : 'Nessuna'), descrizione: r.breveDescrizione }));
+            .map(r => ({
+                id: r.id,
+                tecnico: r.presenze?.map(id => tecniciMap.get(id)).join(', ') || 'N/A',
+                data: r.date.format('DD/MM/YYYY'),
+                destinazione: r.naveId ? naviMap.get(r.naveId) : (r.luogoId ? luoghiMap.get(r.luogoId) : 'Nessuna'),
+                descrizione: r.note
+            }));
 
         // LOGICA CORRETTA: Usa i check-in per le presenze di oggi
         const presenzeOggi = new Map<string, string>(); // Mappa per garantire l'unicità del tecnico
@@ -131,7 +142,7 @@ const DashboardPage = () => {
             const isFuture = currentDate.isAfter(today, 'day');
             let missingReports = 0;
             if (!isFuture && currentDate.day() !== 0 && currentDate.day() !== 6) { // Non calcolare per sabato e domenica
-                const uniqueTechnicians = new Set(rapportiniWithDate.filter(r => r.date.isSame(currentDate, 'day')).map(r => r.tecnicoId));
+                const uniqueTechnicians = new Set(rapportiniWithDate.filter(r => r.date.isSame(currentDate, 'day')).flatMap(r => r.presenze || []));
                 missingReports = activeTechnicians - uniqueTechnicians.size;
             }
             return { day, missingReports: Math.max(0, missingReports), isFuture };
