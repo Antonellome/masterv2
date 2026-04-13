@@ -14,36 +14,16 @@ import {
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DataGrid, GridColDef, GridFooterContainer, GridToolbar } from '@mui/x-data-grid';
-import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
-import { RapportinoSchema } from '@/models/rapportino.schema';
+import { useData } from '@/hooks/useData';
+import { Rapportino, Tecnico } from '@/models/definitions';
 
 dayjs.locale('it');
 
 // --- Definizioni dei tipi ---
-interface Tecnico {
-    id: string;
-    nome: string;
-    cognome: string;
-}
-
-interface Nave {
-    id: string;
-    nome?: string;
-}
-
-interface Luogo {
-    id: string;
-    nome?: string;
-}
-
-interface TipoGiornata {
-    id: string;
-    nome?: string;
-}
-
 interface Presenza {
     id: string;
     data: string;
@@ -60,100 +40,83 @@ interface Totali {
 // --- Componente Principale ---
 const ConsuntivoMensile = () => {
     // --- Stati del componente ---
-    const [tecnici, setTecnici] = useState<Tecnico[]>([]);
+    const { tecnici, navi, tipiGiornata, luoghi, loading: anagraficheLoading, error: anagraficheError } = useData();
+    const [rapportini, setRapportini] = useState<Rapportino[]>([]);
+    const [rapportiniLoading, setRapportiniLoading] = useState(true);
+    const [rapportiniError, setRapportiniError] = useState<string | null>(null);
+    
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [selectedMonth, setSelectedMonth] = useState<Dayjs | null>(dayjs());
-    const [presenze, setPresenze] = useState<Presenza[]>([]);
-    const [loading, setLoading] = useState(false);
     const [reportGenerated, setReportGenerated] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
+    
     useEffect(() => {
-        const fetchTecnici = async () => {
-            try {
-                const q = query(collection(db, "tecnici"));
-                const querySnapshot = await getDocs(q);
-                const tecniciList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tecnico));
-                setTecnici(tecniciList.sort((a, b) => a.cognome.localeCompare(b.cognome)));
-            } catch {
-                setError("Errore nel caricamento dei tecnici.");
+        setRapportiniLoading(true);
+        const unsub = onSnapshot(collection(db, "rapportini"), 
+            (snapshot) => {
+                const rapportiniData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rapportino));
+                setRapportini(rapportiniData);
+                setRapportiniLoading(false);
+            }, 
+            (err) => {
+                console.error("Errore caricamento rapportini:", err);
+                setRapportiniError("Errore nel caricamento dei rapportini.");
+                setRapportiniLoading(false);
             }
-        };
-        fetchTecnici();
+        );
+        return () => unsub();
     }, []);
 
-    const handleGenerateReport = async () => {
+    const handleGenerateReport = () => {
         if (!selectedTecnico || !selectedMonth) {
-            setError("Per favore, seleziona un tecnico e un mese validi.");
+            setRapportiniError("Per favore, seleziona un tecnico e un mese validi.");
             return;
         }
-
-        setLoading(true);
-        setError(null);
-        setReportGenerated(false);
-
-        try {
-            const startOfMonth = selectedMonth.startOf('month').toDate();
-            const endOfMonth = selectedMonth.endOf('month').toDate();
-
-            // 1. Carica TUTTE le risorse necessarie per il lookup, inclusi i luoghi
-            const [naviSnap, tipiGiornataSnap, luoghiSnap] = await Promise.all([
-                getDocs(collection(db, "navi")),
-                getDocs(collection(db, "tipiGiornata")),
-                getDocs(collection(db, "luoghi")),
-            ]);
-
-            // 2. Crea le mappe per la traduzione, inclusa quella per i luoghi
-            const naviMap = new Map(naviSnap.docs.map(doc => [doc.id, doc.data().nome]));
-            const tipiGiornataMap = new Map(tipiGiornataSnap.docs.map(doc => [doc.id, doc.data().nome]));
-            const luoghiMap = new Map(luoghiSnap.docs.map(doc => [doc.id, doc.data().nome]));
-
-            const rapportiniQuery = query(
-                collection(db, "rapportini"), 
-                where("tecnicoScriventeId", "==", selectedTecnico.id),
-                where("data", ">=", Timestamp.fromDate(startOfMonth)),
-                where("data", "<=", Timestamp.fromDate(endOfMonth))
-            );
-
-            const querySnapshot = await getDocs(rapportiniQuery);
-            if (querySnapshot.empty) {
-                 setPresenze([]);
-                 setReportGenerated(true);
-                 setLoading(false);
-                 return;
-            }
-            
-            // 3. Mappa i risultati usando la logica corretta con `luogoId`
-            const presenzeData = querySnapshot.docs.map(doc => {
-                const data = doc.data() as RapportinoSchema;
-                const formattedDate = data.data instanceof Timestamp ? dayjs(data.data.toDate()).format('DD/MM/YYYY') : 'Data Invalida';
-
-                return {
-                    id: doc.id,
-                    data: formattedDate,
-                    tipoGiornata: data.giornataId ? tipiGiornataMap.get(data.giornataId) || 'ID Giornata non trovato' : 'N/D',
-                    nave: data.naveId ? naviMap.get(data.naveId) || 'ID Nave non trovato' : 'N/D',
-                    luogo: data.luogoId ? luoghiMap.get(data.luogoId) || 'ID Luogo non trovato' : 'N/D',
-                    ore: data.oreLavorate || 0,
-                } as Presenza;
-            });
-
-            const validPresenze = presenzeData.filter(p => p.data !== 'Data Invalida');
-            validPresenze.sort((a, b) => dayjs(a.data, 'DD/MM/YYYY').diff(dayjs(b.data, 'DD/MM/YYYY')));
-            
-            setPresenze(validPresenze);
-            setReportGenerated(true);
-
-        } catch (err: any) {
-            console.error("Errore durante la generazione del report:", err);
-            if (err.code === 'failed-precondition') {
-                setError(`La query richiede un indice. Controlla la console per il link per crearlo.`);
-            } else {
-                setError("Si è verificato un errore imprevisto durante la generazione del report.");
-            }
-        }
-        setLoading(false);
+        setRapportiniError(null);
+        setReportGenerated(true);
     };
+    
+    const presenze = useMemo((): Presenza[] => {
+        if (!reportGenerated || !selectedTecnico || !selectedMonth) {
+            return [];
+        }
+
+        const startOfMonth = selectedMonth.startOf('month');
+        const endOfMonth = selectedMonth.endOf('month');
+
+        const naviMap = new Map(navi.map(doc => [doc.id, doc.nome]));
+        const tipiGiornataMap = new Map(tipiGiornata.map(doc => [doc.id, doc.nome]));
+        const luoghiMap = new Map(luoghi.map(doc => [doc.id, doc.nome]));
+        
+        const filteredRapportini = rapportini.filter(r => {
+            const dataRapportino = r.data instanceof Timestamp ? dayjs(r.data.toDate()) : null;
+            if (!dataRapportino) return false;
+            
+            const presenzeTecnico = r.presenze || [];
+            const isTecnicoPresente = presenzeTecnico.includes(selectedTecnico.id);
+            const isNelMese = dataRapportino.isAfter(startOfMonth.subtract(1, 'day')) && dataRapportino.isBefore(endOfMonth.add(1, 'day'));
+            
+            return isTecnicoPresente && isNelMese;
+        });
+
+        const presenzeData = filteredRapportini.map(doc => {
+            const formattedDate = doc.data instanceof Timestamp ? dayjs(doc.data.toDate()).format('DD/MM/YYYY') : 'Data Invalida';
+
+            return {
+                id: doc.id,
+                data: formattedDate,
+                tipoGiornata: doc.tipoGiornataId ? tipiGiornataMap.get(doc.tipoGiornataId) || 'N/D' : 'N/D',
+                nave: doc.naveId ? naviMap.get(doc.naveId) || 'N/D' : 'N/D',
+                luogo: doc.luogoId ? luoghiMap.get(doc.luogoId) || 'N/D' : 'N/D',
+                ore: doc.oreLavoro || 0,
+            } as Presenza;
+        });
+        
+        presenzeData.sort((a, b) => dayjs(a.data, 'DD/MM/YYYY').diff(dayjs(b.data, 'DD/MM/YYYY')));
+        
+        return presenzeData;
+
+    }, [rapportini, selectedTecnico, selectedMonth, reportGenerated, navi, tipiGiornata, luoghi]);
+
 
     const columns: GridColDef[] = [
         { field: 'data', headerName: 'Data', width: 120, sortable: true },
@@ -188,6 +151,9 @@ const ConsuntivoMensile = () => {
             </Box>
         </GridFooterContainer>
     );
+    
+    const loading = anagraficheLoading || rapportiniLoading;
+    const error = anagraficheError || rapportiniError;
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
@@ -195,7 +161,7 @@ const ConsuntivoMensile = () => {
                 <Grid container spacing={2} alignItems="center" sx={{ mb: 3, flexShrink: 0 }}>
                      <Grid item xs={12} sm={6} md={4}>
                         <Autocomplete
-                            options={tecnici}
+                            options={tecnici.sort((a, b) => a.cognome.localeCompare(b.cognome))}
                             getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
                             value={selectedTecnico}
                             onChange={(_, newValue) => setSelectedTecnico(newValue)}
@@ -227,7 +193,7 @@ const ConsuntivoMensile = () => {
 
                 {error && <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }}>{error}</Alert>}
 
-                {reportGenerated && (
+                {(reportGenerated && !loading) && (
                     <Box sx={{ flexGrow: 1, width: '100%' }}>
                          <DataGrid
                             rows={presenze}
@@ -235,8 +201,14 @@ const ConsuntivoMensile = () => {
                             slots={{ toolbar: GridToolbar, footer: CustomFooter }}
                             density="compact"
                             disableRowSelectionOnClick
-                            localeText={{ noRowsLabel: "Nessun rapportino trovato per questo mese." }}
+                            localeText={{ noRowsLabel: "Nessun rapportino trovato per il tecnico e il mese selezionati." }}
                         />
+                    </Box>
+                )}
+                 {loading && !reportGenerated && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 5, flexDirection: 'column', alignItems: 'center' }}>
+                        <CircularProgress />
+                        <Typography sx={{ mt: 2 }}>Caricamento dati...</Typography>
                     </Box>
                 )}
             </Paper>

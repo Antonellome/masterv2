@@ -86,7 +86,7 @@ const RapportinoEdit: React.FC = () => {
     // State del form
     const [tecnicoResponsabileId, setTecnicoResponsabileId] = useState<string | null>(null);
     const [data, setData] = useState<Dayjs | null>(dayjs());
-    const [tipoGiornataId, setTipoGiornataId] = useState('');
+    const [giornataId, setGiornataId] = useState(''); // <-- CAMPO CORRETTO
     const [isLavorativo, setIsLavorativo] = useState(true);
     const [veicoloId, setVeicoloId] = useState<string | null>(null);
     const [naveId, setNaveId] = useState<string | null>(null);
@@ -108,14 +108,12 @@ const RapportinoEdit: React.FC = () => {
     const handleTecnicoResponsabileChange = (_: any, tecnico: Tecnico | null) => {
         setTecnicoResponsabileId(tecnico?.id || null);
         if (tecnico) {
-            // Se seleziono un tecnico, imposto il suo dettaglio ore come principale
             setDettaglioOre([{
                 tecnicoId: tecnico.id,
                 nome: `${tecnico.cognome} ${tecnico.nome}`.trim(),
                 isManual: false, oraInizio: '07:30', oraFine: '16:30', pausa: 60, ore: 8,
             }]);
         } else {
-            // Se deseleziono, pulisco tutto
             setDettaglioOre([]);
         }
     };
@@ -139,15 +137,16 @@ const RapportinoEdit: React.FC = () => {
                     setTecnicoResponsabileId(reportData.tecnicoId);
                     setData(dayjs(reportData.data.toDate()));
                     
-                    const resolvedTipoGiornataId = reportData.tipoGiornataId || '';
-                    if (resolvedTipoGiornataId && !tipiGiornataMap.has(resolvedTipoGiornataId)) {
+                    // LEGGE IL CAMPO CORRETTO: giornataId
+                    const resolvedGiornataId = reportData.giornataId || '';
+                    if (resolvedGiornataId && !tipiGiornataMap.has(resolvedGiornataId)) {
                         showAlert(`Tipo Giornata non più valido. Selezionane uno nuovo.`, 'warning');
-                        setTipoGiornataId('');
+                        setGiornataId('');
                     } else {
-                        setTipoGiornataId(resolvedTipoGiornataId);
+                        setGiornataId(resolvedGiornataId);
                     }
 
-                    const tipo = tipiGiornataMap.get(resolvedTipoGiornataId);
+                    const tipo = tipiGiornataMap.get(resolvedGiornataId);
                     setIsLavorativo(isGiornataLavorativa(tipo));
                     setVeicoloId(reportData.veicoloId || null);
                     setNaveId(reportData.naveId || null);
@@ -187,7 +186,7 @@ const RapportinoEdit: React.FC = () => {
         loadReport();
     }, [isEditMode, reportId, navigate, collectionsLoading, tecnici, tipiGiornataMap, showAlert]);
     
-    const handleTipoGiornataChange = (id: string) => { setTipoGiornataId(id); const tipo = tipiGiornataMap.get(id); setIsLavorativo(isGiornataLavorativa(tipo)); };
+    const handleTipoGiornataChange = (id: string) => { setGiornataId(id); const tipo = tipiGiornataMap.get(id); setIsLavorativo(isGiornataLavorativa(tipo)); };
     const handleCancel = () => navigate('/reportistica');
 
     const handleOreUpdate = useCallback((updatedData: DettaglioOreData) => {
@@ -204,7 +203,7 @@ const RapportinoEdit: React.FC = () => {
 
     const handleAltriTecniciChange = (_: any, nuoviTecnici: Tecnico[]) => {
         const responsabile = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
-        if (!responsabile) return; // Non dovrebbe succedere se il responsabile è selezionato
+        if (!responsabile) return;
         const nuoviDettagli = nuoviTecnici.map(t => dettaglioOre.find(d => d.tecnicoId === t.id) || { ...responsabile, tecnicoId: t.id, nome: `${t.cognome} ${t.nome}`.trim() });
         setDettaglioOre([responsabile, ...nuoviDettagli]);
     };
@@ -219,15 +218,13 @@ const RapportinoEdit: React.FC = () => {
             showAlert("Seleziona un Tecnico Responsabile.", "error");
             return;
         }
-        // ... (resto della validazione, che ora è corretta perché si basa su `tecnicoResponsabileId`)
-        if ((!data && !isPeriodo) || !tipoGiornataId) {
+        if ((!data && !isPeriodo) || !giornataId) { // <-- CAMPO CORRETTO
             showAlert("Compila i campi obbligatori: Data e Tipo Giornata.", "warning");
             return;
         }
 
         setIsSaving(true);
         try {
-            // Logica per periodo (invariata, ma ora usa tecnicoResponsabileId)
             if (isPeriodo && !isEditMode) {
                 const batch = writeBatch(db);
                 let currentDay = dataInizio!;
@@ -235,28 +232,27 @@ const RapportinoEdit: React.FC = () => {
                     const newReportRef = doc(collection(db, 'rapportini'));
                     batch.set(newReportRef, { 
                         nome: 'Rapportino di periodo', 
-                        tipoGiornataId, 
+                        giornataId, // <-- CAMPO CORRETTO
                         data: Timestamp.fromDate(currentDay.toDate()), 
                         tecnicoId: tecnicoResponsabileId, 
-                        presenze: [tecnicoResponsabileId], // Solo il responsabile per ferie/malattia
-                        createdBy: user?.uid, // Chi ha creato il record
+                        presenze: [tecnicoResponsabileId],
+                        createdBy: user?.uid,
                         createdAt: serverTimestamp(), 
                         updatedAt: serverTimestamp(), 
-                        oreLavoro: 0 
+                        oreLavoro: 0,
+                        tipoGiornataId: null // Pulisce il campo vecchio
                     });
                     currentDay = currentDay.add(1, 'day');
                 }
                 await batch.commit();
                 showAlert(`Creati i rapportini di assenza.`, "success");
             } else { 
-                // Logica per rapportino singolo/modifica
                 const responsabileDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
                 if (isLavorativo && (!responsabileDettaglio || (responsabileDettaglio.ore ?? 0) <= 0)) {
                     showAlert("Le ore di lavoro per il tecnico responsabile non possono essere zero.", "warning");
                     setIsSaving(false);
                     return;
                 }
-                // ... (altre validazioni)
 
                 const presenze = dettaglioOre.map(d => d.tecnicoId);
                 const dettaglioOreTecniciToSave = dettaglioOre.map(d => ({ tecnicoId: d.tecnicoId, ore: d.ore || 0 }));
@@ -264,7 +260,7 @@ const RapportinoEdit: React.FC = () => {
 
                 const rapportinoData = {
                     data: Timestamp.fromDate(data!.toDate()),
-                    tipoGiornataId, 
+                    giornataId, // <-- CAMPO CORRETTO
                     tecnicoId: tecnicoResponsabileId, 
                     presenze,
                     nome: isLavorativo ? 'Rapportino giornaliero' : 'Rapportino non lavorativo',
@@ -281,6 +277,7 @@ const RapportinoEdit: React.FC = () => {
                     lavoroEseguito: isLavorativo ? lavoroEseguito : '',
                     materialiImpiegati: isLavorativo ? materialiImpiegati : '',
                     updatedAt: serverTimestamp(),
+                    tipoGiornataId: null, // Pulisce il campo vecchio
                     ...(isEditMode ? {} : { createdBy: user?.uid, createdAt: serverTimestamp() })
                 };
 
@@ -315,19 +312,18 @@ const RapportinoEdit: React.FC = () => {
                 <Paper elevation={3} sx={{ p: { xs: 2, sm: 3 } }}>
                     <Typography variant="h4" component="h1" gutterBottom>{isEditMode ? 'Dettaglio' : 'Nuovo'} Rapportino</Typography>
                     <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 2 }}>
-                         {/* ... (sezione periodo) ... */}
                         <Autocomplete
                             options={sortedTecnici}
                             getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
                             value={sortedTecnici.find(t => t.id === tecnicoResponsabileId) || null}
                             onChange={handleTecnicoResponsabileChange}
-                            disabled={isEditMode || isSaving} // Bloccato in modifica
+                            disabled={isEditMode || isSaving}
                             renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />}
                         />
                         <DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} />
                         <FormControl fullWidth required>
                             <InputLabel>Tipo Giornata</InputLabel>
-                            <Select value={tipoGiornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>
+                            <Select value={giornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>
                                 {sortedTipiGiornata.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
                             </Select>
                         </FormControl>
@@ -353,8 +349,7 @@ const RapportinoEdit: React.FC = () => {
                                             <IconButton size="small" onClick={() => removeTecnico(dett.tecnicoId)} disabled={d.tecnicoId === tecnicoResponsabileId}><DeleteIcon /></IconButton>
                                         </Box>
                                     </Paper>
-                                ))}
-                                {/* ... (resto del form: dettagli intervento, etc. - Invariato) ... */}
+                                ))},
                                  <Divider sx={{ my: 1 }}><Typography variant="overline">Dettagli Intervento</Typography></Divider>
                                 <Autocomplete options={sortedNavi} getOptionLabel={o => o.nome || ''} value={sortedNavi.find(n => n.id === naveId) || null} onChange={(_, v) => setNaveId(v?.id || null)} renderInput={params => <TextField {...params} label="Nave" />} />
                                 <Autocomplete options={sortedLuoghi} getOptionLabel={o => o.nome || ''} value={sortedLuoghi.find(l => l.id === luogoId) || null} onChange={(_, v) => setLuogoId(v?.id || null)} renderInput={params => <TextField {...params} label="Luogo" />} />

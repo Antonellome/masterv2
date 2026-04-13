@@ -3,7 +3,7 @@ import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaV3Provider, CustomProvider } from "firebase/app-check";
 
 // Configurazione Firebase centralizzata
 const firebaseConfig = {
@@ -16,33 +16,43 @@ const firebaseConfig = {
   databaseURL: "https://riso-project-app-default-rtdb.europe-west1.firebasedatabase.app"
 };
 
+// LA CHIAVE CORRETTA (reCAPTCHA v3 Standard) per la produzione
+const RECAPTCHA_KEY = '6Lcp2LUsAAAAALannRMeNzgFLMHd_272Jo6MBAXM';
+
 // PATTERN SINGLETON: Inizializza l'app solo se non esiste già
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Inizializzazione di App Check (una sola volta, dopo l'inizializzazione dell'app)
+// Inizializzazione di App Check
 if (typeof window !== 'undefined') { // Assicura che il codice venga eseguito solo nel browser
   try {
+    let appCheckProvider;
+
     if (import.meta.env.DEV) {
-      // AMBIENTE DI SVILUPPO (ANTEPRIMA)
-      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-      console.log("Firebase App Check in modalità DEBUG.");
-      initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider('6Ld84bMsAAAAAP_4_qsKx2a4MSgmc82Gg5k8-C6k'), // Chiave fittizia per localhost
-        isTokenAutoRefreshEnabled: true
+      // In SVILUPPO, usiamo un CustomProvider per generare un token fittizio.
+      // Questo evita gli errori di reCAPTCHA nella console e velocizza i test.
+      // Funziona perché abbiamo disabilitato l'enforcement di App Check sul backend per Auth.
+      console.log("App in modalità sviluppo. Inizializzo App Check con un provider fittizio.");
+      appCheckProvider = new CustomProvider({
+        getToken: () => Promise.resolve({
+          token: "dev-mode-fake-token",
+          expireTimeMillis: Date.now() + 60 * 60 * 1000, // Scade tra 1 ora
+        }),
       });
     } else {
-      // AMBIENTE DI PRODUZIONE (SITO ONLINE) con la NUOVA CHIAVE
-      initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider('6Lee77MsAAAAALdYGZlQ1p_hf2UleNSFLhRhvz-q'), 
-        isTokenAutoRefreshEnabled: true
-      });
+      // In PRODUZIONE, usiamo il provider reCAPTCHA v3 standard per la sicurezza.
+      appCheckProvider = new ReCaptchaV3Provider(RECAPTCHA_KEY);
     }
+
+    initializeAppCheck(app, {
+      provider: appCheckProvider,
+      isTokenAutoRefreshEnabled: true
+    });
+
   } catch (error) {
-    // Gestisce il caso in cui App Check sia già inizializzato, evitando crash
     if (String(error).includes('already-initialized')) {
-      console.log("App Check è già inizializzato.");
+      // Questo non è un errore critico, l'app check è già attivo.
     } else {
-      console.error("Errore durante l'inizializzazione di App Check:", error);
+      console.error("Errore critico durante l'inizializzazione di App Check:", error);
     }
   }
 }
