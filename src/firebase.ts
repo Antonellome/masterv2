@@ -1,7 +1,7 @@
 
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 import { initializeAppCheck, ReCaptchaV3Provider, CustomProvider } from "firebase/app-check";
 
@@ -16,30 +16,29 @@ const firebaseConfig = {
   databaseURL: "https://riso-project-app-default-rtdb.europe-west1.firebasedatabase.app"
 };
 
-// LA CHIAVE CORRETTA (reCAPTCHA v3 Standard) per la produzione
+
 const RECAPTCHA_KEY = '6Lcp2LUsAAAAALannRMeNzgFLMHd_272Jo6MBAXM';
 
-// PATTERN SINGLETON: Inizializza l'app solo se non esiste già
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Inizializzazione di App Check
-if (typeof window !== 'undefined') { // Assicura che il codice venga eseguito solo nel browser
+// CORREZIONE: Usiamo la dimensione minima consentita per la cache (1MB) invece di 0.
+// Questo risolve il crash e forza la rinizializzazione della cache.
+const db = initializeFirestore(app, { cacheSizeBytes: 1048576 });
+
+
+if (typeof window !== 'undefined') { 
   try {
     let appCheckProvider;
 
     if (import.meta.env.DEV) {
-      // In SVILUPPO, usiamo un CustomProvider per generare un token fittizio.
-      // Questo evita gli errori di reCAPTCHA nella console e velocizza i test.
-      // Funziona perché abbiamo disabilitato l'enforcement di App Check sul backend per Auth.
       console.log("App in modalità sviluppo. Inizializzo App Check con un provider fittizio.");
       appCheckProvider = new CustomProvider({
         getToken: () => Promise.resolve({
           token: "dev-mode-fake-token",
-          expireTimeMillis: Date.now() + 60 * 60 * 1000, // Scade tra 1 ora
+          expireTimeMillis: Date.now() + 60 * 60 * 1000, 
         }),
       });
     } else {
-      // In PRODUZIONE, usiamo il provider reCAPTCHA v3 standard per la sicurezza.
       appCheckProvider = new ReCaptchaV3Provider(RECAPTCHA_KEY);
     }
 
@@ -50,14 +49,12 @@ if (typeof window !== 'undefined') { // Assicura che il codice venga eseguito so
 
   } catch (error) {
     if (String(error).includes('already-initialized')) {
-      // Questo non è un errore critico, l'app check è già attivo.
     } else {
       console.error("Errore critico durante l'inizializzazione di App Check:", error);
     }
   }
 }
 
-// Esportazioni dei servizi Firebase
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export { db }; // Esportiamo l'istanza del db modificata
 export const functions = getFunctions(app, 'europe-west1');

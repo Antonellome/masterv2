@@ -1,38 +1,30 @@
-
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Cliente, Tecnico, Rapportino, TipoGiornata, Nave, Luogo, Veicolo } from '@/models/definitions';
+import type { Cliente, Tecnico, TipoGiornata, Nave, Luogo, Veicolo } from '@/models/definitions';
 
-// Definizione di un tipo per l'oggetto restituito dall'hook
-export interface UseDataReturn {
+export interface DataBundle {
   clienti: Cliente[];
   tecnici: Tecnico[];
-  // Rimosso: rapportini: Rapportino[];
   tipiGiornata: TipoGiornata[];
   navi: Nave[];
   luoghi: Luogo[];
   veicoli: Veicolo[];
-  loading: boolean;
-  error: string | null;
 }
 
-// Collezione di anagrafiche da caricare
-const collectionsToLoad: { key: keyof Omit<UseDataReturn, 'loading' | 'error' | 'rapportini'>, name: string }[] = [
+const collectionsToLoad: { key: keyof DataBundle; name: string }[] = [
   { key: 'clienti', name: 'clienti' },
   { key: 'tecnici', name: 'tecnici' },
-  // Rimosso: { key: 'rapportini', name: 'rapportini' },
   { key: 'tipiGiornata', name: 'tipiGiornata' },
   { key: 'navi', name: 'navi' },
   { key: 'luoghi', name: 'luoghi' },
   { key: 'veicoli', name: 'veicoli' },
 ];
 
-export const useData = (): UseDataReturn => {
-  const [data, setData] = useState<Omit<UseDataReturn, 'loading' | 'error'>>({
+export const useData = () => {
+  const [data, setData] = useState<DataBundle>({
     clienti: [],
     tecnici: [],
-    rapportini: [], // Mantenuto per compatibilità strutturale, ma non più caricato qui
     tipiGiornata: [],
     navi: [],
     luoghi: [],
@@ -41,49 +33,41 @@ export const useData = (): UseDataReturn => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const initialLoadStatus = useRef(
-    Object.fromEntries(collectionsToLoad.map(c => [c.key, false]))
-  );
-
   useEffect(() => {
-    const unsubs = collectionsToLoad.map(({ key, name }) => {
-      return onSnapshot(collection(db, name), snapshot => {
-        const collectionData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        setData(prevData => ({
-          ...prevData,
-          [key]: collectionData as any,
-        }));
-        
-        if (!initialLoadStatus.current[key]) {
-          initialLoadStatus.current[key] = true;
-          const allLoaded = Object.values(initialLoadStatus.current).every(Boolean);
-          if (allLoaded) {
-            setLoading(false);
+    const loadStatus: Partial<Record<keyof DataBundle, boolean>> = {};
+
+    const unsubscribers = collectionsToLoad.map(({ key, name }) => {
+      return onSnapshot(
+        collection(db, name),
+        (snapshot) => {
+          const collectionData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any;
+          setData((prevData) => ({ ...prevData, [key]: collectionData }));
+
+          if (!loadStatus[key]) {
+            loadStatus[key] = true;
+            if (Object.keys(loadStatus).length === collectionsToLoad.length) {
+              setLoading(false);
+            }
+          }
+        },
+        (err) => {
+          console.error(`Errore caricamento ${name}:`, err);
+          setError(`Fallito il caricamento di ${name}.`);
+          
+          if (!loadStatus[key]) {
+            loadStatus[key] = true;
+            if (Object.keys(loadStatus).length === collectionsToLoad.length) {
+              setLoading(false);
+            }
           }
         }
-
-      }, err => {
-        console.error(`Errore caricamento ${name}:`, err);
-        setError(`Errore nel caricamento di ${name}.`);
-        if (!initialLoadStatus.current[key]) {
-            initialLoadStatus.current[key] = true;
-            const allLoaded = Object.values(initialLoadStatus.current).every(Boolean);
-            if (allLoaded) {
-                setLoading(false);
-            }
-        }
-      });
+      );
     });
 
     return () => {
-      unsubs.forEach(unsub => unsub());
+      unsubscribers.forEach((unsub) => unsub());
     };
   }, []);
 
-  return useMemo(() => ({
-    ...(data as Omit<UseDataReturn, 'loading' | 'error'>),
-    loading,
-    error,
-  }), [data, loading, error]);
+  return { ...data, loading, error };
 };

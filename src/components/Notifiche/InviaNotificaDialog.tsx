@@ -158,7 +158,7 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>2. Scrivi il Messaggio</Typography>
           <TextField label="Titolo" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth required />
-          <TextField label="Testo del Messaggio" value={body} onChange={(e) => setBody(e.body.value)} fullWidth multiline rows={4} required />
+          <TextField label="Testo del Messaggio" value={body} onChange={(e) => setBody(e.target.value)} fullWidth multiline rows={4} required />
 
         </Box>
       </DialogContent>

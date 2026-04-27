@@ -45,8 +45,8 @@ const CheckinVisivo: React.FC<CheckinVisivoProps> = ({ checkins, loading, error 
             }
         }
         
-        Object.values(naviMap).forEach(tecnici => tecnici.sort((a, b) => a.nome.localeCompare(b.nome)));
-        Object.values(luoghiMap).forEach(tecnici => tecnici.sort((a, b) => a.nome.localeCompare(b.nome)));
+        Object.values(naviMap).forEach(tecnici => tecnici.sort((a, b) => `${a.nome} ${a.cognome}`.localeCompare(`${b.nome} ${b.cognome}`)));
+        Object.values(luoghiMap).forEach(tecnici => tecnici.sort((a, b) => `${a.nome} ${a.cognome}`.localeCompare(`${b.nome} ${b.cognome}`)));
 
         return { navi: naviMap, luoghi: luoghiMap };
     }, [checkins]);
@@ -85,7 +85,7 @@ const CheckinVisivo: React.FC<CheckinVisivoProps> = ({ checkins, loading, error 
                             </AccordionSummary>
                             <AccordionDetails sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, maxHeight: '200px', overflowY: 'auto' }}>
                                 {tecnici.map((tecnico) => (
-                                    <Chip key={tecnico.id} label={tecnico.nome} variant="outlined" size="small"/>
+                                    <Chip key={tecnico.id} label={`${tecnico.nome} ${tecnico.cognome}`} variant="outlined" size="small"/>
                                 ))}
                             </AccordionDetails>
                         </Accordion>

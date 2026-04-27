@@ -1,53 +1,52 @@
-import { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from "firebase/firestore"; 
-import { db } from '@/firebase';
-import type { Anagrafica } from '@/models/definitions';
 
-export const useAnagrafiche = () => {
-    const [anagrafiche, setAnagrafiche] = useState<Anagrafica[]>([]);
-    const [loading, setLoading] = useState(true);
+import { useState, useEffect } from 'react';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { db } from '@/firebase';
+import type { Tecnico, Anagrafica } from '@/models/definitions';
+
+interface AnagraficheData {
+    tecnici: Tecnico[];
+    luoghi: Anagrafica[];
+    navi: Anagrafica[];
+    loading: boolean;
+    error: Error | null;
+}
+
+export const useAnagrafiche = (): AnagraficheData => {
+    const [tecnici, setTecnici] = useState<Tecnico[]>([]);
+    const [luoghi, setLuoghi] = useState<Anagrafica[]>([]);
+    const [navi, setNavi] = useState<Anagrafica[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<Error | null>(null);
 
-    const anagraficheCollectionRef = collection(db, "anagrafiche");
-
-    const fetchAnagrafiche = async () => {
-        try {
-            setLoading(true);
-            const data = await getDocs(anagraficheCollectionRef);
-            const anagraficheData = data.docs.map((doc) => ({
-                ...doc.data(),
-                id: doc.id,
-            })) as Anagrafica[];
-            setAnagrafiche(anagraficheData);
-        } catch (err) {
-            setError(err as Error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const addAnagrafica = async (anagrafica: Omit<Anagrafica, 'id'>) => {
-        try {
-            await addDoc(anagraficheCollectionRef, anagrafica);
-            fetchAnagrafiche(); // Refresh data
-        } catch (err) {
-            setError(err as Error);
-        }
-    };
-
-    const updateAnagrafica = async (id: string, anagrafica: Partial<Anagrafica>) => {
-        try {
-            const anagraficaDoc = doc(db, "anagrafiche", id);
-            await updateDoc(anagraficaDoc, anagrafica);
-            fetchAnagrafiche(); // Refresh data
-        } catch (err) {
-            setError(err as Error);
-        }
-    };
-
     useEffect(() => {
+        const fetchAnagrafiche = async () => {
+            setLoading(true);
+            try {
+                const [tecniciSnap, luoghiSnap, naviSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'tecnici'), orderBy('nome'))),
+                    getDocs(query(collection(db, 'luoghi'), orderBy('nome'))),
+                    getDocs(query(collection(db, 'navi'), orderBy('nome')))
+                ]);
+
+                const tecniciData = tecniciSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tecnico));
+                const luoghiData = luoghiSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'luogo' as const } as Anagrafica));
+                const naviData = naviSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'nave' as const } as Anagrafica));
+
+                setTecnici(tecniciData);
+                setLuoghi(luoghiData);
+                setNavi(naviData);
+
+            } catch (e: any) {
+                console.error("Errore durante il caricamento delle anagrafiche:", e);
+                setError(e);
+            } finally {
+                setLoading(false);
+            }
+        };
+
         fetchAnagrafiche();
     }, []);
 
-    return { anagrafiche, loading, error, addAnagrafica, updateAnagrafica };
+    return { tecnici, luoghi, navi, loading, error };
 };
