@@ -1,52 +1,24 @@
 
-import { useState, useEffect } from 'react';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { db } from '@/firebase';
-import type { Tecnico, Anagrafica } from '@/models/definitions';
+// src/hooks/useAnagrafiche.ts
+import { useFirestoreData } from './useFirestoreData';
+import { collection } from 'firebase/firestore';
+import { db } from '../firebase';
+import type { Tecnico, Nave, Luogo } from '../models/definitions';
+import { useMemo } from 'react';
 
-interface AnagraficheData {
-    tecnici: Tecnico[];
-    luoghi: Anagrafica[];
-    navi: Anagrafica[];
-    loading: boolean;
-    error: Error | null;
-}
+export const useAnagrafiche = () => {
+    const { data: tecnici, loading: lTecnici, error: eTecnici } = useFirestoreData<Tecnico>(collection(db, 'tecnici'));
+    const { data: navi, loading: lNavi, error: eNavi } = useFirestoreData<Nave>(collection(db, 'navi'));
+    const { data: luoghi, loading: lLuoghi, error: eLuoghi } = useFirestoreData<Luogo>(collection(db, 'luoghi'));
 
-export const useAnagrafiche = (): AnagraficheData => {
-    const [tecnici, setTecnici] = useState<Tecnico[]>([]);
-    const [luoghi, setLuoghi] = useState<Anagrafica[]>([]);
-    const [navi, setNavi] = useState<Anagrafica[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<Error | null>(null);
+    const loading = lTecnici || lNavi || lLuoghi;
+    const error = eTecnici || eNavi || eLuoghi;
 
-    useEffect(() => {
-        const fetchAnagrafiche = async () => {
-            setLoading(true);
-            try {
-                const [tecniciSnap, luoghiSnap, naviSnap] = await Promise.all([
-                    getDocs(query(collection(db, 'tecnici'), orderBy('nome'))),
-                    getDocs(query(collection(db, 'luoghi'), orderBy('nome'))),
-                    getDocs(query(collection(db, 'navi'), orderBy('nome')))
-                ]);
+    const anagrafiche = useMemo(() => ({
+        tecnici,
+        navi,
+        luoghi
+    }), [tecnici, navi, luoghi]);
 
-                const tecniciData = tecniciSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tecnico));
-                const luoghiData = luoghiSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'luogo' as const } as Anagrafica));
-                const naviData = naviSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), tipo: 'nave' as const } as Anagrafica));
-
-                setTecnici(tecniciData);
-                setLuoghi(luoghiData);
-                setNavi(naviData);
-
-            } catch (e: any) {
-                console.error("Errore durante il caricamento delle anagrafiche:", e);
-                setError(e);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchAnagrafiche();
-    }, []);
-
-    return { tecnici, luoghi, navi, loading, error };
+    return { ...anagrafiche, loading, error };
 };
