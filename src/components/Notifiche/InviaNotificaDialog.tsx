@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, 
-  Autocomplete, CircularProgress, Box, Typography, 
-  FormControlLabel, Checkbox, Divider
+  Autocomplete, CircularProgress, Box, Typography, Divider, FormControl, 
+  RadioGroup, FormControlLabel, Radio
 } from '@mui/material';
 import { collection, getDocs, Timestamp, addDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
@@ -16,45 +16,49 @@ interface InviaNotificaDialogProps {
   onError: (message: string) => void;
 }
 
-// Interfaccia aggiornata per coerenza
-interface NotificaOutbox {
+// Interfaccia allineata a NotificaRichiesta
+interface NotificaDaInviare {
   title: string;
   body: string;
-  dataCreazione: Timestamp;
-  isGlobal?: boolean;
+  createdAt: Timestamp;
+  sendToAll?: boolean;
   to_ids?: string[];
   to_category_ids?: string[];
-  mittente: string; // Aggiunto per tracciabilità
+  to_names?: string[];
+  to_category_names?: string[];
+  mittente: string;
 }
 
 const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose, onSuccess, onError }) => {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  
+  // Dati caricati da Firestore
   const [tecnici, setTecnici] = useState<Tecnico[]>([]);
   const [categorie, setCategorie] = useState<Categoria[]>([]);
-  const [selectedTecnici, setSelectedTecnici] = useState<Tecnico[]>([]);
-  const [selectedCategorie, setSelectedCategorie] = useState<Categoria[]>([]);
-  const [sendToAll, setSendToAll] = useState(false);
+
+  // Stato del form
+  const [sendMode, setSendMode] = useState('tecnico'); // tecnico | categoria | tutti
+  const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
+  const [selectedCategoria, setSelectedCategoria] = useState<Categoria | null>(null);
+
+  // Stato UI
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // Assume che ci sia un modo per ottenere l'utente corrente
-  // In un'app reale, questo verrebbe da un contesto di autenticazione.
-  const currentUser = { displayName: "Admin" }; // Esempio statico
+  const currentUser = { displayName: "Admin" };
 
   useEffect(() => {
     if (open) {
+      setLoading(true);
       const fetchTecniciAndCategorie = async () => {
-        setLoading(true);
         try {
           const [tecniciSnapshot, categorieSnapshot] = await Promise.all([
             getDocs(collection(db, 'tecnici')),
             getDocs(collection(db, 'categorie')),
           ]);
-          const tecniciList = tecniciSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Tecnico));
-          const categorieList = categorieSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Categoria));
-          setTecnici(tecniciList);
-          setCategorie(categorieList);
+          setTecnici(tecniciSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Tecnico)));
+          setCategorie(categorieSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Categoria)));
         } catch (error) {
           console.error("Errore nel caricamento: ", error);
           onError("Impossibile caricare i dati necessari.");
@@ -66,10 +70,6 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
   }, [open, onError]);
 
   const handleSend = async () => {
-    if (!sendToAll && !selectedTecnici.length && !selectedCategorie.length) {
-        onError('Seleziona almeno un destinatario, una categoria, o spunta "Invia a tutti".');
-        return;
-    }
     if (!title || !body) {
         onError('Titolo e corpo del messaggio sono obbligatori.');
         return;
@@ -77,27 +77,27 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
     setSending(true);
     
-    const notifica: NotificaOutbox = {
+    const notifica: NotificaDaInviare = {
         title,
         body,
-        dataCreazione: Timestamp.now(),
+        createdAt: Timestamp.now(),
         mittente: currentUser.displayName || 'Sistema',
     };
 
-    if (sendToAll) {
-        notifica.isGlobal = true;
-    } else {
-        if (selectedTecnici.length > 0) {
-            notifica.to_ids = selectedTecnici.map(t => t.id);
-        }
-        if (selectedCategorie.length > 0) {
-            notifica.to_category_ids = selectedCategorie.map(c => c.id);
-        }
+    if (sendMode === 'tutti') {
+        notifica.sendToAll = true;
+    } else if (sendMode === 'tecnico') {
+        if (!selectedTecnico) { onError('Seleziona un tecnico.'); setSending(false); return; }
+        notifica.to_ids = [selectedTecnico.id];
+        notifica.to_names = [`${selectedTecnico.nome} ${selectedTecnico.cognome || ''}`.trim()];
+    } else if (sendMode === 'categoria') {
+        if (!selectedCategoria) { onError('Seleziona una categoria.'); setSending(false); return; }
+        notifica.to_category_ids = [selectedCategoria.id];
+        notifica.to_category_names = [selectedCategoria.nome];
     }
 
     try {
-      // MODIFICA CHIAVE: Scrittura nella collezione 'notifiche_outbox'
-      await addDoc(collection(db, 'notifiche_outbox'), notifica);
+      await addDoc(collection(db, 'notificheRichieste'), notifica);
       onSuccess();
       handleClose();
     } catch (error) {
@@ -109,11 +109,12 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
   };
 
   const handleClose = () => {
+    // Reset completo dello stato del form
     setTitle('');
     setBody('');
-    setSelectedTecnici([]);
-    setSelectedCategorie([]);
-    setSendToAll(false);
+    setSendMode('tecnico');
+    setSelectedTecnico(null);
+    setSelectedCategoria(null);
     onClose();
   }
 
@@ -123,35 +124,37 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 1 }}>
           
-          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>1. Scegli i Destinatari</Typography>
-          
-          <FormControlLabel
-            control={<Checkbox checked={sendToAll} onChange={(e) => setSendToAll(e.target.checked)} />}
-            label="Invia a tutti i tecnici"
-          />
+          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>1. Scegli Destinatario</Typography>
+
+          <FormControl component="fieldset">
+            <RadioGroup row value={sendMode} onChange={(e) => setSendMode(e.target.value)}>
+              <FormControlLabel value="tecnico" control={<Radio />} label="Tecnico" />
+              <FormControlLabel value="categoria" control={<Radio />} label="Categoria" />
+              <FormControlLabel value="tutti" control={<Radio />} label="Tutti" />
+            </RadioGroup>
+          </FormControl>
 
           {loading ? <CircularProgress /> : (
-            <>
-              <Autocomplete
-                multiple
-                disabled={sendToAll}
-                options={tecnici}
-                getOptionLabel={(option) => `${option.nome} ${option.cognome || ''}`}
-                value={selectedTecnici}
-                onChange={(_, newValue) => setSelectedTecnici(newValue)}
-                renderInput={(params) => <TextField {...params} label="Seleziona Tecnici" />}
-              />
-              <Typography color="text.secondary" textAlign="center" sx={{m: 0, p: 0, fontStyle: 'italic' }}>o</Typography>
-              <Autocomplete
-                multiple
-                disabled={sendToAll}
-                options={categorie}
-                getOptionLabel={(option) => option.nome}
-                value={selectedCategorie}
-                onChange={(_, newValue) => setSelectedCategorie(newValue)}
-                renderInput={(params) => <TextField {...params} label="Seleziona Categorie" />}
-              />
-            </>
+            <Box sx={{ minHeight: '60px' }}>
+              {sendMode === 'tecnico' && (
+                <Autocomplete
+                  options={tecnici}
+                  getOptionLabel={(option) => `${option.nome} ${option.cognome || ''}`.trim()}
+                  value={selectedTecnico}
+                  onChange={(_, newValue) => setSelectedTecnico(newValue)}
+                  renderInput={(params) => <TextField {...params} label="Seleziona Tecnico" />}
+                />
+              )}
+              {sendMode === 'categoria' && (
+                <Autocomplete
+                  options={categorie}
+                  getOptionLabel={(option) => option.nome}
+                  value={selectedCategoria}
+                  onChange={(_, newValue) => setSelectedCategoria(newValue)}
+                  renderInput={(params) => <TextField {...params} label="Seleziona Categoria" />}
+                />
+              )}
+            </Box>
           )}
 
           <Divider sx={{ my: 1 }} />
