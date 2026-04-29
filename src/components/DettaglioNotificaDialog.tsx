@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
     Dialog,
@@ -17,56 +18,81 @@ import {
     Chip
 } from '@mui/material';
 import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db } from '../../firebase'; 
-import type { NotificaRichiesta } from '../../types/definitions'; 
+import { db } from '@/firebase';
+import type { Notifica } from '@/models/definitions';
 import PeopleIcon from '@mui/icons-material/People';
-import dayjs from 'dayjs';
 
+interface ReadByEntry {
+  uid: string;
+  nome: string;
+  readAt: Timestamp;
+}
+
+// Interfaccia per le props del componente
 interface DettaglioNotificaDialogProps {
     open: boolean;
     onClose: () => void;
-    notifica: NotificaRichiesta | null;
+    notifica: Notifica | null;
 }
 
 const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open, onClose, notifica }) => {
-    const [readers, setReaders] = useState<any[]>([]);
+    const [readers, setReaders] = useState<ReadByEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!open || !notifica?.id) {
             setReaders([]);
+            setLoading(false);
             return;
         }
 
         setLoading(true);
+        console.log(`[DIAGNOSTICA] Apertura listener per notifica: ${notifica.id}`);
+
         const unsubscribe = onSnapshot(doc(db, 'notificheRichieste', notifica.id), (docSnapshot) => {
             if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
+                console.log("[DIAGNOSTICA] Dati ricevuti da Firestore:", data);
 
-                // --- LOGICA DI LETTURA CORRETTA PER OGGETTO/MAPPA ---
-                const readByData = data.readBy && typeof data.readBy === 'object' ? Object.values(data.readBy) : [];
+                const readByData = Array.isArray(data.readBy) ? data.readBy : [];
                 
-                // Ordina i lettori per data, dal più recente al meno recente
-                readByData.sort((a, b) => (b.readAt?.toMillis() || 0) - (a.readAt?.toMillis() || 0));
+                if (!Array.isArray(data.readBy)) {
+                    console.warn(`[DIAGNOSTICA] Il campo 'readBy' non è un array o è assente. Trovato:`, data.readBy);
+                }
+
+                readByData.sort((a, b) => {
+                    const timeA = a.readAt?.toMillis() || 0;
+                    const timeB = b.readAt?.toMillis() || 0;
+                    return timeB - timeA;
+                });
+                
                 setReaders(readByData);
+                console.log("[DIAGNOSTICA] Stato 'readers' aggiornato:", readByData);
 
             } else {
+                console.error(`[DIAGNOSTICA] Notifica con ID ${notifica.id} non trovata!`);
                 setReaders([]);
             }
             setLoading(false);
         }, (error) => {
-            console.error("Errore listener dettaglio notifica:", error);
+            console.error("[DIAGNOSTICA] Errore nel listener del dettaglio notifica:", error);
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            console.log(`[DIAGNOSTICA] Chiusura listener per notifica: ${notifica.id}`);
+            unsubscribe();
+        }
 
     }, [notifica, open]);
 
     const formatTimestamp = (timestamp: any) => {
         if (!timestamp) return 'Data non disponibile';
         const date = timestamp.toDate ? timestamp.toDate() : timestamp;
-        return dayjs(date).format('DD/MM/YYYY HH:mm');
+        return new Intl.DateTimeFormat('it-IT', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        }).format(date);
     };
 
     return (
@@ -76,7 +102,7 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
                 {!loading && readers.length > 0 && (
                     <Chip 
                         icon={<PeopleIcon />} 
-                        label={`Letto da ${readers.length} ${readers.length > 1 ? 'tecnici' : 'tecnico'}`}
+                        label={`Letto da ${readers.length} tecnici`} 
                         color="success" 
                     />
                 )}
@@ -99,8 +125,8 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
                         <Typography variant="h6" gutterBottom>Elenco Letture</Typography>
                         {readers.length > 0 ? (
                             <List dense>
-                                {readers.map((reader, index) => (
-                                    <ListItem key={index}>
+                                {readers.map((reader) => (
+                                    <ListItem key={reader.uid}>
                                         <ListItemIcon>
                                              <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.light' }}>
                                                 {reader.nome?.charAt(0) || 'N'}

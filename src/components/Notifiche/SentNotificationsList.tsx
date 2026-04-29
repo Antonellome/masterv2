@@ -20,19 +20,14 @@ import {
     ListItemAvatar,
     Avatar,
     Divider,
-    Tooltip
+    Tooltip,
+    Chip
 } from '@mui/material';
-import { Delete as DeleteIcon, Done as DoneIcon, DoneAll as DoneAllIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Done as DoneIcon, DoneAll as DoneAllIcon, People as PeopleIcon } from '@mui/icons-material';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import dayjs from 'dayjs';
 import type { NotificaRichiesta } from '../../types/definitions';
-
-// Definizione del tipo per la nuova struttura di `readBy`
-interface ReadByEntry {
-    name: string;
-    readAt: Timestamp;
-}
 
 const DettaglioNotificaDialog = lazy(() => import('./DettaglioNotificaDialog'));
 
@@ -84,26 +79,16 @@ const SentNotificationsList = () => {
         }
         setConfirmDelete({ open: false, id: null });
     };
-
-    const generateTooltipContent = (notifica: NotificaRichiesta): React.ReactNode => {
-        const recipients = [
-            ...(notifica.to_names || []),
-            ...(notifica.to_category_names || []).map(c => `Cat: ${c}`)
-        ];
-        const recipientsText = notifica.sendToAll ? 'Tutti i tecnici' : recipients.join(', ') || 'Nessun destinatario';
-
-        const readByData = notifica.readBy as { [uid: string]: ReadByEntry } | undefined;
-        const readers = readByData ? Object.values(readByData) : [];
-
+    
+    const generateTooltipContent = (readers: any[]): React.ReactNode => {
+        // Ordina i lettori per data, dal più recente al meno recente
+        const sortedReaders = [...readers].sort((a, b) => (b.readAt?.toDate() || 0) - (a.readAt?.toDate() || 0));
         return (
             <Box>
-                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>Inviata a: {recipientsText}</Typography>
-                <Divider />
-                <Typography variant="body2" sx={{ fontWeight: 'bold', mt: 1, mb: 0.5 }}>Stato Letture:</Typography>
-                {readers.length > 0 ? (
-                    readers.map(reader => (
-                        <Typography key={reader.name} variant="caption" display="block">
-                            - {reader.name} (Letto il: {dayjs(reader.readAt.toDate()).format('DD/MM HH:mm')})
+                 {sortedReaders.length > 0 ? (
+                    sortedReaders.map((reader, index) => (
+                        <Typography key={index} variant="caption" display="block">
+                            - {reader.nome} (Letto il: {dayjs(reader.readAt?.toDate()).format('DD/MM HH:mm')})
                         </Typography>
                     ))
                 ) : (
@@ -131,7 +116,12 @@ const SentNotificationsList = () => {
             <Paper elevation={3} sx={{ mt: 2 }}>
                 <List sx={{ padding: 0 }}>
                     {sentNotifications.map((notifica, index) => {
-                        const hasBeenRead = notifica.readBy && Object.keys(notifica.readBy).length > 0;
+                        
+                        // --- LOGICA DI LETTURA CORRETTA PER OGGETTO/MAPPA ---
+                        const readers = notifica.readBy && typeof notifica.readBy === 'object' ? Object.values(notifica.readBy) : [];
+                        const readerCount = readers.length;
+                        const hasBeenRead = readerCount > 0;
+                        
                         return (
                             <React.Fragment key={notifica.id}>
                                 <ListItem
@@ -144,8 +134,8 @@ const SentNotificationsList = () => {
                                 >
                                     <ListItemButton onClick={() => handleOpenDetail(notifica)}>
                                         <ListItemAvatar>
-                                            <Tooltip title={generateTooltipContent(notifica)} arrow placement="right">
-                                                <Avatar sx={{ bgcolor: hasBeenRead ? 'primary.main' : 'grey.500' }}>
+                                            <Tooltip title={generateTooltipContent(readers)} arrow placement="right">
+                                                <Avatar sx={{ bgcolor: hasBeenRead ? 'success.main' : 'grey.500' }}>
                                                     {hasBeenRead ? <DoneAllIcon /> : <DoneIcon />}
                                                 </Avatar>
                                             </Tooltip>
@@ -153,9 +143,21 @@ const SentNotificationsList = () => {
                                         <ListItemText
                                             primary={notifica.title || '(Nessun titolo)'}
                                             secondary={
-                                                <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                                    {`Inviata il: ${dayjs((notifica.createdAt as Timestamp).toDate()).format('DD/MM/YYYY HH:mm')}`}
-                                                </Typography>
+                                                <Box component="span" sx={{ display: 'flex', flexDirection: 'column', mt: 0.5 }}>
+                                                    <Typography component="span" variant="body2" color="text.secondary">
+                                                        {`Inviata il: ${dayjs((notifica.createdAt as Timestamp)?.toDate()).format('DD/MM/YYYY HH:mm')}`}
+                                                    </Typography>
+                                                    {hasBeenRead && (
+                                                        <Chip 
+                                                            icon={<PeopleIcon />}
+                                                            label={`Letto da ${readerCount} ${readerCount > 1 ? 'tecnici' : 'tecnico'}`}
+                                                            size="small"
+                                                            color="success"
+                                                            variant="outlined"
+                                                            sx={{ mt: 1, maxWidth: 'fit-content' }}
+                                                        />
+                                                    )}
+                                                </Box>
                                             }
                                             primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
                                         />

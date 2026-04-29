@@ -1,17 +1,18 @@
 
 import React from 'react';
-import { 
-    Grid, 
-    FormControl, 
-    InputLabel, 
-    Select, 
-    MenuItem, 
-    OutlinedInput, 
-    SelectChangeEvent, 
-    TextField, 
-    Autocomplete, 
+import {
+    Grid,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    OutlinedInput,
+    SelectChangeEvent,
+    TextField,
+    Autocomplete,
     Box,
-    Chip 
+    Chip,
+    CircularProgress
 } from '@mui/material';
 import { FiltriCheckin, Tecnico, Anagrafica } from '@/models/definitions';
 
@@ -35,6 +36,15 @@ const MenuProps = {
 };
 
 const CheckinFilters: React.FC<CheckinFiltersProps> = ({ filtri, onFilterChange, tecnici, luoghi, navi }) => {
+
+    // Guard Clause: Se i dati non sono ancora pronti, mostra un caricamento.
+    if (!tecnici || !luoghi || !navi) {
+        return (
+            <Grid container spacing={2} sx={{ alignItems: 'center', justifyContent: 'center', py: 2 }}>
+                <CircularProgress />
+            </Grid>
+        );
+    }
 
     const handleLuoghiChange = (event: SelectChangeEvent<string[]>) => {
         const { target: { value } } = event;
