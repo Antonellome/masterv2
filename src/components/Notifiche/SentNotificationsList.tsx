@@ -81,7 +81,6 @@ const SentNotificationsList = () => {
     };
     
     const generateTooltipContent = (readers: any[]): React.ReactNode => {
-        // Ordina i lettori per data, dal più recente al meno recente
         const sortedReaders = [...readers].sort((a, b) => (b.readAt?.toDate() || 0) - (a.readAt?.toDate() || 0));
         return (
             <Box>
@@ -117,7 +116,6 @@ const SentNotificationsList = () => {
                 <List sx={{ padding: 0 }}>
                     {sentNotifications.map((notifica, index) => {
                         
-                        // --- LOGICA DI LETTURA CORRETTA PER OGGETTO/MAPPA ---
                         const readers = notifica.readBy && typeof notifica.readBy === 'object' ? Object.values(notifica.readBy) : [];
                         const readerCount = readers.length;
                         const hasBeenRead = readerCount > 0;
@@ -160,6 +158,7 @@ const SentNotificationsList = () => {
                                                 </Box>
                                             }
                                             primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
+                                            secondaryTypographyProps={{ component: 'div' }} // <-- Ecco la correzione
                                         />
                                     </ListItemButton>
                                 </ListItem>
