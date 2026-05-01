@@ -102,18 +102,16 @@ const SentNotificationsList = () => {
     }
     if (sentNotifications.length === 0) {
         return (
-             <Box sx={{ p: { xs: 0.5, sm: 1 } }}>
-                <Paper elevation={3} sx={{ p: 4, textAlign: 'center', mt: 2 }}>
-                    <Typography color="text.secondary">Nessuna notifica inviata.</Typography>
-                </Paper>
-            </Box>
+            <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
+                <Typography color="text.secondary">Nessuna notifica inviata.</Typography>
+            </Paper>
         );
     }
 
     return (
         <>
-            <Paper elevation={3} sx={{ mt: 2 }}>
-                <List sx={{ padding: 0 }}>
+            <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <List sx={{ overflow: 'auto', p: 0, flexGrow: 1 }}>
                     {sentNotifications.map((notifica, index) => {
                         
                         const readers = notifica.readBy && typeof notifica.readBy === 'object' ? Object.values(notifica.readBy) : [];
@@ -158,7 +156,7 @@ const SentNotificationsList = () => {
                                                 </Box>
                                             }
                                             primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
-                                            secondaryTypographyProps={{ component: 'div' }} // <-- Ecco la correzione
+                                            secondaryTypographyProps={{ component: 'div' }}
                                         />
                                     </ListItemButton>
                                 </ListItem>

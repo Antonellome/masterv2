@@ -26,20 +26,24 @@ const NotificationsPage = () => {
     return (
         <>
             <SectionLayout>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography color="text.secondary" sx={{ maxWidth: '70%' }}>
-                        Da qui puoi inviare notifiche push ai tecnici e consultare lo storico delle notifiche inviate.
-                    </Typography>
-                    <Button
-                        variant="contained"
-                        startIcon={<AddCircleOutlineIcon />}
-                        onClick={() => setDialogOpen(true)}
-                    >
-                        Invia Nuova Notifica
-                    </Button>
+                <Box sx={{ height: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
+                    <Box sx={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography color="text.secondary" sx={{ maxWidth: '70%' }}>
+                            Da qui puoi inviare notifiche push ai tecnici e consultare lo storico delle notifiche inviate.
+                        </Typography>
+                        <Button
+                            variant="contained"
+                            startIcon={<AddCircleOutlineIcon />}
+                            onClick={() => setDialogOpen(true)}
+                        >
+                            Invia Nuova Notifica
+                        </Button>
+                    </Box>
+                    
+                    <Box sx={{ flexGrow: 1, minHeight: 0 }}>
+                        <SentNotificationsList />
+                    </Box>
                 </Box>
-                
-                <SentNotificationsList />
             </SectionLayout>
 
             <InviaNotificaDialog
