@@ -11,12 +11,10 @@ import {
     List,
     ListItem,
     ListItemText,
-    ListItemIcon,
-    Avatar,
     Divider,
     Chip
 } from '@mui/material';
-import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase'; 
 import type { NotificaRichiesta } from '../../types/definitions'; 
 import PeopleIcon from '@mui/icons-material/People';
@@ -28,8 +26,13 @@ interface DettaglioNotificaDialogProps {
     notifica: NotificaRichiesta | null;
 }
 
+interface ReaderDetail {
+    nome: string;
+    readAt: Timestamp | null;
+}
+
 const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open, onClose, notifica }) => {
-    const [readers, setReaders] = useState<any[]>([]);
+    const [readers, setReaders] = useState<ReaderDetail[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -39,16 +42,45 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
         }
 
         setLoading(true);
-        const unsubscribe = onSnapshot(doc(db, 'notificheRichieste', notifica.id), (docSnapshot) => {
+        const unsubscribe = onSnapshot(doc(db, 'notificheRichieste', notifica.id), async (docSnapshot) => {
             if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
+                const readByMap = data.readBy && typeof data.readBy === 'object' ? data.readBy : {};
+                const readerUids = Object.keys(readByMap);
 
-                // --- LOGICA DI LETTURA CORRETTA PER OGGETTO/MAPPA ---
-                const readByData = data.readBy && typeof data.readBy === 'object' ? Object.values(data.readBy) : [];
-                
-                // Ordina i lettori per data, dal più recente al meno recente
-                readByData.sort((a, b) => (b.readAt?.toMillis() || 0) - (a.readAt?.toMillis() || 0));
-                setReaders(readByData);
+                if (readerUids.length > 0) {
+                    try {
+                        const readerPromises = readerUids.map(uid => getDoc(doc(db, 'tecnici', uid)));
+                        const readerDocs = await Promise.all(readerPromises);
+
+                        const detailedReaders = readerUids.map((uid, index) => {
+                            const readerDoc = readerDocs[index];
+                            let nome = 'Utente Sconosciuto';
+                            if (readerDoc.exists()) {
+                                const tecnicoData = readerDoc.data();
+                                nome = `${tecnicoData.nome || ''} ${tecnicoData.cognome || ''}`.trim() || 'Nome non disponibile';
+                            }
+                            return {
+                                nome: nome,
+                                readAt: readByMap[uid]?.readAt || null 
+                            };
+                        });
+
+                        detailedReaders.sort((a, b) => {
+                            const timeA = a.readAt?.toMillis() || 0;
+                            const timeB = b.readAt?.toMillis() || 0;
+                            return timeB - timeA;
+                        });
+
+                        setReaders(detailedReaders);
+
+                    } catch (error) {
+                        console.error("Errore nel recuperare i dettagli dei lettori:", error);
+                        setReaders([]);
+                    }
+                } else {
+                    setReaders([]);
+                }
 
             } else {
                 setReaders([]);
@@ -65,7 +97,7 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
 
     const formatTimestamp = (timestamp: any) => {
         if (!timestamp) return 'Data non disponibile';
-        const date = timestamp.toDate ? timestamp.toDate() : timestamp;
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
         return dayjs(date).format('DD/MM/YYYY HH:mm');
     };
 
@@ -100,15 +132,10 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
                         {readers.length > 0 ? (
                             <List dense>
                                 {readers.map((reader, index) => (
-                                    <ListItem key={index}>
-                                        <ListItemIcon>
-                                             <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.light' }}>
-                                                {reader.nome?.charAt(0) || 'N'}
-                                             </Avatar>
-                                        </ListItemIcon>
+                                    <ListItem key={index} sx={{ py: 0, pl: 1 }}>
                                         <ListItemText 
                                             primary={reader.nome || 'Nome non disponibile'} 
-                                            secondary={`Letto il: ${formatTimestamp(reader.readAt)}`}
+                                            primaryTypographyProps={{ variant: 'body2' }}
                                         />
                                     </ListItem>
                                 ))}
