@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'; // 1. Importato `where`
+import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase';
 import {
   Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert, Divider
@@ -10,14 +10,24 @@ import {
 import { DataGrid, GridColDef, GridRowParams, GridToolbar } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ConfirmationDialog from '@/components/ConfirmationDialog'; // Importa il dialog
 
 interface Tecnico {
-  id: string; 
+  id: string;
   nome: string;
   cognome: string;
   email: string;
-  abilitato: boolean; 
-  attivo: boolean; // Aggiunto per coerenza
+  abilitato: boolean;
+  attivo: boolean;
+}
+
+// Stato per il dialogo di conferma
+interface DialogState {
+  open: boolean;
+  title: string;
+  content: string;
+  onConfirm: () => void;
 }
 
 const functions = getFunctions(undefined, 'europe-west1');
@@ -28,6 +38,7 @@ const GestioneAccessi = () => {
   const [loading, setLoading] = useState(true);
   const [operating, setOperating] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [dialog, setDialog] = useState<DialogState>({ open: false, title: '', content: '', onConfirm: () => {} }); // Stato per il dialogo
 
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbar({ open: true, message, severity });
@@ -42,26 +53,22 @@ const GestioneAccessi = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // 2. AGGIUNTO IL FILTRO `where`
       const q = query(
-        collection(db, 'tecnici'), 
-        where('attivo', '==', true), // Mostra solo i tecnici attivi!
-        orderBy('cognome'), 
+        collection(db, 'tecnici'),
+        where('attivo', '==', true),
+        orderBy('cognome'),
         orderBy('nome')
       );
       const anagraficaSnapshot = await getDocs(q);
-      
       const tecniciList = anagraficaSnapshot.docs.map(doc => ({
         id: doc.id,
         nome: doc.data().nome || '',
         cognome: doc.data().cognome || '',
         email: doc.data().email || '',
         attivo: doc.data().attivo === true,
-        abilitato: doc.data().abilitato === true, 
+        abilitato: doc.data().abilitato === true,
       } as Tecnico));
-      
       setTecnici(tecniciList);
-
     } catch (err) {
       handleDetailedError(err, 'Caricamento Tecnici');
     } finally {
@@ -74,52 +81,86 @@ const GestioneAccessi = () => {
   }, [fetchData]);
 
   const handleToggleAccess = async (tecnico: Tecnico) => {
+    if (!tecnico.email) {
+      showSnackbar('Impossibile abilitare un utente senza email. Aggiorna l\'anagrafica.', 'error');
+      return;
+    }
     setOperating(true);
     const nuovoStato = !tecnico.abilitato;
-
     try {
-        await manageAccess({
-            action: 'toggleAbilitato',
-            payload: { uid: tecnico.id, abilitato: nuovoStato }
-        });
-        showSnackbar(`Accesso ${nuovoStato ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
-        await fetchData(); 
+      await manageAccess({ uid: tecnico.id, abilitato: nuovoStato });
+      showSnackbar(`Accesso ${nuovoStato ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
+      await fetchData();
     } catch (err) {
-        handleDetailedError(err, "Abilitazione Fallita");
+      handleDetailedError(err, "Abilitazione Fallita");
     } finally {
-        setOperating(false);
+      setOperating(false);
     }
   };
 
-  const handleResetPassword = async (email: string) => {
-      if (!window.confirm(`Inviare un'email di ripristino password a ${email}?`)) return;
-      setOperating(true);
-      try {
-          await sendPasswordResetEmail(getAuth(), email);
-          showSnackbar(`Email di ripristino inviata a ${email}.`, 'success');
-      } catch (error) {
-          handleDetailedError(error, "Reset Password Fallito");
-      } finally {
-          setOperating(false);
-      }
+  // Funzione che esegue effettivamente il reset
+  const executeResetPassword = async (email: string) => {
+    setOperating(true);
+    try {
+        await sendPasswordResetEmail(getAuth(), email);
+        showSnackbar(`Email di ripristino inviata a ${email}.`, 'success');
+    } catch (error) {
+        handleDetailedError(error, "Reset Password Fallito");
+    } finally {
+        setOperating(false);
+        setDialog({ open: false, title: '', content: '', onConfirm: () => {} });
+    }
+  };
+
+  // Funzione che apre il dialogo di conferma
+  const handleResetPassword = (email: string | null | undefined) => {
+    if (!email) {
+      showSnackbar('Email non disponibile per questo tecnico. Impossibile inviare il reset.', 'error');
+      return;
+    }
+    setDialog({
+      open: true,
+      title: 'Conferma Invio Email',
+      content: `Stai per inviare un\'email di ripristino password all\'indirizzo ${email}. Vuoi procedere?`,
+      onConfirm: () => executeResetPassword(email),
+    });
   };
 
   const columns: GridColDef<Tecnico>[] = [
     { field: 'cognome', headerName: 'Cognome', flex: 1, minWidth: 150 },
     { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 150 },
-    { field: 'email', headerName: 'Email', flex: 1.5, minWidth: 250 },
+    {
+      field: 'email',
+      headerName: 'Email',
+      flex: 1.5,
+      minWidth: 250,
+      renderCell: (params: GridRowParams<Tecnico>) => (
+        params.row.email ? (
+          <Typography variant="body2">{params.row.email}</Typography>
+        ) : (
+          <Tooltip title="Email mancante! Aggiornare l\'anagrafica.">
+            <Box sx={{ display: 'flex', alignItems: 'center', color: 'warning.main' }}>
+              <ErrorOutlineIcon fontSize="small" sx={{ mr: 1 }} />
+              <Typography variant="body2">Mancante</Typography>
+            </Box>
+          </Tooltip>
+        )
+      )
+    },
     {
       field: 'abilitato',
-      headerName: 'Accesso App Mobile',
-      width: 180, align: 'center', headerAlign: 'center',
+      headerName: 'Accesso App',
+      width: 130, align: 'center', headerAlign: 'center',
       renderCell: (params: GridRowParams<Tecnico>) => (
-        <Tooltip title={params.row.abilitato ? 'Revoca accesso' : 'Abilita accesso' }>
-          <Switch
-            checked={params.row.abilitato}
-            onChange={() => handleToggleAccess(params.row)}
-            disabled={operating}
-            color="success"
-          />
+        <Tooltip title={params.row.abilitato ? 'Revoca accesso' : 'Abilita accesso'}>
+          <span>
+            <Switch
+              checked={params.row.abilitato}
+              onChange={() => handleToggleAccess(params.row)}
+              disabled={operating || !params.row.email}
+              color="success"
+            />
+          </span>
         </Tooltip>
       ),
     },
@@ -128,12 +169,12 @@ const GestioneAccessi = () => {
         headerName: 'Password',
         sortable: false, disableColumnMenu: true, width: 100, align: 'center', headerAlign: 'center',
         renderCell: (params: GridRowParams<Tecnico>) => (
-            <Tooltip title="Invia Email per impostare/resettare la Password">
+            <Tooltip title={!params.row.email ? "Email non disponibile" : "Invia Email per impostare/resettare la Password"}>
               <span>
                 <IconButton
                     onClick={() => handleResetPassword(params.row.email)}
                     color="primary"
-                    disabled={operating || !params.row.abilitato}
+                    disabled={operating || !params.row.abilitato || !params.row.email}
                 >
                     <VpnKeyIcon />
                 </IconButton>
@@ -148,11 +189,15 @@ const GestioneAccessi = () => {
       setSnackbar({ ...snackbar, open: false });
   };
 
+  const handleCloseDialog = () => {
+    setDialog({ ...dialog, open: false });
+  };
+
   return (
     <Box sx={{ mt: 4 }}>
       <Typography variant="h5" gutterBottom>Gestione Accesso App Tecnici</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Da questa sezione puoi abilitare o revocare l'accesso all'app mobile per ogni tecnico e inviare l'email per il reset della password.
+        Da questa sezione puoi abilitare o revocare l'accesso all\'app mobile per ogni tecnico e inviare l'email per il reset della password.
       </Typography>
       <Divider sx={{ mb: 3 }} />
 
@@ -170,6 +215,14 @@ const GestioneAccessi = () => {
           />
         )}
       </Box>
+
+      <ConfirmationDialog 
+        open={dialog.open}
+        title={dialog.title}
+        content={dialog.content}
+        onConfirm={dialog.onConfirm}
+        onCancel={handleCloseDialog}
+      />
 
       <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={operating}>
         <CircularProgress color="inherit" />

@@ -1,9 +1,9 @@
 
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, initializeFirestore, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
+import { getFirestore, initializeFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
-import { initializeAppCheck, ReCaptchaV3Provider, CustomProvider } from "firebase/app-check";
+// import { initializeAppCheck, ReCaptchaV3Provider, CustomProvider } from "firebase/app-check";
 
 // Configurazione Firebase centralizzata
 const firebaseConfig = {
@@ -17,15 +17,13 @@ const firebaseConfig = {
 };
 
 
-const RECAPTCHA_KEY = '6Lcp2LUsAAAAALannRMeNzgFLMHd_272Jo6MBAXM';
+// const RECAPTCHA_KEY = '6Lcp2LUsAAAAALannRMeNzgFLMHd_272Jo6MBAXM';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// CORREZIONE: Usiamo la dimensione minima consentita per la cache (1MB) invece di 0.
-// Questo risolve il crash e forza la rinizializzazione della cache.
 const db = initializeFirestore(app, { cacheSizeBytes: 1048576 });
 
-
+/*
 if (typeof window !== 'undefined') { 
   try {
     let appCheckProvider;
@@ -39,7 +37,8 @@ if (typeof window !== 'undefined') {
         }),
       });
     } else {
-      appCheckProvider = new ReCaptchaV3Provider(RECAPTCHA_KEY);
+      // In produzione, useremmo ReCaptchaV3Provider
+      // appCheckProvider = new ReCaptchaV3Provider(RECAPTCHA_KEY);
     }
 
     initializeAppCheck(app, {
@@ -49,12 +48,14 @@ if (typeof window !== 'undefined') {
 
   } catch (error) {
     if (String(error).includes('already-initialized')) {
+      // Questo errore è normale in HMR, lo ignoriamo
     } else {
       console.error("Errore critico durante l'inizializzazione di App Check:", error);
     }
   }
 }
+*/
 
 export const auth = getAuth(app);
-export { db }; // Esportiamo l'istanza del db modificata
+export { db };
 export const functions = getFunctions(app, 'europe-west1');
