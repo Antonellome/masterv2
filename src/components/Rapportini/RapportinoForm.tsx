@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     Typography, FormControl, InputLabel, Select, MenuItem, Switch, FormControlLabel,
-    Autocomplete, Button, CircularProgress, Grid, Alert, Divider, Box, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Chip, TextField
+    Autocomplete, Button, CircularProgress, Grid, Alert, Divider, Box, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Chip, TextField, Paper
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -12,7 +12,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import { db } from '@/firebase';
 import { doc, setDoc, collection, Timestamp, writeBatch } from 'firebase/firestore';
-import { useData } from '@/hooks/useData'; // <-- ORA USO QUESTO!
+import { useData } from '@/hooks/useData';
 import type { Rapportino, TipoGiornata, Tecnico, Nave, Luogo, Veicolo } from '@/models/definitions';
 import OreLavoroSingoloTecnico from '@/components/Rapportini/OreLavoroSingoloTecnico';
 
@@ -37,10 +37,8 @@ const isGiornataLavorativa = (tipo: TipoGiornata | undefined): boolean => {
 const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | null, initialDate?: Dayjs }> = ({ onClose, rapportino: initialRapportino, initialDate }) => {
     const isEditMode = Boolean(initialRapportino?.id);
 
-    // 1. DATA FETCHING UNIFICATO E CORRETTO
     const { tipiGiornata, tecnici, veicoli, navi, luoghi, loading } = useData();
 
-    // 2. STATE DEL FORM
     const [tecnicoScriventeId, setTecnicoScriventeId] = useState<string>('');
     const [data, setData] = useState<Dayjs | null>(initialDate || dayjs());
     const [tipoGiornataId, setTipoGiornataId] = useState('');
@@ -57,20 +55,17 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
     const [dataFine, setDataFine] = useState<Dayjs | null>(dayjs());
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    
-    // Modal state
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingTecnico, setEditingTecnico] = useState<DettaglioOreData | null>(null);
     const [tempDettaglioOre, setTempDettaglioOre] = useState<DettaglioOreData | null>(null);
 
-    // 3. DATI ORDINATI E MEMOIZZATI
     const sortedTipiGiornata = useMemo(() => [...tipiGiornata].sort((a, b) => a.nome.localeCompare(b.nome)), [tipiGiornata]);
     const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`)), [tecnici]);
     const sortedNavi = useMemo(() => [...navi].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
     const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => a.nome.localeCompare(b.nome)), [luoghi]);
     const sortedVeicoli = useMemo(() => [...veicoli].sort((a, b) => a.targa.localeCompare(b.targa)), [veicoli]);
 
-    // 4. LOGICA DI INIZIALIZZAZIONE (EDIT MODE)
     useEffect(() => {
         if (initialRapportino) {
             const { data, tecnicoId, tipoGiornataId, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, dettaglioOreTecnici, altriTecniciIds, isTrasferta, oraInizio, oraFine, pausa, oreLavoro } = initialRapportino;
@@ -126,7 +121,6 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
         }
     }, [tecnicoScriventeId, isEditMode, tecnici]);
 
-    // 5. HANDLERS E FUNZIONI DI CALLBACK
     const handleTipoGiornataChange = (id: string) => {
         setTipoGiornataId(id);
         const tipo = tipiGiornata.find(t => t.id === id);
@@ -156,12 +150,72 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
     };
 
     const removeTecnico = (tecnicoIdToRemove: string) => setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== tecnicoIdToRemove));
+    
+    // *** NUOVA FUNZIONE PER CREARE L'OGGETTO RAPPORTO ***
+    const buildRapportinoDoc = (currentData: Dayjs): Omit<Rapportino, 'id'> => {
+        const scriventeDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoScriventeId);
+        const presenze = dettaglioOre.map(d => d.tecnicoId);
+        
+        let oreLavoroTotali: number;
+        let dettaglioOreTecniciToSave: { tecnicoId: string; ore: number; }[];
+
+        if (isLavorativo) {
+            dettaglioOreTecniciToSave = dettaglioOre.map(d => ({ tecnicoId: d.tecnicoId, ore: d.ore || 0 }));
+            oreLavoroTotali = dettaglioOreTecniciToSave.reduce((sum, item) => sum + item.ore, 0);
+        } else {
+            // *** INIZIO DELLA MODIFICA ***
+            const selectedTipo = tipiGiornata.find(t => t.id === tipoGiornataId);
+            const tipoNome = selectedTipo?.nome.toLowerCase() || '';
+            
+            let oreDaAssegnare = 0;
+            if (tipoNome.includes('ferie') || tipoNome.includes('malattia')) {
+                oreDaAssegnare = 8;
+            }
+
+            dettaglioOreTecniciToSave = dettaglioOre.map(d => ({
+                tecnicoId: d.tecnicoId,
+                ore: oreDaAssegnare
+            }));
+            
+            oreLavoroTotali = dettaglioOreTecniciToSave.reduce((sum, item) => sum + item.ore, 0);
+            // *** FINE DELLA MODIFICA ***
+        }
+
+        return {
+            data: Timestamp.fromDate(currentData.toDate()),
+            tipoGiornataId: tipoGiornataId,
+            tecnicoId: tecnicoScriventeId,
+            presenze: presenze,
+            updatedAt: Timestamp.now(),
+            createdAt: initialRapportino?.createdAt || Timestamp.now(),
+            nome: isLavorativo ? 'Rapportino giornaliero' : (initialRapportino?.nome || 'Rapportino non lavorativo'),
+            oreLavoro: oreLavoroTotali,
+            dettaglioOreTecnici: dettaglioOreTecniciToSave,
+            altriTecniciIds: isLavorativo ? dettaglioOre.filter(d => d.tecnicoId !== tecnicoScriventeId).map(d => d.tecnicoId) : [],
+            isTrasferta: isLavorativo ? (scriventeDettaglio?.isManual || false) : false,
+            oraInizio: isLavorativo && scriventeDettaglio && !scriventeDettaglio.isManual ? (scriventeDettaglio.oraInizio || null) : null,
+            oraFine: isLavorativo && scriventeDettaglio && !scriventeDettaglio.isManual ? (scriventeDettaglio.oraFine || null) : null,
+            pausa: isLavorativo && scriventeDettaglio && !scriventeDettaglio.isManual ? (scriventeDettaglio.pausa ?? null) : null,
+            veicoloId: isLavorativo ? (veicoloId || null) : null,
+            naveId: isLavorativo ? (naveId || null) : null,
+            luogoId: isLavorativo ? (luogoId || null) : null,
+            descrizioneBreve: isLavorativo ? (descrizioneBreve || '') : '',
+            lavoroEseguito: isLavorativo ? (lavoroEseguito || '') : '',
+            materialiImpiegati: isLavorativo ? (materialiImpiegati || '') : '',
+        };
+    };
+
 
     const handleSubmit = async () => {
         if ((isPeriodo ? !dataInizio || !dataFine : !data) || !tipoGiornataId || !tecnicoScriventeId) {
             setError("Compila i campi obbligatori: Data, Tecnico Responsabile e Tipo Giornata.");
             return;
         }
+        if (dettaglioOre.length === 0) {
+            setError("Aggiungi almeno un tecnico al rapportino.");
+            return;
+        }
+
         setError(null);
         setIsSaving(true);
 
@@ -171,42 +225,22 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
                 const batch = writeBatch(db);
                 const days = Array.from({ length: dataFine!.diff(dataInizio, 'day') + 1 }, (_, i) => dataInizio!.add(i, 'day'));
 
+                // La logica per calcolare ore e dettagli viene eseguita una volta
+                const docDataTemplate = buildRapportinoDoc(dataInizio!); // Uso dataInizio come template
+
                 days.forEach(day => {
                     const newReportRef = doc(collection(db, 'rapportini'));
-                    const rapportinoData: Partial<Rapportino> = { nome: 'Rapportino di periodo', tipoGiornataId, data: Timestamp.fromDate(day.toDate()), tecnicoId: tecnicoScriventeId, presenze: [tecnicoScriventeId], createdAt: Timestamp.now(), updatedAt: Timestamp.now(), oreLavoro: 0 };
-                    batch.set(newReportRef, rapportinoData);
+                    // Creo una copia del template e aggiorno solo la data
+                    const rapportinoPerGiorno: Omit<Rapportino, 'id'> = {
+                        ...docDataTemplate,
+                        data: Timestamp.fromDate(day.toDate()),
+                    };
+                    batch.set(newReportRef, rapportinoPerGiorno);
                 });
                 await batch.commit();
+
             } else {
-                const scriventeDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoScriventeId);
-                const presenze = dettaglioOre.map(d => d.tecnicoId);
-                const dettaglioOreTecniciToSave = dettaglioOre.map(d => ({ tecnicoId: d.tecnicoId, ore: d.ore || 0 }));
-                const oreLavoroTotali = dettaglioOreTecniciToSave.reduce((sum, item) => sum + item.ore, 0);
-
-                const docData: Omit<Rapportino, 'id'> = {
-                    data: Timestamp.fromDate(data!.toDate()),
-                    tipoGiornataId: tipoGiornataId,
-                    tecnicoId: tecnicoScriventeId,
-                    presenze: presenze,
-                    updatedAt: Timestamp.now(),
-                    createdAt: initialRapportino?.createdAt || Timestamp.now(),
-
-                    nome: isLavorativo ? 'Rapportino giornaliero' : 'Rapportino non lavorativo',
-                    oreLavoro: isLavorativo ? oreLavoroTotali : 0,
-                    altriTecniciIds: isLavorativo ? dettaglioOre.filter(d => d.tecnicoId !== tecnicoScriventeId).map(d => d.tecnicoId) : [],
-                    dettaglioOreTecnici: isLavorativo ? dettaglioOreTecniciToSave : [],
-                    isTrasferta: isLavorativo ? (scriventeDettaglio?.isManual || false) : false,
-                    oraInizio: isLavorativo && scriventeDettaglio && !scriventeDettaglio.isManual ? (scriventeDettaglio.oraInizio || null) : null,
-                    oraFine: isLavorativo && scriventeDettaglio && !scriventeDettaglio.isManual ? (scriventeDettaglio.oraFine || null) : null,
-                    pausa: isLavorativo && scriventeDettaglio && !scriventeDettaglio.isManual ? (scriventeDettaglio.pausa ?? null) : null,
-                    veicoloId: isLavorativo ? (veicoloId || null) : null,
-                    naveId: isLavorativo ? (naveId || null) : null,
-                    luogoId: isLavorativo ? (luogoId || null) : null,
-                    descrizioneBreve: isLavorativo ? (descrizioneBreve || '') : '',
-                    lavoroEseguito: isLavorativo ? (lavoroEseguito || '') : '',
-                    materialiImpiegati: isLavorativo ? (materialiImpiegati || '') : '',
-                };
-
+                const docData = buildRapportinoDoc(data!);
                 const docRef = isEditMode ? doc(db, 'rapportini', initialRapportino!.id) : doc(collection(db, 'rapportini'));
                 await setDoc(docRef, docData, { merge: isEditMode });
             }
@@ -253,9 +287,10 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
                                 </Select>
                             </FormControl>
                         </Grid>}
-                        {isEditMode && <Grid item xs={12}><TextField label="Tecnico Responsabile" value={initialRapportino?.tecnico ? `${initialRapportino.tecnico.cognome} ${initialRapportino.tecnico.nome}` : 'Caricamento...'} fullWidth disabled /></Grid>}
+                         {isEditMode && <Grid item xs={12}><TextField label="Tecnico Responsabile" value={initialRapportino?.tecnico ? `${initialRapportino.tecnico.cognome} ${initialRapportino.tecnico.nome}` : 'Caricamento...'} fullWidth disabled /></Grid>}
                     </Grid>
-                    
+                     
+                    {/* Common fields for both modes */}
                     <FormControl fullWidth required>
                         <InputLabel>Tipo Giornata</InputLabel>
                         <Select value={tipoGiornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>
@@ -301,3 +336,4 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
 };
 
 export default RapportinoForm;
+
