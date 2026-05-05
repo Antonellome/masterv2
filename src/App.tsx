@@ -28,19 +28,7 @@ import RapportiniList from '@/pages/RapportiniList';
 import AnagrafichePage from '@/pages/AnagrafichePage';
 import GestioneAnagrafica from '@/pages/GestioneAnagrafica';
 
-const AppFeatureProviders = ({ children }: { children: React.ReactNode }) => (
-  <NotificationProvider>
-    <RefreshProvider>
-      <AlertProvider>
-        <DataProvider>
-          {children}
-        </DataProvider>
-      </AlertProvider>
-    </RefreshProvider>
-  </NotificationProvider>
-);
-
-const AppRoutes = () => {
+const AppContent = () => {
   const { loading, user } = useAuth();
 
   if (loading) {
@@ -89,9 +77,15 @@ function App() {
     <ThemeProvider>
       <GlobalStyles styles={{ a: { color: 'inherit', textDecoration: 'none' } }} />
       <AuthProvider>
-        <AppFeatureProviders>
-          <AppRoutes />
-        </AppFeatureProviders>
+        <NotificationProvider>
+          <RefreshProvider>
+            <AlertProvider>
+              <DataProvider>
+                <AppContent />
+              </DataProvider>
+            </AlertProvider>
+          </RefreshProvider>
+        </NotificationProvider>
       </AuthProvider>
     </ThemeProvider>
   );
