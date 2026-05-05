@@ -30,11 +30,16 @@ interface Presenza {
     tipoGiornata: string;
     nave: string;
     luogo: string;
-    ore: number;
+    oreOrdinarie: number;
+    oreStraordinarie: number;
+    totaleOreGiorno: number;
 }
 
 interface Totali {
-    [key: string]: number;
+    oreOrdinarie: number;
+    oreStraordinarie: number;
+    totaleGenerale: number;
+    perTipoGiornata: { [key: string]: { ore: number; giorni: number } };
 }
 
 // --- Componente Principale ---
@@ -49,6 +54,8 @@ const ConsuntivoMensile = () => {
     const [selectedMonth, setSelectedMonth] = useState<Dayjs | null>(dayjs());
     const [reportGenerated, setReportGenerated] = useState(false);
     
+    const SOGLIA_ORE_ORDINARIE = 8;
+
     useEffect(() => {
         setRapportiniLoading(true);
         const unsub = onSnapshot(collection(db, "rapportini"), 
@@ -99,6 +106,10 @@ const ConsuntivoMensile = () => {
         });
 
         const presenzeData = filteredRapportini.map(doc => {
+            const oreLavoro = doc.oreLavoro || 0;
+            const oreOrdinarie = Math.min(oreLavoro, SOGLIA_ORE_ORDINARIE);
+            const oreStraordinarie = Math.max(0, oreLavoro - SOGLIA_ORE_ORDINARIE);
+            
             const formattedDate = doc.data instanceof Timestamp ? dayjs(doc.data.toDate()).format('DD/MM/YYYY') : 'Data Invalida';
 
             return {
@@ -107,7 +118,9 @@ const ConsuntivoMensile = () => {
                 tipoGiornata: doc.tipoGiornataId ? tipiGiornataMap.get(doc.tipoGiornataId) || 'N/D' : 'N/D',
                 nave: doc.naveId ? naviMap.get(doc.naveId) || 'N/D' : 'N/D',
                 luogo: doc.luogoId ? luoghiMap.get(doc.luogoId) || 'N/D' : 'N/D',
-                ore: doc.oreLavoro || 0,
+                oreOrdinarie,
+                oreStraordinarie,
+                totaleOreGiorno: oreLavoro,
             } as Presenza;
         });
         
@@ -123,30 +136,55 @@ const ConsuntivoMensile = () => {
         { field: 'tipoGiornata', headerName: 'Tipo Giornata', flex: 1 },
         { field: 'nave', headerName: 'Nave', flex: 1 },
         { field: 'luogo', headerName: 'Luogo', flex: 1 },
-        { field: 'ore', headerName: 'Ore', width: 100, type: 'number' },
+        { field: 'oreOrdinarie', headerName: 'Ordinarie', width: 100, type: 'number' },
+        { field: 'oreStraordinarie', headerName: 'Straordinarie', width: 110, type: 'number' },
+        { field: 'totaleOreGiorno', headerName: 'Totale Giorno', width: 120, type: 'number' },
     ];
 
-    const totaliPerTipoGiornata: Totali = useMemo(() => presenze.reduce((acc, curr) => {
-        const key = curr.tipoGiornata || "Non specificato";
-        acc[key] = (acc[key] || 0) + (curr.ore || 0);
-        return acc;
-    }, {} as Totali), [presenze]);
-
-    const totaleGenerale = useMemo(() => presenze.reduce((acc, curr) => acc + (curr.ore || 0), 0), [presenze]);
+    const totali: Totali = useMemo(() => {
+        return presenze.reduce((acc, curr) => {
+            const tipoGiornata = curr.tipoGiornata || "Non specificato";
+            
+            acc.oreOrdinarie += curr.oreOrdinarie;
+            acc.oreStraordinarie += curr.oreStraordinarie;
+            acc.totaleGenerale += curr.totaleOreGiorno;
+            
+            if (!acc.perTipoGiornata[tipoGiornata]) {
+                acc.perTipoGiornata[tipoGiornata] = { ore: 0, giorni: 0 };
+            }
+            
+            acc.perTipoGiornata[tipoGiornata].ore += curr.totaleOreGiorno;
+            acc.perTipoGiornata[tipoGiornata].giorni += 1;
+            
+            return acc;
+        }, { 
+            oreOrdinarie: 0, 
+            oreStraordinarie: 0, 
+            totaleGenerale: 0, 
+            perTipoGiornata: {} 
+        } as Totali);
+    }, [presenze]);
 
     const CustomFooter = () => (
-         <GridFooterContainer sx={{ justifyContent: 'flex-start', p: 2, borderTop: '1px solid #e0e0e0' }}>
-            <Box>
-                 <Typography variant="h6" gutterBottom>Riepilogo Ore</Typography>
-                 <Grid container spacing={2}>
-                    {Object.entries(totaliPerTipoGiornata).map(([tipo, ore]) => (
-                        <Grid item xs={6} sm={4} md={3} key={tipo}>
-                            <Typography variant="body2"><strong>{tipo}:</strong> {ore} ore</Typography>
+         <GridFooterContainer sx={{ justifyContent: 'space-between', p: 3, borderTop: '1px solid #e0e0e0', flexWrap: 'wrap' }}>
+            <Box sx={{ mb: { xs: 3, md: 0 }, flex: '1 1 50%' }}>
+                <Typography variant="h6" gutterBottom>Riepilogo per Tipo Giornata</Typography>
+                <Grid container spacing={1}>
+                    {Object.entries(totali.perTipoGiornata).map(([tipo, { ore, giorni }]) => (
+                        <Grid item xs={12} sm={6} md={12} key={tipo}>
+                            <Typography variant="body2">
+                                <strong>{tipo}:</strong> {ore} ore ({giorni} {giorni > 1 ? 'giorni' : 'giorno'})
+                            </Typography>
                         </Grid>
                     ))}
-                 </Grid>
-                 <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #ccc' }}>
-                    <Typography variant="h5">Totale Generale: {totaleGenerale} ore</Typography>
+                </Grid>
+            </Box>
+            <Box sx={{ textAlign: { md: 'right' }, flex: '1 1 40%' }}>
+                <Typography variant="h6" gutterBottom>Riepilogo Totale Mensile</Typography>
+                <Typography variant="body1">Ore Ordinarie: <strong>{totali.oreOrdinarie}</strong></Typography>
+                <Typography variant="body1">Ore Straordinarie: <strong>{totali.oreStraordinarie}</strong></Typography>
+                <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #ccc' }}>
+                    <Typography variant="h5">Totale Generale: {totali.totaleGenerale} ore</Typography>
                 </Box>
             </Box>
         </GridFooterContainer>
