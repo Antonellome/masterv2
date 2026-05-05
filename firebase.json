@@ -3,6 +3,7 @@
     "rules": "firestore.rules"
   },
   "hosting": {
+    "site": "riso-project-app",
     "public": "dist",
     "ignore": [
       "firebase.json",

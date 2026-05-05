@@ -7,7 +7,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/firebase';
 
 const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('scuderiantonio@proton.me');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, error, setError, loading } = useAuth();
   const navigate = useNavigate();
