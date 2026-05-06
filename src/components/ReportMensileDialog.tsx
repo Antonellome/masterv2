@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -19,12 +19,14 @@ import {
   IconButton,
   Typography,
   type TransitionProps,
+  Tooltip,
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Print, Share } from '@mui/icons-material';
 import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Rapportino, Tecnico } from '@/models/definitions';
 import GeneratedReportView from './GeneratedReportView';
+import { useReactToPrint } from 'react-to-print';
 
 const Transition = React.forwardRef(function Transition(
   props: TransitionProps & { children: React.ReactElement },
@@ -44,6 +46,26 @@ const ReportMensileDialog: React.FC<ReportMensileDialogProps> = ({ open, onClose
   const [mese, setMese] = useState(new Date().getMonth() + 1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<Rapportino[] | null>(null);
+
+  const componentToPrintRef = useRef(null);
+
+  const handlePrint = useReactToPrint({ content: () => componentToPrintRef.current });
+
+  const handleShare = async () => {
+    const reportTitle = `Report per ${tecnico?.nome} ${tecnico?.cognome} - ${mesi.find(m => m.value === mese)?.label} ${anno}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: reportTitle,
+          text: 'Ecco il report mensile generato.',
+          // Se si vuole condividere un'URL, si può aggiungere qui
+          // url: window.location.href,
+        });
+      } catch (error) {
+        console.error('Errore nella condivisione:', error);
+      }
+    }
+  };
 
   const handleGenerate = async () => {
     if (!tecnico) return;
@@ -93,21 +115,13 @@ const ReportMensileDialog: React.FC<ReportMensileDialogProps> = ({ open, onClose
         <DialogContent dividers sx={{ pt: 2 }}>
           <DialogContentText sx={{mb: 3}}>Seleziona il periodo desiderato per generare il report mensile.</DialogContentText>
           <Grid container spacing={3}>
-            <Grid
-              size={{
-                xs: 12,
-                sm: 6
-              }}>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth variant="outlined">
                 <InputLabel>Anno</InputLabel>
                 <Select value={anno} onChange={(e) => setAnno(e.target.value as number)} label="Anno">{anni.map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}</Select>
               </FormControl>
             </Grid>
-            <Grid
-              size={{
-                xs: 12,
-                sm: 6
-              }}>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth variant="outlined">
                 <InputLabel>Mese</InputLabel>
                 <Select value={mese} onChange={(e) => setMese(e.target.value as number)} label="Mese">{mesi.map(m => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}</Select>
@@ -137,10 +151,23 @@ const ReportMensileDialog: React.FC<ReportMensileDialogProps> = ({ open, onClose
                   <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
                       Report per {tecnico?.nome} {tecnico?.cognome} - {mesi.find(m => m.value === mese)?.label} {anno}
                   </Typography>
+                  <Tooltip title="Stampa Report">
+                    <IconButton color="inherit" onClick={handlePrint}>
+                        <Print />
+                    </IconButton>
+                  </Tooltip>
+                   {navigator.share && (
+                    <Tooltip title="Condividi Report">
+                        <IconButton color="inherit" onClick={handleShare}>
+                            <Share />
+                        </IconButton>
+                    </Tooltip>
+                  )}
               </Toolbar>
           </AppBar>
           {generatedReport && (
               <GeneratedReportView 
+                  ref={componentToPrintRef}
                   rapportini={generatedReport}
                   tecnici={tecnico ? [tecnico] : []}
                   anno={anno}

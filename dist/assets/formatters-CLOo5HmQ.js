@@ -1,0 +1,1 @@
+const e=t=>{if(t==null)return"--";if(t<=8)return t%1!==0?`${t.toFixed(2).replace(".50",".5").replace(".00","")}h`:`${t}h`;const i=8,n=t-i,r=Math.floor(n),o=Math.round((n-r)*60);let a="";return r>0&&(a+=`${r}`),o>0&&(r>0?a+=`:${o.toString().padStart(2,"0")}`:a+=`0:${o.toString().padStart(2,"0")}`),`${i} + ${a}h`};export{e as f};

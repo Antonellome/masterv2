@@ -1,102 +1,80 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, 
   Autocomplete, CircularProgress, Box, Typography, Divider, FormControl, 
   RadioGroup, FormControlLabel, Radio
 } from '@mui/material';
-import { collection, getDocs, Timestamp, addDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Tecnico, Categoria } from '@/models/definitions';
+
+// Definisco la struttura del documento come da specifiche R.I.S.O.
+interface NotificaRichiesta {
+  title: string;
+  message: string;
+  createdAt: any; // Verrà usato serverTimestamp()
+  to_ids?: string[];
+  target?: 'all';
+  to_category_ids?: string[];
+}
 
 interface InviaNotificaDialogProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
   onError: (message: string) => void;
+  tecnici: Tecnico[]; // Dati passati come props
+  categorie: Categoria[]; // Dati passati come props
+  loading: boolean; // Stato di caricamento globale
 }
 
-// Interfaccia allineata a NotificaRichiesta
-interface NotificaDaInviare {
-  title: string;
-  body: string;
-  createdAt: Timestamp;
-  sendToAll?: boolean;
-  to_ids?: string[];
-  to_category_ids?: string[];
-  to_names?: string[];
-  to_category_names?: string[];
-  mittente: string;
-}
-
-const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose, onSuccess, onError }) => {
+const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ 
+    open, 
+    onClose, 
+    onSuccess, 
+    onError, 
+    tecnici, 
+    categorie, 
+    loading 
+}) => {
   const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [message, setMessage] = useState(''); // Rinominato da body a message per coerenza
   
-  // Dati caricati da Firestore
-  const [tecnici, setTecnici] = useState<Tecnico[]>([]);
-  const [categorie, setCategorie] = useState<Categoria[]>([]);
-
-  // Stato del form
+  // Stato del form, invariato
   const [sendMode, setSendMode] = useState('tecnico'); // tecnico | categoria | tutti
   const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
   const [selectedCategoria, setSelectedCategoria] = useState<Categoria | null>(null);
 
-  // Stato UI
-  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const currentUser = { displayName: "Admin" };
-
-  useEffect(() => {
-    if (open) {
-      setLoading(true);
-      const fetchTecniciAndCategorie = async () => {
-        try {
-          const [tecniciSnapshot, categorieSnapshot] = await Promise.all([
-            getDocs(collection(db, 'tecnici')),
-            getDocs(collection(db, 'categorie')),
-          ]);
-          setTecnici(tecniciSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Tecnico)));
-          setCategorie(categorieSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Categoria)));
-        } catch (error) {
-          console.error("Errore nel caricamento: ", error);
-          onError("Impossibile caricare i dati necessari.");
-        }
-        setLoading(false);
-      };
-      fetchTecniciAndCategorie();
-    }
-  }, [open, onError]);
-
   const handleSend = async () => {
-    if (!title || !body) {
+    if (!title || !message) {
         onError('Titolo e corpo del messaggio sono obbligatori.');
         return;
     }
 
     setSending(true);
     
-    const notifica: NotificaDaInviare = {
+    // Costruisco il documento secondo le specifiche R.I.S.O.
+    const notifica: NotificaRichiesta = {
         title,
-        body,
-        createdAt: Timestamp.now(),
-        mittente: currentUser.displayName || 'Sistema',
+        message,
+        createdAt: serverTimestamp(),
     };
 
     if (sendMode === 'tutti') {
-        notifica.sendToAll = true;
+        notifica.target = 'all';
     } else if (sendMode === 'tecnico') {
         if (!selectedTecnico) { onError('Seleziona un tecnico.'); setSending(false); return; }
         notifica.to_ids = [selectedTecnico.id];
-        notifica.to_names = [`${selectedTecnico.nome} ${selectedTecnico.cognome || ''}`.trim()];
     } else if (sendMode === 'categoria') {
         if (!selectedCategoria) { onError('Seleziona una categoria.'); setSending(false); return; }
         notifica.to_category_ids = [selectedCategoria.id];
-        notifica.to_category_names = [selectedCategoria.nome];
     }
 
     try {
+      // Scrivo nella collezione corretta: `notificheRichieste`
       await addDoc(collection(db, 'notificheRichieste'), notifica);
       onSuccess();
       handleClose();
@@ -109,15 +87,15 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
   };
 
   const handleClose = () => {
-    // Reset completo dello stato del form
     setTitle('');
-    setBody('');
+    setMessage('');
     setSendMode('tecnico');
     setSelectedTecnico(null);
     setSelectedCategoria(null);
     onClose();
   }
 
+  // L'estetica del componente rimane IDENTICA
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
       <DialogTitle>Invia Nuova Notifica</DialogTitle>
@@ -161,7 +139,7 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
           <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>2. Scrivi il Messaggio</Typography>
           <TextField label="Titolo" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth required />
-          <TextField label="Testo del Messaggio" value={body} onChange={(e) => setBody(e.target.value)} fullWidth multiline rows={4} required />
+          <TextField label="Testo del Messaggio" value={message} onChange={(e) => setMessage(e.target.value)} fullWidth multiline rows={4} required />
 
         </Box>
       </DialogContent>

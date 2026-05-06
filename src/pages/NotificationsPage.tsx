@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import {
     Box,
@@ -10,8 +11,11 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import SentNotificationsList from '@/components/Notifiche/SentNotificationsList';
 import InviaNotificaDialog from '@/components/Notifiche/InviaNotificaDialog';
 import SectionLayout from '@/components/common/SectionLayout';
+import { useData } from '@/hooks/useData';
 
 const NotificationsPage = () => {
+    const { tecnici, categorie, loading } = useData();
+
     const [isDialogOpen, setDialogOpen] = useState(false);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
@@ -51,6 +55,9 @@ const NotificationsPage = () => {
                 onClose={() => setDialogOpen(false)}
                 onSuccess={handleSuccess}
                 onError={handleError}
+                tecnici={tecnici}
+                categorie={categorie}
+                loading={loading}
             />
 
             <Snackbar

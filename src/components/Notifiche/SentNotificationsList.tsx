@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
     Typography,
@@ -24,10 +25,22 @@ import {
     Chip
 } from '@mui/material';
 import { Delete as DeleteIcon, Done as DoneIcon, DoneAll as DoneAllIcon, People as PeopleIcon } from '@mui/icons-material';
-import { collection, onSnapshot, query, orderBy, doc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { collection, onSnapshot, query, doc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/firebase';
 import dayjs from 'dayjs';
-import type { NotificaRichiesta } from '../../types/definitions';
+
+// La definizione del tipo ora corrisponde a NotificaRichiesta
+interface NotificaRichiesta {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: Timestamp;
+  readBy?: { [key: string]: { nome: string, readAt: Timestamp } };
+  // Aggiungiamo anche gli altri campi opzionali per completezza
+  to_ids?: string[];
+  target?: 'all';
+  to_category_ids?: string[];
+}
 
 const DettaglioNotificaDialog = lazy(() => import('./DettaglioNotificaDialog'));
 
@@ -40,13 +53,23 @@ const SentNotificationsList = () => {
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
 
     useEffect(() => {
-        const q = query(collection(db, 'notificheRichieste'), orderBy('createdAt', 'desc'));
+        // 1. Puntiamo alla collezione corretta: `notificheRichieste`
+        const q = query(collection(db, 'notificheRichieste'));
+        
         const unsubscribe = onSnapshot(q, snapshot => {
             const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificaRichiesta));
+            
+            // 2. Ordiniamo per il campo corretto: `createdAt`
+            notifications.sort((a, b) => {
+                const dateA = a.createdAt?.toDate()?.getTime() || 0;
+                const dateB = b.createdAt?.toDate()?.getTime() || 0;
+                return dateB - dateA; // Ordine decrescente per avere le più recenti in alto
+            });
+
             setSentNotifications(notifications);
             setLoading(false);
         }, error => {
-            console.error("Errore nel listener delle notifiche inviate:", error);
+            console.error("Errore nel listener dello storico notifiche R.I.S.O.:", error);
             setLoading(false);
         });
         return () => unsubscribe();
@@ -70,8 +93,9 @@ const SentNotificationsList = () => {
     const handleConfirmDelete = async () => {
         if (confirmDelete.id) {
             try {
+                // 3. Assicuriamoci di cancellare dalla collezione corretta
                 await deleteDoc(doc(db, 'notificheRichieste', confirmDelete.id));
-                setSnackbar({ open: true, message: 'Notifica eliminata con successo', severity: 'info' });
+                setSnackbar({ open: true, message: 'Richiesta di notifica eliminata dallo storico', severity: 'info' });
             } catch (error) {
                 console.error("Errore durante l'eliminazione:", error);
                 setSnackbar({ open: true, message: 'Errore durante l\'eliminazione', severity: 'error' });
@@ -80,22 +104,28 @@ const SentNotificationsList = () => {
         setConfirmDelete({ open: false, id: null });
     };
     
-    const generateTooltipContent = (readers: any[]): React.ReactNode => {
-        const sortedReaders = [...readers].sort((a, b) => (b.readAt?.toDate() || 0) - (a.readAt?.toDate() || 0));
+    // Questa funzione è già compatibile con la nuova struttura `readBy`
+    const generateTooltipContent = (readersMap: NotificaRichiesta['readBy']): React.ReactNode => {
+        if (!readersMap) {
+            return <Typography variant="caption">Nessuna lettura registrata.</Typography>;
+        }
+        const readers = Object.values(readersMap);
+        if (readers.length === 0) {
+            return <Typography variant="caption">Nessuna lettura registrata.</Typography>;
+        }
+        const sortedReaders = [...readers].sort((a, b) => (b.readAt?.toDate()?.getTime() || 0) - (a.readAt?.toDate()?.getTime() || 0));
         return (
             <Box>
-                 {sortedReaders.length > 0 ? (
-                    sortedReaders.map((reader, index) => (
-                        <Typography key={index} variant="caption" display="block">
-                            - {reader.nome} (Letto il: {dayjs(reader.readAt?.toDate()).format('DD/MM HH:mm')})
-                        </Typography>
-                    ))
-                ) : (
-                    <Typography variant="caption">Nessuna lettura registrata.</Typography>
-                )}
+                {sortedReaders.map((reader, index) => (
+                    <Typography key={index} variant="caption" display="block">
+                        - {reader.nome} (Letto il: {dayjs(reader.readAt?.toDate()).format('DD/MM HH:mm')})
+                    </Typography>
+                ))}
             </Box>
         );
     };
+
+    // ... il resto del componente (UI) rimane invariato, ma aggiorniamo i campi
 
     if (loading) {
         return <Box display="flex" justifyContent="center" p={4}><CircularProgress />;</Box>;
@@ -103,7 +133,7 @@ const SentNotificationsList = () => {
     if (sentNotifications.length === 0) {
         return (
             <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
-                <Typography color="text.secondary">Nessuna notifica inviata.</Typography>
+                <Typography color="text.secondary">Nessuna richiesta di notifica presente nello storico.</Typography>
             </Paper>
         );
     }
@@ -114,7 +144,7 @@ const SentNotificationsList = () => {
                 <List sx={{ overflow: 'auto', p: 0, flexGrow: 1 }}>
                     {sentNotifications.map((notifica, index) => {
                         
-                        const readers = notifica.readBy && typeof notifica.readBy === 'object' ? Object.values(notifica.readBy) : [];
+                        const readers = notifica.readBy ? Object.values(notifica.readBy) : [];
                         const readerCount = readers.length;
                         const hasBeenRead = readerCount > 0;
                         
@@ -130,7 +160,7 @@ const SentNotificationsList = () => {
                                 >
                                     <ListItemButton onClick={() => handleOpenDetail(notifica)}>
                                         <ListItemAvatar>
-                                            <Tooltip title={generateTooltipContent(readers)} arrow placement="right">
+                                            <Tooltip title={generateTooltipContent(notifica.readBy)} arrow placement="right">
                                                 <Avatar sx={{ bgcolor: hasBeenRead ? 'success.main' : 'grey.500' }}>
                                                     {hasBeenRead ? <DoneAllIcon /> : <DoneIcon />}
                                                 </Avatar>
@@ -141,7 +171,7 @@ const SentNotificationsList = () => {
                                             secondary={
                                                 <Box component="span" sx={{ display: 'flex', flexDirection: 'column', mt: 0.5 }}>
                                                     <Typography component="span" variant="body2" color="text.secondary">
-                                                        {`Inviata il: ${dayjs((notifica.createdAt as Timestamp)?.toDate()).format('DD/MM/YYYY HH:mm')}`}
+                                                        {`Inviata il: ${dayjs(notifica.createdAt?.toDate()).format('DD/MM/YYYY HH:mm')}`}
                                                     </Typography>
                                                     {hasBeenRead && (
                                                         <Chip 
@@ -167,12 +197,13 @@ const SentNotificationsList = () => {
                 </List>
             </Paper>
 
+            {/* Il dialogo di dettaglio e di conferma eliminazione rimangono funzionalmente invariati */}
             <Suspense fallback={<CircularProgress />}>
                 {isDetailOpen && (
                     <DettaglioNotificaDialog
                         open={isDetailOpen}
                         onClose={handleCloseDetail}
-                        notifica={selectedNotifica}
+                        notifica={selectedNotifica as any} // Cast per compatibilità temporanea, idealmente DettaglioNotificaDialog andrebbe tipizzato
                     />
                 )}
             </Suspense>
@@ -184,7 +215,7 @@ const SentNotificationsList = () => {
                 <DialogTitle>Conferma Eliminazione</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        Sei sicuro di voler eliminare questa notifica? L'azione è irreversibile.
+                        Sei sicuro di voler eliminare questa richiesta di notifica? L'azione è irreversibile.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

@@ -106,7 +106,10 @@ const ConsuntivoMensile = () => {
         });
 
         const presenzeData = filteredRapportini.map(doc => {
-            const oreLavoro = doc.oreLavoro || 0;
+            // Logica Corretta: Cerca le ore specifiche del tecnico
+            const dettaglioTecnico = doc.dettaglioOreTecnici?.find(d => d.tecnicoId === selectedTecnico.id);
+            const oreLavoro = dettaglioTecnico ? dettaglioTecnico.ore : (doc.oreLavoro || 0);
+
             const oreOrdinarie = Math.min(oreLavoro, SOGLIA_ORE_ORDINARIE);
             const oreStraordinarie = Math.max(0, oreLavoro - SOGLIA_ORE_ORDINARIE);
             
@@ -115,7 +118,7 @@ const ConsuntivoMensile = () => {
             return {
                 id: doc.id,
                 data: formattedDate,
-                tipoGiornata: doc.tipoGiornataId ? tipiGiornataMap.get(doc.tipoGiornataId) || 'N/D' : 'N/D',
+                tipoGiornata: doc.giornataId ? tipiGiornataMap.get(doc.giornataId) || 'N/D' : 'N/D',
                 nave: doc.naveId ? naviMap.get(doc.naveId) || 'N/D' : 'N/D',
                 luogo: doc.luogoId ? luoghiMap.get(doc.luogoId) || 'N/D' : 'N/D',
                 oreOrdinarie,

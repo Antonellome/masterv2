@@ -1,8 +1,10 @@
+
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Cliente, Tecnico, TipoGiornata, Nave, Luogo, Veicolo } from '@/models/definitions';
+import type { Cliente, Tecnico, TipoGiornata, Nave, Luogo, Veicolo, Categoria } from '@/models/definitions';
 
+// 1. Aggiungo Categoria al DataBundle
 export interface DataBundle {
   clienti: Cliente[];
   tecnici: Tecnico[];
@@ -10,8 +12,10 @@ export interface DataBundle {
   navi: Nave[];
   luoghi: Luogo[];
   veicoli: Veicolo[];
+  categorie: Categoria[]; 
 }
 
+// 2. Aggiungo 'categorie' all'array delle collezioni da caricare
 const collectionsToLoad: { key: keyof DataBundle; name: string }[] = [
   { key: 'clienti', name: 'clienti' },
   { key: 'tecnici', name: 'tecnici' },
@@ -19,6 +23,7 @@ const collectionsToLoad: { key: keyof DataBundle; name: string }[] = [
   { key: 'navi', name: 'navi' },
   { key: 'luoghi', name: 'luoghi' },
   { key: 'veicoli', name: 'veicoli' },
+  { key: 'categorie', name: 'categorie' },
 ];
 
 export const useData = () => {
@@ -29,6 +34,7 @@ export const useData = () => {
     navi: [],
     luoghi: [],
     veicoli: [],
+    categorie: [], // 3. Inizializzo lo stato
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

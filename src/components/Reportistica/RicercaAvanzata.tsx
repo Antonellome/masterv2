@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { doc, deleteDoc, Timestamp, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
@@ -17,9 +16,10 @@ import { useNavigate } from 'react-router-dom';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ShareIcon from '@mui/icons-material/Share'; // <-- Import Share Icon
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import { useData } from '@/hooks/useData';
-import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
+import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino, Veicolo } from '@/models/definitions';
 
 dayjs.locale('it');
 
@@ -54,30 +54,104 @@ interface FilterState {
 // --- COMPONENTE PRINCIPALE ---
 const RicercaAvanzata: React.FC = () => {
     const navigate = useNavigate();
-    const { tipiGiornata, tecnici, clienti, navi, luoghi, loading: anagraficheLoading, error: anagraficheError } = useData();
+    const { tipiGiornata, tecnici, clienti, navi, luoghi, veicoli, loading: anagraficheLoading, error: anagraficheError } = useData();
     const [rapportini, setRapportini] = useState<Rapportino[]>([]);
     const [rapportiniLoading, setRapportiniLoading] = useState(true);
     const [rapportiniError, setRapportiniError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'rapportini'), snapshot => {
-            const rapportiniData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rapportino));
-            setRapportini(rapportiniData);
+            const data = snapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                ...doc.data(),
+                data: doc.data().data instanceof Timestamp ? doc.data().data : Timestamp.now(),
+            } as Rapportino));
+            setRapportini(data);
             setRapportiniLoading(false);
         }, err => {
             console.error("Errore caricamento rapportini:", err);
             setRapportiniError("Errore nel caricamento dei rapportini.");
             setRapportiniLoading(false);
         });
-
         return () => unsub();
     }, []);
 
-
-    // Hooks chiamati sempre e nello stesso ordine
     const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null });
     const [rowToDelete, setRowToDelete] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
+
+    const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
+
+    // The print/share handler
+    const handlePrintOrShare = useCallback((id: string) => {
+        try {
+            const rapportinoToPrint = rapportini.find(r => r.id === id);
+            if (!rapportinoToPrint) {
+                setSnackbar({ open: true, message: "Rapportino non trovato.", severity: 'error' });
+                return;
+            }
+            
+            const tecniciMap = new Map(tecnici.map(t => [t.id, t]));
+            const naviMap = new Map(navi.map(n => [n.id, n]));
+            const luoghiMap = new Map(luoghi.map(l => [l.id, l]));
+            const tipiGiornataMap = new Map(tipiGiornata.map(tg => [tg.id, tg]));
+            const clientiMap = new Map(clienti.map(c => [c.id, c]));
+            const veicoliMap = new Map(veicoli.map(v => [v.id, v]));
+
+            const nave = rapportinoToPrint.naveId ? naviMap.get(rapportinoToPrint.naveId) : undefined;
+            const cliente = nave?.clienteId ? clientiMap.get(nave.clienteId) : undefined;
+            const isManual = rapportinoToPrint.isTrasferta === true;
+
+            let dettaglioOreTecnici: any[] = [];
+            if (Array.isArray(rapportinoToPrint.dettaglioOreTecnici) && rapportinoToPrint.dettaglioOreTecnici.length > 0) {
+                 dettaglioOreTecnici = rapportinoToPrint.dettaglioOreTecnici.map(dett => {
+                    const tecnico = tecniciMap.get(dett.tecnicoId);
+                    return {
+                        ...dett,
+                        nome: tecnico ? `${tecnico.cognome} ${tecnico.nome}`.trim() : 'Sconosciuto',
+                        ore: dett.ore || 0,
+                        isManual,
+                        oraInizio: rapportinoToPrint.oraInizio || '--',
+                        oraFine: rapportinoToPrint.oraFine || '--',
+                        pausa: isManual ? '-' : rapportinoToPrint.pausa ?? 0,
+                    };
+                });
+            } else if (Array.isArray(rapportinoToPrint.presenze)) {
+                 dettaglioOreTecnici = rapportinoToPrint.presenze.map(tecId => {
+                    const tecnico = tecniciMap.get(tecId);
+                    return {
+                        tecnicoId: tecId,
+                        nome: tecnico ? `${tecnico.cognome} ${tecnico.nome}`.trim() : 'Sconosciuto',
+                        ore: rapportinoToPrint.oreLavoro || 0,
+                        isManual,
+                        oraInizio: rapportinoToPrint.oraInizio || '--',
+                        oraFine: rapportinoToPrint.oraFine || '--',
+                        pausa: isManual ? '-' : rapportinoToPrint.pausa ?? 0,
+                    };
+                });
+            }
+            
+            const dataToDate = rapportinoToPrint.data instanceof Timestamp 
+                ? rapportinoToPrint.data.toDate() 
+                : new Date();
+
+            const enrichedRapportino = {
+                ...rapportinoToPrint,
+                data: dataToDate,
+                tecnico: tecniciMap.get(rapportinoToPrint.tecnicoId),
+                nave: nave ? { ...nave, cliente } : undefined,
+                luogo: luoghiMap.get(rapportinoToPrint.luogoId || ''),
+                tipoGiornata: tipiGiornataMap.get(rapportinoToPrint.giornataId || ''),
+                veicolo: veicoliMap.get(rapportinoToPrint.veicoloId || ''),
+                dettaglioOreTecnici,
+            };
+
+            navigate(`/rapportini/stampa/${id}`, { state: { rapportino: enrichedRapportino } });
+        } catch (error) {
+            console.error("Errore durante la preparazione per stampa/condivisione:", error);
+            setSnackbar({ open: true, message: "Impossibile generare l'anteprima per questo rapportino.", severity: 'error' });
+        }
+    }, [rapportini, tecnici, navi, luoghi, tipiGiornata, clienti, veicoli, navigate]);
 
     const flatRapportini = useMemo((): FlatRapportino[] => {
         const tecniciMap = new Map(tecnici.map((t) => [t.id, t]));
@@ -92,20 +166,15 @@ const RicercaAvanzata: React.FC = () => {
                 const t = tecniciMap.get(id);
                 return t ? `${t.cognome} ${t.nome}`.trim() : `ID Sconosciuto: ${id}`;
             });
-
-            const tipoGiornataObj = rapportino.tipoGiornataId ? tipiGiornataMap.get(rapportino.tipoGiornataId) : null;
+            const tipoGiornataObj = rapportino.giornataId ? tipiGiornataMap.get(rapportino.giornataId) : null;
             const tipoGiornataNome = tipoGiornataObj?.nome || "N/D";
-            
             const naveObj = rapportino.naveId ? naviMap.get(rapportino.naveId) : null;
             const naveNome = naveObj?.nome || "N/D";
-
             const luogoObj = rapportino.luogoId ? luoghiMap.get(rapportino.luogoId) : null;
             const luogoNome = luogoObj?.nome || "N/D";
-            
             const clienteId = naveObj?.clienteId;
             const clienteObj = clienteId ? clientiMap.get(clienteId) : null;
             const clienteNome = clienteObj?.nome || "N/D";
-            
             const ore = formatOreLavoro(rapportino.oreLavoro ?? 0);
 
             return {
@@ -121,7 +190,7 @@ const RicercaAvanzata: React.FC = () => {
                 tecnicoIds,
                 naveId: rapportino.naveId,
                 clienteId: clienteId,
-                tipoGiornataId: rapportino.tipoGiornataId,
+                tipoGiornataId: rapportino.giornataId,
                 luogoId: rapportino.luogoId,
             };
         });
@@ -152,17 +221,16 @@ const RicercaAvanzata: React.FC = () => {
         }
         setRowToDelete(null);
     };
+    
     const handleRowClick = (params: GridRowParams) => {
-        if (params.field === 'actions') {
-            return;
-        }
+        if (params.field === 'actions') return;
         navigate(`/rapportino/edit/${params.id}`);
     };
-    const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
-    const handlePrint = (id: string) => window.open(`/rapportini/stampa/${id}`, '_blank');
+
     const handleFilterChange = useCallback(<K extends keyof FilterState>(filterName: K, value: FilterState[K]) => {
         setFilters(prev => ({ ...prev, [filterName]: value }));
     }, []);
+
     const resetFilters = useCallback(() => setFilters({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null }), []);
 
     const columns: GridColDef<FlatRapportino>[] = useMemo(() => [
@@ -186,14 +254,15 @@ const RicercaAvanzata: React.FC = () => {
             field: 'actions',
             type: 'actions',
             headerName: 'Azioni',
-            width: 100,
+            width: 120, // Increased width to accommodate the new icon
             getActions: ({ id }) => [
                 <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={(e) => { e.stopPropagation(); handleEdit(id as string);}} />,
-                <GridActionsCellItem icon={<PrintIcon />} label="Stampa" onClick={(e) => { e.stopPropagation(); handlePrint(id as string);}} />,
+                <GridActionsCellItem icon={<PrintIcon />} label="Stampa" onClick={(e) => { e.stopPropagation(); handlePrintOrShare(id as string);}} />,
+                <GridActionsCellItem icon={<ShareIcon />} label="Condividi/Salva PDF" onClick={(e) => { e.stopPropagation(); handlePrintOrShare(id as string);}} />,
                 <GridActionsCellItem icon={<DeleteIcon color="error" />} label="Elimina" onClick={(e) => { e.stopPropagation(); handleDeleteRequest(id as string);}} />,
             ],
         },
-    ], [handleEdit, handlePrint, handleDeleteRequest]);
+    ], [handleEdit, handlePrintOrShare, handleDeleteRequest]);
     
     const renderContent = () => {
         if (anagraficheLoading || rapportiniLoading) {

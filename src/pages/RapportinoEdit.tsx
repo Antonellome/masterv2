@@ -48,7 +48,7 @@ const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly,
         <Paper variant="outlined" sx={{ p: 2, mt: 1, mb: 1, borderLeft: isScrivente ? '4px solid' : undefined, borderColor: 'primary.main' }}>
             {isScrivente && <Typography variant="caption" display="block" sx={{mb: 1}}>Orario principale (si applica a tutti)</Typography>}
             <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12}><FormControlLabel control={<Switch checked={datiOre.isManual} onChange={(e) => handleValueChange('isManual', e.target.checked)} disabled={isReadOnly} />} label="Inserimento manuale ore (Trasferta)" /></Grid>
+                <Grid item xs={12}><FormControlLabel control={<Switch checked={datiOre.isManual} onChange={(e) => handleValueChange('isManual', e.target.checked)} disabled={isReadOnly} />} label="Inserimento manuale ore" /></Grid>
                 {!datiOre.isManual ? (
                     <>
                         <Grid item xs={6} sm={3}><TextField label="Inizio" type="time" value={datiOre.oraInizio || ''} onChange={e => handleValueChange('oraInizio', e.target.value)} disabled={isReadOnly} fullWidth InputLabelProps={{ shrink: true }} /></Grid>
@@ -345,11 +345,11 @@ const RapportinoEdit: React.FC = () => {
                                      <Paper key={dett.tecnicoId} variant="outlined" sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
                                         <Box><Typography fontWeight="bold">{dett.nome}</Typography><Chip label={dett.isManual ? `Ore: ${dett.ore || 0}` : `${dett.oraInizio || '-'} - ${dett.oraFine || '-'}`} size="small" /></Box>
                                         <Box>
-                                            <IconButton size="small" onClick={() => handleOpenModal(dett)} disabled={d.tecnicoId === tecnicoResponsabileId}><EditIcon /></IconButton>
-                                            <IconButton size="small" onClick={() => removeTecnico(dett.tecnicoId)} disabled={d.tecnicoId === tecnicoResponsabileId}><DeleteIcon /></IconButton>
+                                            <IconButton size="small" onClick={() => handleOpenModal(dett)}><EditIcon /></IconButton>
+                                            <IconButton size="small" onClick={() => removeTecnico(dett.tecnicoId)}><DeleteIcon /></IconButton>
                                         </Box>
                                     </Paper>
-                                ))},
+                                ))}
                                  <Divider sx={{ my: 1 }}><Typography variant="overline">Dettagli Intervento</Typography></Divider>
                                 <Autocomplete options={sortedNavi} getOptionLabel={o => o.nome || ''} value={sortedNavi.find(n => n.id === naveId) || null} onChange={(_, v) => setNaveId(v?.id || null)} renderInput={params => <TextField {...params} label="Nave" />} />
                                 <Autocomplete options={sortedLuoghi} getOptionLabel={o => o.nome || ''} value={sortedLuoghi.find(l => l.id === luogoId) || null} onChange={(_, v) => setLuogoId(v?.id || null)} renderInput={params => <TextField {...params} label="Luogo" />} />

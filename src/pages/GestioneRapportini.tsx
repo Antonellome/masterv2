@@ -1,16 +1,43 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
-import { useCollection } from '@/hooks/useCollection';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '@/firebase';
+import { useData } from '@/hooks/useData';
 import type { Rapportino, Tecnico, Nave, Luogo } from '@/models/definitions';
 import RapportiniList from '@/components/Rapportini/RapportiniList';
-import { RapportinoFormController } from '@/components/Rapportini/RapportinoFormController';
+import RapportinoFormController from '@/components/Rapportini/RapportinoFormController';
 
 const GestioneRapportini = () => {
-    // 1. Carica tutte le collezioni necessarie
-    const { data: tecnici, loading: loadingTecnici } = useCollection<Tecnico>('tecnici');
-    const { data: rapportini, loading: loadingRapportini } = useCollection<Rapportino>('rapportini');
-    const { data: navi, loading: loadingNavi } = useCollection<Nave>('navi');
-    const { data: luoghi, loading: loadingLuoghi } = useCollection<Luogo>('luoghi');
+    // 1. Usa l'hook centralizzato useData per i dati "master"
+    const { 
+        tecnici, 
+        navi, 
+        luoghi, 
+        loading: loadingData, // Stato di caricamento per i dati master
+    } = useData();
+
+    // 2. Stato specifico per i rapportini
+    const [rapportini, setRapportini] = useState<Rapportino[]>([]);
+    const [loadingRapportini, setLoadingRapportini] = useState(true);
+
+    // 3. Carica i rapportini in modo separato con un useEffect
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, 'rapportini'), 
+            (snapshot) => {
+                const rapportiniData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Rapportino[];
+                setRapportini(rapportiniData);
+                setLoadingRapportini(false);
+            },
+            (error) => {
+                console.error("Errore nel caricamento dei rapportini: ", error);
+                setLoadingRapportini(false);
+            }
+        );
+
+        // Funzione di pulizia per annullare la sottoscrizione
+        return () => unsubscribe();
+    }, []); // L'array vuoto assicura che l'effetto venga eseguito solo una volta
 
     const [formOpen, setFormOpen] = useState(false);
     const [selectedRapportino, setSelectedRapportino] = useState<Rapportino | null>(null);
@@ -30,8 +57,7 @@ const GestioneRapportini = () => {
         setSelectedRapportino(null);
     };
 
-    // 2. Crea le "mappe" per risolvere gli ID in nomi leggibili.
-    // La mappa dei tecnici ora contiene l'intero oggetto per accedere a nome e cognome.
+    // 4. Mappe per la risoluzione degli ID, come prima
     const tecniciMap = useMemo(() => {
         if (!tecnici) return new Map<string, Tecnico>();
         return new Map(tecnici.map(t => [t.id, t]));
@@ -47,7 +73,8 @@ const GestioneRapportini = () => {
         return new Map(luoghi.map(l => [l.id, l.nome]));
     }, [luoghi]);
 
-    const isLoading = loadingTecnici || loadingRapportini || loadingNavi || loadingLuoghi;
+    // 5. Stato di caricamento combinato
+    const isLoading = loadingData || loadingRapportini;
 
     return (
         <Box sx={{ p: 2 }}>
@@ -56,17 +83,18 @@ const GestioneRapportini = () => {
             </Typography>
             <Paper elevation={3} sx={{ p: 2 }}>
                 <RapportiniList 
-                    rapportini={rapportini || []}
+                    rapportini={rapportini}
                     tecniciMap={tecniciMap}
                     naviMap={naviMap}
                     luoghiMap={luoghiMap}
                     loading={isLoading}
                     onAdd={handleAdd}
                     onEdit={handleEdit}
-                    onDelete={(id) => console.log("Elimina", id)} // Logica di eliminazione da implementare
+                    onDelete={(id) => console.log("Elimina", id)}
                 />
             </Paper>
 
+            {/* Il controller del form rimane invariato */}
             {formOpen && (
                  <RapportinoFormController
                     open={formOpen}

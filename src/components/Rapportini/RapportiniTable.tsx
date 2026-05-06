@@ -6,7 +6,7 @@ import Delete from '@mui/icons-material/Delete';
 import Visibility from '@mui/icons-material/Visibility';
 import { Timestamp } from 'firebase/firestore';
 import { useData } from '@/contexts/DataContext';
-import type { Rapportino } from '@/models/definitions';
+import type { Rapportino, Tecnico } from '@/models/definitions';
 import dayjs from 'dayjs';
 import RapportinoView from '@/components/Rapportini/RapportinoView';
 import { useReactToPrint } from 'react-to-print';
@@ -16,7 +16,8 @@ interface RapportiniTableProps {
 }
 
 const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
-  const { rapportini, tecniciMap, naviMap, luoghiMap, clientiMap, loading, error, deleteData } = useData();
+  // Ora importiamo anche tipiGiornataMap
+  const { rapportini, tecniciMap, naviMap, luoghiMap, clientiMap, tipiGiornataMap, loading, error, deleteData } = useData();
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedRapportino, setSelectedRapportino] = useState<Rapportino | null>(null);
   const componentToPrintRef = useRef(null);
@@ -44,25 +45,50 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
     }
   }, [deleteData]);
 
+  // Funzione CORRETTA per ottenere i nomi dei tecnici
   const getTecniciNomi = useCallback((rapportino: Rapportino): string => {
-    const nomi = new Set<string>();
-    if (rapportino.tecnicoScrivente) {
-        const tecnico = tecniciMap[rapportino.tecnicoScrivente.id];
-        if (tecnico) nomi.add(`${tecnico.nome} ${tecnico.cognome}`);
+    if (!rapportino.presenze || rapportino.presenze.length === 0) {
+      return 'N/D';
     }
-    rapportino.tecniciAggiunti?.forEach(ref => {
-        const tecnico = tecniciMap[ref.id];
-        if (tecnico) nomi.add(`${tecnico.nome} ${tecnico.cognome}`);
+    const nomi = new Set<string>();
+    rapportino.presenze.forEach(tecnicoId => {
+      const tecnico = tecniciMap[tecnicoId];
+      if (tecnico) {
+        nomi.add(`${tecnico.nome} ${tecnico.cognome}`);
+      }
     });
     return Array.from(nomi).join(', ');
   }, [tecniciMap]);
 
   const columns: GridColDef[] = useMemo(() => [
-    { field: 'data', headerName: 'Data', width: 120, valueFormatter: params => params.value ? dayjs((params.value as Timestamp).toDate()).format('DD/MM/YYYY') : '--' },
-    { field: 'tecnici', headerName: 'Tecnici', flex: 1, minWidth: 200, renderCell: (params) => getTecniciNomi(params.row as Rapportino) },
-    { field: 'nave', headerName: 'Nave', flex: 1, minWidth: 150, valueGetter: (params) => naviMap[params.row.naveId]?.nome || '--' },
-    { field: 'luogo', headerName: 'Luogo', flex: 1, minWidth: 150, valueGetter: (params) => luoghiMap[params.row.luogoId]?.nome || '--' },
-    { field: 'cliente', headerName: 'Cliente', flex: 1, minWidth: 150, valueGetter: (params) => clientiMap[params.row.clienteId]?.nome || '--' },
+    { field: 'data', headerName: 'Data', width: 120, valueFormatter: params => params.value ? dayjs((params.value as Timestamp).toDate()).format('DD/MM/YYYY') : 'N/D' },
+    { 
+      field: 'tecnici', 
+      headerName: 'Tecnici', 
+      flex: 1, 
+      minWidth: 200, 
+      renderCell: (params) => {
+        const nomi = getTecniciNomi(params.row as Rapportino);
+        return <Tooltip title={nomi}><Typography noWrap>{nomi}</Typography></Tooltip>;
+      } 
+    },
+    // Colonna TIPO GIORNATA corretta
+    {
+      field: 'tipoGiornata',
+      headerName: 'Tipo Giornata',
+      flex: 1,
+      minWidth: 150,
+      valueGetter: (params) => {
+        const id = params.row.tipoGiornataId || params.row.giornataId; // Prova entrambi gli ID
+        if (tipiGiornataMap && id) {
+          return tipiGiornataMap[id]?.nome || 'N/D';
+        }
+        return 'N/D';
+      }
+    },
+    { field: 'nave', headerName: 'Nave', flex: 1, minWidth: 150, valueGetter: (params) => (params.row.naveId && naviMap[params.row.naveId]?.nome) || 'N/D' },
+    { field: 'luogo', headerName: 'Luogo', flex: 1, minWidth: 150, valueGetter: (params) => (params.row.luogoId && luoghiMap[params.row.luogoId]?.nome) || 'N/D' },
+    { field: 'cliente', headerName: 'Cliente', flex: 1, minWidth: 150, valueGetter: (params) => (params.row.clienteId && clientiMap[params.row.clienteId]?.nome) || 'N/D' },
     {
       field: 'actions',
       headerName: 'Azioni',
@@ -84,10 +110,18 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
         </Box>
       ),
     },
-  ], [getTecniciNomi, naviMap, luoghiMap, clientiMap, handleOpenView, handleDelete]);
+  ], [getTecniciNomi, naviMap, luoghiMap, clientiMap, tipiGiornataMap, handleOpenView, handleDelete]);
 
   const sortedRapportini = useMemo(() => {
-      return [...(rapportini || [])].sort((a, b) => (b.data as Timestamp).toMillis() - (a.data as Timestamp).toMillis());
+      if (!rapportini) return [];
+      return [...rapportini].sort((a, b) => {
+          const dateA = a.data as Timestamp;
+          const dateB = b.data as Timestamp;
+          if (!dateA && !dateB) return 0;
+          if (!dateA) return 1;
+          if (!dateB) return -1;
+          return dateB.toMillis() - dateA.toMillis();
+      });
   }, [rapportini]);
 
   if (error) {
@@ -96,7 +130,7 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
 
   return (
     <Box sx={{ height: 650, width: '100%' }}>
-      <DataGrid
+       <DataGrid
         rows={sortedRapportini}
         columns={columns}
         loading={loading}
@@ -113,7 +147,7 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
             color: 'white',
             fontWeight: 'bold',
           },
-          '& .MuiDataGride-row:hover': {
+          '& .MuiDataGrid-row:hover': {
             backgroundColor: 'rgba(255,255,255,0.05)',
             cursor: 'pointer'
           },

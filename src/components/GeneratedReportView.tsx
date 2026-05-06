@@ -1,12 +1,10 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, 
-  TableHead, TableRow, Button, Divider, Icon
+  TableHead, TableRow, Divider, Icon
 } from '@mui/material';
-import Print from '@mui/icons-material/Print';
 import Summarize from '@mui/icons-material/Summarize';
-import { useReactToPrint } from 'react-to-print';
-import type { Rapportino, Tecnico } from '@/models/definitions'; // Corretto
+import type { Rapportino, Tecnico } from '@/models/definitions'; 
 import dayjs from 'dayjs';
 import { useTheme } from '@mui/material/styles';
 
@@ -23,11 +21,8 @@ interface ReportData {
     rapportini: Rapportino[];
 }
 
-const GeneratedReportView: React.FC<GeneratedReportViewProps> = ({ rapportini, tecnici, anno, mese }) => {
-  const printRef = useRef<HTMLDivElement>(null);
+const GeneratedReportView = React.forwardRef<HTMLDivElement, GeneratedReportViewProps>(({ rapportini, tecnici, anno, mese }, ref) => {
   const theme = useTheme();
-  const handlePrint = useReactToPrint({ content: () => printRef.current });
-
   const meseNome = new Date(anno, mese - 1).toLocaleString('it-IT', { month: 'long' });
 
   const reportData: ReportData[] = tecnici.map(tecnico => {
@@ -38,20 +33,13 @@ const GeneratedReportView: React.FC<GeneratedReportViewProps> = ({ rapportini, t
       oreTotali,
       rapportini: rapportiniDelTecnico,
     };
-  }).filter(data => data.rapportini.length > 0); 
+  }).filter(data => data.rapportini.length > 0);
 
   const oreComplessive = reportData.reduce((acc, data) => acc + data.oreTotali, 0);
 
-  const cardStyle = {
-    borderLeft: `5px solid ${theme.palette.primary.main}`,
-    p: 2,
-    mb: 2,
-  };
-
   return (
-    <Paper elevation={2} sx={cardStyle}>
-        {/* Area di Stampa */}
-        <Box ref={printRef} sx={{p: 2}}>
+    <Paper elevation={0} sx={{ m: 'auto', maxWidth: 900, p: 3 }}>
+        <Box ref={ref} sx={{p: 4}}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                 <Icon component={Summarize} sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
                 <Box>
@@ -105,16 +93,8 @@ const GeneratedReportView: React.FC<GeneratedReportViewProps> = ({ rapportini, t
                 <Typography variant="h6" align="right">Totale Ore Complessive: <Typography component="span" color="primary" variant="h5" fontWeight="bold">{oreComplessive}</Typography></Typography>
             </Box>
         </Box>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button variant="contained" startIcon={<Print />} onClick={handlePrint} size="large">
-                Stampa Report
-            </Button>
-        </Box>
     </Paper>
   );
-};
+});
 
 export default GeneratedReportView;

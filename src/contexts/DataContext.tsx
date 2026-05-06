@@ -8,7 +8,7 @@ import React, {
     useMemo,
     ReactNode
 } from 'react';
-import { getFirestore, collection, getDocs, doc, addDoc, writeBatch, query, updateDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { 
     Tecnico,
     Cliente,
@@ -21,6 +21,14 @@ import {
 } from '@/models/definitions';
 import { useAuth } from './AuthProvider';
 
+const createMap = <T extends { id: string }>(items: T[] | undefined): { [id: string]: T } => {
+    if (!items) return {};
+    return items.reduce((acc, item) => {
+        acc[item.id] = item;
+        return acc;
+    }, {} as { [id: string]: T });
+};
+
 export type CollectionName = keyof AllData;
 
 interface AllData {
@@ -30,11 +38,24 @@ interface AllData {
     navi: Nave[];
     luoghi: Luogo[];
     categorie: Categoria[];
-    'tipi-giornata': TipoGiornata[];
+    tipiGiornata: TipoGiornata[];
     veicoli: Veicolo[];
 }
 
-interface DataContextType extends AllData {
+interface DataContextType {
+    tecnici: Tecnico[];
+    clienti: Cliente[];
+    ditte: Ditta[];
+    navi: Nave[];
+    luoghi: Luogo[];
+    categorie: Categoria[];
+    tipiGiornata: TipoGiornata[];
+    veicoli: Veicolo[];
+    tecniciMap: { [id: string]: Tecnico };
+    clientiMap: { [id: string]: Cliente };
+    naviMap: { [id: string]: Nave };
+    luoghiMap: { [id: string]: Luogo };
+    tipiGiornataMap: { [id: string]: TipoGiornata };
     loading: boolean;
     error: string | null;
     refreshData: () => void;
@@ -46,10 +67,9 @@ interface DataContextType extends AllData {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 const db = getFirestore();
 
-const COLLECTION_NAMES: CollectionName[] = ['tecnici', 'clienti', 'ditte', 'navi', 'luoghi', 'categorie', 'tipi-giornata', 'veicoli'];
+const COLLECTION_NAMES: CollectionName[] = ['tecnici', 'clienti', 'ditte', 'navi', 'luoghi', 'categorie', 'tipiGiornata', 'veicoli'];
 
 const getRealCollectionName = (name: CollectionName): string => {
-    if (name === 'tipi-giornata') return 'giornate';
     return name;
 };
 
@@ -57,7 +77,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const { user, userRole } = useAuth();
     const [data, setData] = useState<AllData>({ 
         tecnici: [], clienti: [], ditte: [], navi: [], luoghi: [], 
-        categorie: [], 'tipi-giornata': [], veicoli: []
+        categorie: [], tipiGiornata: [], veicoli: []
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -68,7 +88,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         if (!user || userRole !== 'Amministratore') {
             setLoading(false);
-            setData({ tecnici: [], clienti: [], ditte: [], navi: [], luoghi: [], categorie: [], 'tipi-giornata': [], veicoli: [] });
+            setData({ tecnici: [], clienti: [], ditte: [], navi: [], luoghi: [], categorie: [], tipiGiornata: [], veicoli: [] });
             return;
         }
 
@@ -124,15 +144,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         } catch (e) { throw e; }
     }, [refreshData]);
 
+    const tecniciMap = useMemo(() => createMap(data.tecnici), [data.tecnici]);
+    const clientiMap = useMemo(() => createMap(data.clienti), [data.clienti]);
+    const naviMap = useMemo(() => createMap(data.navi), [data.navi]);
+    const luoghiMap = useMemo(() => createMap(data.luoghi), [data.luoghi]);
+    const tipiGiornataMap = useMemo(() => createMap(data.tipiGiornata), [data.tipiGiornata]);
+
     const value = useMemo(() => ({
         ...data,
+        tecniciMap,
+        clientiMap,
+        naviMap,
+        luoghiMap,
+        tipiGiornataMap,
         loading,
         error,
         refreshData,
         addDocument,
         updateDocument,
         deleteDocument,
-    }), [data, loading, error, refreshData, addDocument, updateDocument, deleteDocument]);
+    }), [data, tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, loading, error, refreshData, addDocument, updateDocument, deleteDocument]);
 
     return (
         <DataContext.Provider value={value}>

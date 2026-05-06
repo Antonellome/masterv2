@@ -33,99 +33,61 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.manageAccess = void 0;
-const https_1 = require("firebase-functions/v2/https");
+exports.syncDataTrigger = void 0;
+const app_1 = require("firebase-admin/app");
+const firestore_1 = require("firebase-admin/firestore");
+const messaging_1 = require("firebase-admin/messaging");
+// Correggo l'importazione
+const firestore_2 = require("firebase-functions/v2/firestore");
+const v2_1 = require("firebase-functions/v2");
 const logger = __importStar(require("firebase-functions/logger"));
-const admin = __importStar(require("firebase-admin"));
-admin.initializeApp();
-const db = admin.firestore();
-exports.manageAccess = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
-    var _a;
-    // 1. Authorization Check: Only admins can proceed.
-    if (((_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'admin') {
-        throw new https_1.HttpsError("permission-denied", "Operazione non autorizzata. Solo un amministratore può gestire gli accessi.");
+// Imposto la regione per tutte le funzioni in questo file
+(0, v2_1.setGlobalOptions)({ region: "europe-west1" });
+// Inizializza l'app Firebase Admin
+(0, app_1.initializeApp)();
+const db = (0, firestore_1.getFirestore)();
+const messaging = (0, messaging_1.getMessaging)();
+// Modalità sicura DISATTIVATA DEFINITIVAMENTE
+const SAFE_MODE = false;
+// Funzione V3 (per tracciamento) che si attiva alla creazione di un documento in 'notificheRichieste'
+exports.syncDataTrigger = (0, firestore_2.onDocumentCreated)("notificheRichieste/{docId}", async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) {
+        logger.log("Nessun dato associato all'evento, uscita.");
+        return;
     }
-    const { uid, abilitato } = request.data;
-    const callerUid = request.auth.uid;
-    if (typeof uid !== 'string' || typeof abilitato !== 'boolean') {
-        throw new https_1.HttpsError("invalid-argument", "La funzione richiede un 'uid' (string) e 'abilitato' (boolean).");
+    const docId = event.params.docId;
+    const notificaData = snapshot.data();
+    // Questo controllo è ora permanentemente disattivato
+    if (SAFE_MODE) {
+        logger.log(`[syncDataTrigger V3 - SAFE MODE] Triggered for doc: ${docId}. No action will be taken.`);
+        return;
     }
+    // NUOVO LOG DI VERSIONE
+    logger.log(`[syncDataTrigger V3 - REGION europe-west1] Triggered for doc: ${docId}`);
+    logger.log("[syncDataTrigger V3] Data:", notificaData);
     try {
-        // PATH 1: Standard update for an existing, healthy user.
-        await admin.auth().updateUser(uid, { disabled: !abilitato });
-        await db.collection("tecnici").doc(uid).update({ abilitato: abilitato });
-        logger.info(`SUCCESS: Admin ${callerUid} updated status for existing user ${uid} to abilitato: ${abilitato}`);
-        return { status: "success", message: "Stato utente aggiornato correttamente." };
+        // 1. Invia la notifica FCM
+        const message = {
+            notification: {
+                title: notificaData.title || "Nuova Notifica",
+                body: notificaData.body || "Hai un nuovo messaggio",
+            },
+            topic: "all",
+        };
+        const fcmResponse = await messaging.send(message);
+        logger.log("[syncDataTrigger V3] Notifica FCM inviata con successo:", fcmResponse);
+        // 2. Prepara il documento per 'notificheInviate'
+        const sentNotificaData = Object.assign(Object.assign({}, notificaData), { sentAt: firestore_1.Timestamp.now(), fcmMessageId: fcmResponse, status: "sent" });
+        // 3. Salva nella collezione 'notificheInviate'
+        await db.collection("notificheInviate").add(sentNotificaData);
+        logger.log(`[syncDataTrigger V3] Documento ${docId} archiviato in notificheInviate.`);
+        // 4. Elimina il documento originale da 'notificheRichieste'
+        await db.collection("notificheRichieste").doc(docId).delete();
+        logger.log(`[syncDataTrigger V3] Documento originale ${docId} eliminato da notificheRichieste.`);
     }
     catch (error) {
-        // If the error is NOT 'user-not-found', it's a genuine, unexpected problem.
-        if (error.code !== 'auth/user-not-found') {
-            logger.error(`UNEXPECTED-ERROR while updating ${uid}:`, error);
-            throw new https_1.HttpsError("internal", "Errore interno del server di autenticazione durante l'aggiornamento.");
-        }
-        // PATH 2: SELF-HEALING. The error IS 'auth/user-not-found'.
-        logger.warn(`HEALING-PROCESS-STARTED: User not found in Auth with UID ${uid}.`);
-        // Case A: Trying to DISABLE a non-existent user. This is an orphan record that needs cleaning.
-        if (!abilitato) {
-            logger.warn(`ORPHAN-RECORD-CLEANUP: Attempt to disable non-existent user ${uid}. Deleting from Firestore.`);
-            await db.collection('tecnici').doc(uid).delete();
-            // We throw an error to the client so the UI can refresh and show the record is gone.
-            throw new https_1.HttpsError('not-found', 'Record orfano eliminato. Questo tecnico non esisteva in Authentication ed è stato rimosso.');
-        }
-        // Case B: Trying to ENABLE a non-existent user. This is a FIRST-TIME-PROMOTION.
-        logger.info(`FIRST-TIME-PROMOTION for Firestore doc ${uid}. Starting transaction.`);
-        try {
-            const result = await db.runTransaction(async (transaction) => {
-                const oldDocRef = db.collection("tecnici").doc(uid);
-                const oldDoc = await transaction.get(oldDocRef);
-                if (!oldDoc.exists) {
-                    throw new https_1.HttpsError("not-found", `PANIC: The source document ${uid} was not found during transaction. Aborting.`);
-                }
-                const tecnicoData = oldDoc.data();
-                const userEmail = tecnicoData.email;
-                if (!userEmail) {
-                    throw new https_1.HttpsError("invalid-argument", `CRITICAL: Email field is missing in source document ${uid}. Cannot create user.`);
-                }
-                // Check if a user with this email already exists in Auth, maybe from a past failed attempt.
-                let userRecord;
-                try {
-                    userRecord = await admin.auth().getUserByEmail(userEmail);
-                    logger.warn(`EXISTING-AUTH-USER-FOUND: User with email ${userEmail} already exists (UID: ${userRecord.uid}). Linking this Auth record.`);
-                }
-                catch (e) {
-                    if (e.code === 'auth/user-not-found') {
-                        // This is the ideal case: create the user from scratch.
-                        userRecord = await admin.auth().createUser({
-                            email: userEmail,
-                            displayName: `${tecnicoData.nome} ${tecnicoData.cognome}`
-                        });
-                        logger.info(`NEW-AUTH-USER-CREATED: User for ${userEmail} created with new UID: ${userRecord.uid}`);
-                    }
-                    else {
-                        throw e; // Rethrow other auth errors (network, etc.)
-                    }
-                }
-                const newUid = userRecord.uid;
-                // Set custom claims and ensure the user is enabled.
-                await admin.auth().setCustomUserClaims(newUid, Object.assign(Object.assign({}, userRecord.customClaims), { tecnico: true }));
-                await admin.auth().updateUser(newUid, { disabled: false });
-                // Create the new, correct document with the Auth UID as its ID.
-                const newDocRef = db.collection("tecnici").doc(newUid);
-                transaction.set(newDocRef, Object.assign(Object.assign({}, tecnicoData), { abilitato: true, uid: newUid }));
-                // Delete the old, orphaned document.
-                transaction.delete(oldDocRef);
-                logger.info(`HEALING-TRANSACTION-SUCCESS: Document ${uid} migrated to ${newUid}.`);
-                return { newUid: newUid };
-            });
-            return { status: "success", message: `Utente ${result.newUid} promosso e collegato con successo!` };
-        }
-        catch (transactionError) {
-            logger.error(`FATAL-TRANSACTION-FAILURE for ${uid}:`, transactionError);
-            if (transactionError instanceof https_1.HttpsError) {
-                throw transactionError;
-            }
-            throw new https_1.HttpsError("internal", "La transazione di correzione dei dati è fallita criticamente.");
-        }
+        logger.error(`[syncDataTrigger V3] Errore durante l'elaborazione del documento ${docId}:`, error);
     }
 });
 //# sourceMappingURL=index.js.map

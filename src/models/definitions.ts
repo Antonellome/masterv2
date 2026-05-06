@@ -65,6 +65,31 @@ export interface CheckinData {
 // Definisce la struttura per l'oggetto filtri usato nella sezione Checkin
 export interface FiltriCheckin {
   ricercaTecnico: string;
-  luoghiSelezionati: string[];
+  luoghiSelezionate: string[];
   naviSelezionate: string[];
+}
+
+// Definisce la struttura di una notifica richiesta dall'utente, come era prima
+export interface NotificaRichiesta {
+    id?: string;
+    title: string;
+    body: string;
+    target: 'all' | 'specific';
+    tecniciIds?: string[];
+    createdAt: Timestamp;
+    status?: string;
+    readBy?: any; // Mantenuto per compatibilità
+}
+
+// Definisce la struttura di una notifica inviata e salvata nello storico
+export interface Notifica {
+    id?: string;
+    title: string;
+    body: string;
+    sentAt: Timestamp;
+    fcmMessageId: string;
+    status: string;
+    target: 'all' | 'specific';
+    tecniciIds?: string[];
+    readBy?: { [userId: string]: { nome: string; readAt: Timestamp } };
 }
