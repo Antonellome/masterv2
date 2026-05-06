@@ -114,7 +114,14 @@ const AnalisiOre = () => {
         for (const r of rapportiniFiltrati) {
             const tecnico = tecniciMap.get(r.tecnicoScriventeId);
             const tipoGiornata = tipiGiornataMap.get(r.giornataId);
-            const ore = r.oreLavorate || 0;
+
+            let ore = 0;
+            if (r.oraInizio && r.oraFine) {
+                const inizio = dayjs(r.oraInizio);
+                const fine = dayjs(r.oraFine);
+                ore = fine.diff(inizio, 'minute') / 60;
+            }
+            
             let costo = 0;
 
             if (tipoGiornata) {
