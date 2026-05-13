@@ -3,8 +3,10 @@ import React, { useState } from 'react';
 import { Box, Tabs, Tab, Typography } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
+import SyncIcon from '@mui/icons-material/Sync';
 import GestioneTecnici from '@/components/Tecnici/GestioneTecnici';
 import GestioneAccessi from '@/components/Tecnici/GestioneAccessi';
+import GestioneSincronizzazione from '@/components/Tecnici/GestioneSincronizzazione';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -62,6 +64,13 @@ const TecniciPage = () => {
             id="tecnici-tab-1" 
             aria-controls="tecnici-tabpanel-1" 
           />
+          <Tab 
+            label="Sincronizzazione" 
+            icon={<SyncIcon />} 
+            iconPosition="start" 
+            id="tecnici-tab-2" 
+            aria-controls="tecnici-tabpanel-2" 
+          />
         </Tabs>
       </Box>
       
@@ -70,6 +79,9 @@ const TecniciPage = () => {
       </TabPanel>
       <TabPanel value={value} index={1}>
         <GestioneAccessi />
+      </TabPanel>
+      <TabPanel value={value} index={2}>
+        <GestioneSincronizzazione />
       </TabPanel>
     </Box>
   );

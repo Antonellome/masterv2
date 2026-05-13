@@ -19,6 +19,7 @@ const GestioneTecnici = () => {
     const [tecnicoToDelete, setTecnicoToDelete] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
     const [isSaving, setIsSaving] = useState(false);
+    const [updatingId, setUpdatingId] = useState<string | null>(null);
 
     const collectionName: CollectionName = 'tecnici';
 
@@ -77,16 +78,15 @@ const GestioneTecnici = () => {
         }
     }, [tecnicoToDelete, deleteDocument]);
     
-    // 1. FUNZIONE CREATA
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
-        setIsSaving(true);
+        setUpdatingId(id);
         try {
             await updateDocument(collectionName, id, { attivo: newStatus });
             setSnackbar({ open: true, message: `Stato del tecnico aggiornato a ${newStatus ? 'Attivo' : 'Inattivo'}.`, severity: 'success' });
         } catch (e) {
             handleError(e, "Errore nell'aggiornamento dello stato");
         } finally {
-            setIsSaving(false);
+            setUpdatingId(null);
         }
     }, [updateDocument]);
 
@@ -112,11 +112,11 @@ const GestioneTecnici = () => {
                 onAdd={handleAdd}
                 onEdit={handleEdit}
                 onDelete={(_e, id) => handleDelete(id)}
-                // 2. FUNZIONE COLLEGATA
                 onStatusChange={handleStatusChange} 
                 onSyncChange={() => {}} 
                 onViewDetails={() => {}}
-                isSaving={isSaving} // Aggiungo isSaving per disabilitare i controlli durante le operazioni
+                isSaving={isSaving}
+                updatingId={updatingId}
             />
             <TecnicoForm
                 open={formOpen}

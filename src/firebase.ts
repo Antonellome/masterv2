@@ -4,21 +4,21 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 
-// Importa le variabili d'ambiente di Vite
+// HARDCODED CONFIGURATION - The final test
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL
+  apiKey: "AIzaSyBlpnXKXYvh52cQtojfLsTFUcet-geKzqQ",
+  authDomain: "riso-project-app.firebaseapp.com",
+  projectId: "riso-project-app",
+  storageBucket: "riso-project-app.appspot.com",
+  messagingSenderId: "157316892209",
+  appId: "1:157316892209:web:c591c034fa132e549bb710",
+  databaseURL: "https://riso-project-app-default-rtdb.europe-west1.firebasedatabase.app"
 };
 
-// Inizializza Firebase in modo semplice e sicuro
+// Inizializza Firebase
 const app = initializeApp(firebaseConfig);
 
-// Esporta i servizi che ti servono
+// Esporta i servizi
 const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app, 'europe-west1');

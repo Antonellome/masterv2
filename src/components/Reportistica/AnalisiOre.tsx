@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { collection, Query, where, getDocs, query } from 'firebase/firestore';
+import { collection, Query, where, getDocs, query, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useFirestoreData } from '@/hooks/useFirestoreData';
 import {
@@ -12,7 +12,11 @@ import {
 import type {
     Rapportino, Tecnico, Categoria, Cliente, TipoGiornata, Nave, Luogo
 } from '@/models/definitions';
-import dayjs from 'dayjs';
+
+// Interfaccia flessibile per i dati da Firestore.
+interface RapportinoFromDB extends Omit<Rapportino, 'data'> {
+    data: Timestamp;
+}
 
 // ========= TIPI E INTERFACCE =========
 interface AnalisiData {
@@ -28,7 +32,7 @@ interface AnalisiData {
 // ========= COMPONENTE PRINCIPALE =========
 const AnalisiOre = () => {
     // --- Stati ---
-    const [rapportiniFiltrati, setRapportiniFiltrati] = useState<Rapportino[]>([]);
+    const [rapportiniFiltrati, setRapportiniFiltrati] = useState<RapportinoFromDB[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [userInteracted, setUserInteracted] = useState(false);
@@ -61,35 +65,43 @@ const AnalisiOre = () => {
             setError(null);
             
             try {
+                // La query ora filtra solo per documenti che hanno il campo data, essendo un requisito del where.
+                const startDate = new Date(filtri.dataDa);
+                const endDate = new Date(filtri.dataA);
+
                 let q: Query = query(collection(db, 'rapportini'), 
-                    where('data', '>=', dayjs(filtri.dataDa).startOf('day').toDate()),
-                    where('data', '<=', dayjs(filtri.dataA).endOf('day').toDate())
+                    where('data', '>=', startDate),
+                    where('data', '<=', endDate)
                 );
                 
                 const querySnapshot = await getDocs(q);
-                let rapportiniData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Rapportino[];
-                
+                // Aggiungiamo un filtro per assicurarci che il campo data esista e sia valido
+                const rapportiniData = querySnapshot.docs
+                    .map(doc => ({ ...doc.data(), id: doc.id }))
+                    .filter(r => r.data && typeof r.data.toDate === 'function') as RapportinoFromDB[];
+
                 // Filtri client-side
+                let filteredData = rapportiniData;
                 if (filtri.categoriaId !== 'all' && tecnici) {
                     const tecniciConCategoria = tecnici.filter(t => t.categoriaId === filtri.categoriaId).map(t => t.id);
-                    rapportiniData = rapportiniData.filter(r => r.tecnicoScriventeId && tecniciConCategoria.includes(r.tecnicoScriventeId));
+                    filteredData = filteredData.filter(r => r.tecnicoId && tecniciConCategoria.includes(r.tecnicoId));
                 }
                 if (filtri.clienteId !== 'all' && navi) {
                     const naviDelCliente = navi.filter(n => n.clienteId === filtri.clienteId).map(n => n.id);
-                    rapportiniData = rapportiniData.filter(r => r.naveId && naviDelCliente.includes(r.naveId));
+                    filteredData = filteredData.filter(r => r.naveId && naviDelCliente.includes(r.naveId));
                 }
                 if (filtri.naveId !== 'all') {
-                    rapportiniData = rapportiniData.filter(r => r.naveId === filtri.naveId);
+                    filteredData = filteredData.filter(r => r.naveId === filtri.naveId);
                 }
                 if (filtri.luogoId !== 'all') {
-                    rapportiniData = rapportiniData.filter(r => r.luogoId === filtri.luogoId);
+                    filteredData = filteredData.filter(r => r.luogoId === filtri.luogoId);
                 }
 
-                setRapportiniFiltrati(rapportiniData);
+                setRapportiniFiltrati(filteredData);
 
             } catch (err) {
                 console.error("Errore nel fetch dei rapportini:", err);
-                setError("Si è verificato un errore durante il caricamento dei dati.");
+                setError("Si è verificato un errore durante il caricamento dei dati. Controlla la console per i dettagli.");
             }
             setIsLoading(false);
         };
@@ -97,7 +109,7 @@ const AnalisiOre = () => {
         fetchRapportini();
     }, [filtri, dataLoading, tecnici, navi, userInteracted]);
 
-    // --- Logica di Calcolo ---
+    // --- Logica di Calcolo Resiliente ---
     const analisi = useMemo((): AnalisiData | null => {
         if (!rapportiniFiltrati.length || dataLoading) return null;
 
@@ -112,33 +124,43 @@ const AnalisiOre = () => {
         let hasMissingCostData = false;
 
         for (const r of rapportiniFiltrati) {
-            const tecnico = tecniciMap.get(r.tecnicoScriventeId);
-            const tipoGiornata = tipiGiornataMap.get(r.giornataId);
-
-            let ore = 0;
-            if (r.oraInizio && r.oraFine) {
-                const inizio = dayjs(r.oraInizio);
-                const fine = dayjs(r.oraFine);
-                ore = fine.diff(inizio, 'minute') / 60;
+            // --- BLOCCO DI VALIDAZIONE ROBUSTO ---
+            if (!r.tecnicoId || !tecniciMap.has(r.tecnicoId)) {
+                console.warn(`Rapportino ID ${r.id} saltato: tecnico mancante o non valido.`);
+                continue;
             }
-            
-            let costo = 0;
+            const tecnico = tecniciMap.get(r.tecnicoId)!;
 
-            if (tipoGiornata) {
-                costo = ore * (tipoGiornata.costoOrario || 0);
-            } else {
-                console.warn(`Dati di costo mancanti per il rapportino ID: ${r.id}. ` + 
-                             `Causa: tipoGiornata con ID '${r.giornataId}' non trovato.`);
+            if (!r.tipoGiornataId || !tipiGiornataMap.has(r.tipoGiornataId)) {
+                console.warn(`Rapportino ID ${r.id} saltato: tipoGiornata mancante o non valido.`);
                 hasMissingCostData = true;
+                continue;
+            }
+            const tipoGiornata = tipiGiornataMap.get(r.tipoGiornataId)!;
+
+            // --- CALCOLO SEMPLIFICATO E SICURO ---
+            // Utilizziamo il campo `oreLavoro` come unica fonte di verità, evitando ricalcoli rischiosi.
+            const ore = r.oreLavoro ?? 0;
+
+            let costo = 0;
+            if (typeof tipoGiornata.costoOrario === 'number') {
+                costo = ore * tipoGiornata.costoOrario;
+            } else {
+                if (ore > 0) {
+                     console.warn(`Costo non calcolato per rapportino ID ${r.id}: costo orario non definito per il tipo giornata '${tipoGiornata.nome}'.`);
+                     hasMissingCostData = true;
+                }
             }
 
-            if(tecnico?.categoriaId) {
+            if(tecnico.categoriaId) {
                 costoPerCategoria[tecnico.categoriaId] = (costoPerCategoria[tecnico.categoriaId] || 0) + costo;
             }
 
             oreTotali += ore;
             costoTotale += costo;
-            if(r.tecnicoScriventeId) tecniciUnici.add(r.tecnicoScriventeId);
+            tecniciUnici.add(r.tecnicoId);
+            // Aggiungiamo anche gli altri tecnici se presenti
+            r.presenze?.forEach(id => tecniciUnici.add(id));
         }
 
         return {
@@ -182,7 +204,7 @@ const AnalisiOre = () => {
                 <>
                     {analisi.hasMissingCostData && 
                         <Alert severity="warning" sx={{ mb: 2 }}>
-                            Attenzione: per alcuni rapportini non è stato possibile calcolare il costo perché il tipo di giornata non è stato trovato. Il costo totale potrebbe essere inferiore al reale.
+                            Attenzione: per alcuni rapportini non è stato possibile calcolare il costo perché i dati erano incompleti (es. tipo giornata o costo orario mancante). Il costo totale potrebbe essere inferiore al reale. Controlla la console per i dettagli.
                         </Alert>
                     }
                     <Grid container spacing={3} sx={{ mb: 4 }}>

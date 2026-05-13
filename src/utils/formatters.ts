@@ -1,34 +1,27 @@
-export const formatOreLavoro = (ore: number | null | undefined): string => {
+export const formatOreLavoro = (ore: number | string | null | undefined): string => {
     if (ore === null || ore === undefined) {
         return '--';
     }
 
-    if (ore <= 8) {
-        // Mostra il numero con una o due cifre decimali solo se necessario
-        if (ore % 1 !== 0) {
-            return `${ore.toFixed(2).replace('.50', '.5').replace('.00', '')}h`;
-        }
-        return `${ore}h`;
+    let oreNumeriche: number;
+
+    // Gestisce in modo sicuro sia numeri che stringhe (es. "8+8" o vecchi dati)
+    if (typeof ore === 'string') {
+        oreNumeriche = ore.includes('+')
+            ? ore.split('+').reduce((acc, curr) => acc + parseFloat(curr || '0'), 0)
+            : parseFloat(ore);
+    } else {
+        oreNumeriche = ore;
     }
 
-    const oreBase = 8;
-    const straordinario = ore - oreBase;
-    const oreStraordinario = Math.floor(straordinario);
-    const minutiStraordinario = Math.round((straordinario - oreStraordinario) * 60);
-
-    let straordinarioFormatted = '';
-    if (oreStraordinario > 0) {
-        straordinarioFormatted += `${oreStraordinario}`;
+    if (isNaN(oreNumeriche)) {
+        return 'Err'; // Indica un valore non valido o corrotto
     }
 
-    if (minutiStraordinario > 0) {
-        if (oreStraordinario > 0) {
-             straordinarioFormatted += `:${minutiStraordinario.toString().padStart(2, '0')}`;
-        } else {
-            // Gestisce il caso di 0.5 ore di straordinario (es. 8.5 totali) -> 0:30
-            straordinarioFormatted += `0:${minutiStraordinario.toString().padStart(2, '0')}`;
-        }
+    // Formattazione semplice: mostra i decimali (es. .5) solo se presenti.
+    if (oreNumeriche % 1 !== 0) {
+        return `${oreNumeriche.toFixed(1)}h`.replace('.0', ''); // Es: 8.5h
     }
-
-    return `${oreBase} + ${straordinarioFormatted}h`;
+    
+    return `${oreNumeriche}h`; // Es: 8h, 16h
 };

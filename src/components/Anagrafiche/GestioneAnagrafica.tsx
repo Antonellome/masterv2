@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, getDocs, doc, writeBatch, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { Box, Typography, IconButton, Button, CircularProgress, Snackbar, Alert } from '@mui/material';
 import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbar, GridRenderCellParams, GridRowModel } from '@mui/x-data-grid';
@@ -8,6 +8,7 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/ico
 import FormDialog from './FormDialog';
 import ConfirmationDialog from '../ConfirmationDialog';
 import type { FormField, Anagrafica } from '@/models/definitions';
+import { addAnagraficaWithVersion, updateAnagraficaWithVersion, deleteAnagraficaWithVersion } from '@/utils/firestoreWrite';
 
 // Definizione di un tipo interno per rappresentare la riga della griglia
 type DataRow<T> = T & {
@@ -39,6 +40,8 @@ function GestioneAnagrafica<T extends Anagrafica>({
     const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    const forceRefresh = useCallback(() => setRefreshTrigger(t => t + 1), []);
 
     useEffect(() => {
         const abortController = new AbortController();
@@ -120,49 +123,59 @@ function GestioneAnagrafica<T extends Anagrafica>({
         };
     }, [collectionName, fields, anagraficaType, refreshTrigger]);
 
-    const forceRefresh = () => setRefreshTrigger(t => t + 1);
-
     const handleSave = async (item: Partial<DataRow<T>>) => {
-        const batch = writeBatch(db);
-        const docRef = item.id ? doc(db, collectionName, item.id) : doc(collection(db, collectionName));
-        
-        // Rimuovi le proprietà calcolate prima del salvataggio
-        const { ...itemToSave } = item;
-        delete itemToSave.numNavi;
-        delete itemToSave.numLuoghi;
-        
-        if (!itemToSave.id) {
-            itemToSave.id = docRef.id;
-        }
+        try {
+            // Rimuovi le proprietà calcolate prima del salvataggio
+            const { id, ...itemToSave } = item;
+            delete (itemToSave as Partial<DataRow<T>>).numNavi;
+            delete (itemToSave as Partial<DataRow<T>>).numLuoghi;
 
-        batch.set(docRef, itemToSave, { merge: true });
-        await batch.commit();
-        setSnackbar({ open: true, message: 'Elemento salvato con successo!', severity: 'success' });
-        forceRefresh();
-        setFormOpen(false);
+            if (id) {
+                // Modifica
+                await updateAnagraficaWithVersion(collectionName, id, itemToSave);
+            } else {
+                // Aggiunta
+                await addAnagraficaWithVersion(collectionName, itemToSave);
+            }
+
+            setSnackbar({ open: true, message: 'Elemento salvato con successo!', severity: 'success' });
+            forceRefresh();
+            setFormOpen(false);
+        } catch (error) {
+            console.error("Errore durante il salvataggio:", error);
+            setSnackbar({ open: true, message: `Errore durante il salvataggio: ${error instanceof Error ? error.message : String(error)}`, severity: 'error' });
+        }
     };
 
     const handleDelete = async (id: string) => {
-        await deleteDoc(doc(db, collectionName, id));
-        setSnackbar({ open: true, message: 'Elemento eliminato.', severity: 'success' });
-        forceRefresh();
+        try {
+            await deleteAnagraficaWithVersion(collectionName, id);
+            setSnackbar({ open: true, message: 'Elemento eliminato.', severity: 'success' });
+            forceRefresh();
+        } catch (error) {
+            console.error("Errore durante l'eliminazione:", error);
+            setSnackbar({ open: true, message: `Errore durante l'eliminazione: ${error instanceof Error ? error.message : String(error)}`, severity: 'error' });
+        }
     };
     
     const processRowUpdate = useCallback(async (newRow: GridRowModel<DataRow<T>>, oldRow: GridRowModel<DataRow<T>>) => {
         try {
-            // Rimuovi le proprietà calcolate e non utilizzate
             const { id, ...dataToUpdate } = newRow;
             delete (dataToUpdate as Partial<DataRow<T>>).numNavi;
             delete (dataToUpdate as Partial<DataRow<T>>).numLuoghi;
 
             const dataForUpdate: { [key: string]: unknown } = dataToUpdate;
 
+            // Assicura la corretta tipizzazione dei numeri prima di salvare
             for (const field of fields) {
                 if (field.type === 'number' && dataForUpdate[field.name] !== undefined) {
-                    dataForUpdate[field.name] = Number(dataForUpdate[field.name]);
+                    const numValue = Number(dataForUpdate[field.name]);
+                    dataForUpdate[field.name] = isNaN(numValue) ? 0 : numValue;
                 }
             }
-            await updateDoc(doc(db, collectionName, id), dataForUpdate);
+
+            await updateAnagraficaWithVersion(collectionName, id, dataForUpdate);
+            
             setSnackbar({ open: true, message: 'Modifica salvata!', severity: 'success' });
             forceRefresh(); 
             return newRow;
@@ -171,7 +184,7 @@ function GestioneAnagrafica<T extends Anagrafica>({
             console.error("Update Error:", error);
             return oldRow;
         }
-    }, [collectionName, fields]);
+    }, [collectionName, fields, forceRefresh]);
 
     const handleAddNew = () => {
         setSelectedItem(null);

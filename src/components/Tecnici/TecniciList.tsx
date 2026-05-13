@@ -31,7 +31,6 @@ function CustomToolbar({ onAdd }: { onAdd: () => void }) {
     );
 }
 
-// 1. MODIFICATA LA FIRMA DELLA FUNZIONE
 interface TecniciListProps {
     tecnici: Tecnico[];
     ditteMap: Map<string, string>;
@@ -41,11 +40,12 @@ interface TecniciListProps {
     onEdit: (tecnico: Tecnico) => void;
     onDelete: (event: React.MouseEvent, id: string) => void;
     onAdd: () => void; 
-    isSaving?: boolean; // Aggiunto per feedback visivo
+    isSaving?: boolean;
+    updatingId?: string | null;
 }
 
 const TecniciList: React.FC<TecniciListProps> = ({ 
-    tecnici, ditteMap, categorieMap, onViewDetails, onStatusChange, onEdit, onDelete, onAdd, isSaving 
+    tecnici, ditteMap, categorieMap, onViewDetails, onStatusChange, onEdit, onDelete, onAdd, isSaving, updatingId 
 }) => {
 
     const handleExport = (event: React.MouseEvent, tecnico: Tecnico) => {
@@ -54,7 +54,6 @@ const TecniciList: React.FC<TecniciListProps> = ({
     };
 
     const allColumns: GridColDef[] = [
-        // 2. CORRETTO IL PASSAGGIO DEI DATI
         { 
             field: 'attivo', 
             headerName: 'Stato', 
@@ -63,18 +62,17 @@ const TecniciList: React.FC<TecniciListProps> = ({
             headerAlign: 'center', 
             renderCell: (params) => (
                 <Tooltip title={params.value ? 'Attivo' : 'Non Attivo'}>
-                    {/* 3. AGGIUNTO IL FEEDBACK DI CARICAMENTO */}
-                    <span>
+                    <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                         <Switch 
                             size="small" 
                             checked={Boolean(params.value)} 
                             onChange={(e) => onStatusChange(params.row.id, e.target.checked)} 
                             onClick={(e) => e.stopPropagation()} 
                             color="primary" 
-                            disabled={isSaving} // Disabilita durante il salvataggio
+                            disabled={isSaving || updatingId === params.row.id}
                         />
-                         {isSaving && params.row.id === (tecnici.find(t=>t.attivo !== params.row.attivo)?.id) && <CircularProgress size={20} sx={{position: 'absolute', top: '50%', left: '50%', marginTop: '-10px', marginLeft: '-10px'}}/>}
-                    </span>
+                         {updatingId === params.row.id && <CircularProgress size={24} sx={{position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px'}}/>}
+                    </Box>
                 </Tooltip>
             )
         },

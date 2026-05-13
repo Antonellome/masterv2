@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
     Dialog,
@@ -16,14 +17,14 @@ import {
 } from '@mui/material';
 import { doc, onSnapshot, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase'; 
-import type { NotificaRichiesta } from '../../types/definitions'; 
+import type { NotificaInviata } from '../../models/definitions'; // Aggiornato per usare il tipo corretto
 import PeopleIcon from '@mui/icons-material/People';
 import dayjs from 'dayjs';
 
 interface DettaglioNotificaDialogProps {
     open: boolean;
     onClose: () => void;
-    notifica: NotificaRichiesta | null;
+    notifica: NotificaInviata | null; // Usiamo il tipo NotificaInviata
 }
 
 interface ReaderDetail {
@@ -42,7 +43,8 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
         }
 
         setLoading(true);
-        const unsubscribe = onSnapshot(doc(db, 'notificheRichieste', notifica.id), async (docSnapshot) => {
+        // FIX: Ascolta la collezione `notificheInviate` invece di `notificheRichieste`
+        const unsubscribe = onSnapshot(doc(db, 'notificheInviate', notifica.id), async (docSnapshot) => {
             if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
                 const readByMap = data.readBy && typeof data.readBy === 'object' ? data.readBy : {};
@@ -83,6 +85,8 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
                 }
 
             } else {
+                // Questo può accadere se la notifica viene eliminata mentre il dialogo è aperto
+                console.log("Il documento della notifica non è stato trovato in 'notificheInviate'.");
                 setReaders([]);
             }
             setLoading(false);
@@ -123,7 +127,7 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
                                 <Typography variant="h6" gutterBottom>{notifica.title}</Typography>
                                 <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>{notifica.body}</Typography>
                                 <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
-                                    Inviata il: {formatTimestamp(notifica.createdAt)}
+                                    Inviata il: {formatTimestamp(notifica.sentAt)} {/* FIX: usa sentAt */}
                                 </Typography>
                              </Box>
                         )}

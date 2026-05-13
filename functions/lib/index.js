@@ -33,41 +33,34 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncDataTrigger = void 0;
-const app_1 = require("firebase-admin/app");
-const firestore_1 = require("firebase-admin/firestore");
+exports.rapportiniTrigger = exports.fanOutNotifications = void 0;
+// Importazioni unificate per lo stile V2
+const admin = __importStar(require("firebase-admin"));
 const messaging_1 = require("firebase-admin/messaging");
-// Correggo l'importazione
-const firestore_2 = require("firebase-functions/v2/firestore");
+const firestore_1 = require("firebase-functions/v2/firestore");
 const v2_1 = require("firebase-functions/v2");
 const logger = __importStar(require("firebase-functions/logger"));
-// Imposto la regione per tutte le funzioni in questo file
-(0, v2_1.setGlobalOptions)({ region: "europe-west1" });
-// Inizializza l'app Firebase Admin
-(0, app_1.initializeApp)();
-const db = (0, firestore_1.getFirestore)();
+// Inizializza l'app UNA SOLA VOLTA
+admin.initializeApp();
+const db = admin.firestore();
 const messaging = (0, messaging_1.getMessaging)();
-// Modalità sicura DISATTIVATA DEFINITIVAMENTE
-const SAFE_MODE = false;
-// Funzione V3 (per tracciamento) che si attiva alla creazione di un documento in 'notificheRichieste'
-exports.syncDataTrigger = (0, firestore_2.onDocumentCreated)("notificheRichieste/{docId}", async (event) => {
+// Imposto la regione GLOBALE per tutte le funzioni v2
+(0, v2_1.setGlobalOptions)({ region: "europe-west1" });
+/**
+ * ===================================================================
+ *  FUNZIONE PER NOTIFICHE (V2)
+ * ===================================================================
+ */
+exports.fanOutNotifications = (0, firestore_1.onDocumentCreated)("notificheRichieste/{docId}", async (event) => {
     const snapshot = event.data;
     if (!snapshot) {
-        logger.log("Nessun dato associato all'evento, uscita.");
+        logger.log("[fanOutNotifications] Nessun dato associato all'evento.");
         return;
     }
     const docId = event.params.docId;
     const notificaData = snapshot.data();
-    // Questo controllo è ora permanentemente disattivato
-    if (SAFE_MODE) {
-        logger.log(`[syncDataTrigger V3 - SAFE MODE] Triggered for doc: ${docId}. No action will be taken.`);
-        return;
-    }
-    // NUOVO LOG DI VERSIONE
-    logger.log(`[syncDataTrigger V3 - REGION europe-west1] Triggered for doc: ${docId}`);
-    logger.log("[syncDataTrigger V3] Data:", notificaData);
+    logger.log(`[fanOutNotifications] Triggered for doc: ${docId}`);
     try {
-        // 1. Invia la notifica FCM
         const message = {
             notification: {
                 title: notificaData.title || "Nuova Notifica",
@@ -76,18 +69,88 @@ exports.syncDataTrigger = (0, firestore_2.onDocumentCreated)("notificheRichieste
             topic: "all",
         };
         const fcmResponse = await messaging.send(message);
-        logger.log("[syncDataTrigger V3] Notifica FCM inviata con successo:", fcmResponse);
-        // 2. Prepara il documento per 'notificheInviate'
-        const sentNotificaData = Object.assign(Object.assign({}, notificaData), { sentAt: firestore_1.Timestamp.now(), fcmMessageId: fcmResponse, status: "sent" });
-        // 3. Salva nella collezione 'notificheInviate'
+        logger.log("[fanOutNotifications] Notifica FCM inviata:", fcmResponse);
+        const sentNotificaData = Object.assign(Object.assign({}, notificaData), { sentAt: admin.firestore.Timestamp.now(), fcmMessageId: fcmResponse, status: "sent" });
         await db.collection("notificheInviate").add(sentNotificaData);
-        logger.log(`[syncDataTrigger V3] Documento ${docId} archiviato in notificheInviate.`);
-        // 4. Elimina il documento originale da 'notificheRichieste'
-        await db.collection("notificheRichieste").doc(docId).delete();
-        logger.log(`[syncDataTrigger V3] Documento originale ${docId} eliminato da notificheRichieste.`);
+        logger.log(`[fanOutNotifications] Storico creato per doc: ${docId}`);
     }
     catch (error) {
-        logger.error(`[syncDataTrigger V3] Errore durante l'elaborazione del documento ${docId}:`, error);
+        logger.error(`[fanOutNotifications] Errore per doc ${docId}:`, error);
     }
+});
+/**
+ * ===================================================================
+ *  FUNZIONE PER AGGREGAZIONE RAPPORTINI (Convertita a V2)
+ * ===================================================================
+ */
+exports.rapportiniTrigger = (0, firestore_1.onDocumentWritten)("rapportini/{rapportinoId}", async (event) => {
+    var _a, _b, _c;
+    const change = event.data;
+    if (!change) {
+        logger.log("[rapportiniTrigger] Nessun dato di modifica trovato nell'evento.");
+        return null;
+    }
+    const data = (_b = (_a = change.after) === null || _a === void 0 ? void 0 : _a.data()) !== null && _b !== void 0 ? _b : (_c = change.before) === null || _c === void 0 ? void 0 : _c.data();
+    if (!data) {
+        logger.log("[rapportiniTrigger] Nessun dato da processare.");
+        return null;
+    }
+    const { tecnicoId } = data;
+    if (!tecnicoId) {
+        logger.error("[rapportiniTrigger] ID Tecnico mancante.");
+        return null;
+    }
+    const timestamp = data.data || data.dataInizio;
+    if (!timestamp || !timestamp.toDate) {
+        logger.error("[rapportiniTrigger] Timestamp non valido.");
+        return null;
+    }
+    const date = timestamp.toDate();
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const monthKey = `${year}-${month}`;
+    logger.log(`[rapportiniTrigger] Ricalcolo per tecnico ${tecnicoId} nel mese ${monthKey}.`);
+    const riepilogoId = `${monthKey}_${tecnicoId}`;
+    const riepilogoRef = db.collection("riepiloghiMensili").doc(riepilogoId);
+    const startOfMonth = new Date(year, date.getMonth(), 1);
+    const endOfMonth = new Date(year, date.getMonth() + 1, 0, 23, 59, 59);
+    const rapportiniSnapshot = await db
+        .collection("rapportini")
+        .where("tecnicoId", "==", tecnicoId)
+        .where("data", ">=", startOfMonth)
+        .where("data", "<=", endOfMonth)
+        .get();
+    const aggregato = {
+        oreLavorate: 0,
+        giorniLavorati: 0,
+        giorniFerie: 0,
+        giorniMalattia: 0,
+        giorniPermesso: 0,
+    };
+    rapportiniSnapshot.forEach((doc) => {
+        var _a;
+        const rapportino = doc.data();
+        switch ((_a = rapportino.tipoGiornata) === null || _a === void 0 ? void 0 : _a.nome.toLowerCase()) {
+            case "lavoro":
+            case "lavoro straordinario":
+                aggregato.oreLavorate += rapportino.oreLavoro || 0;
+                aggregato.giorniLavorati += 1;
+                break;
+            case "ferie":
+                aggregato.giorniFerie += 1;
+                break;
+            case "malattia":
+                aggregato.giorniMalattia += 1;
+                break;
+            case "permesso":
+                aggregato.giorniPermesso += 1;
+                break;
+            default:
+                break;
+        }
+    });
+    await riepilogoRef.set(Object.assign(Object.assign({ tecnicoId: tecnicoId, mese: monthKey }, aggregato), { lastUpdated: admin.firestore.FieldValue.serverTimestamp() }), { merge: false });
+    logger.log(`[rapportiniTrigger] Riepilogo per ${tecnicoId} nel mese ${monthKey} aggiornato.`);
+    return null;
 });
 //# sourceMappingURL=index.js.map
