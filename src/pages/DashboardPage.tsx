@@ -8,7 +8,7 @@ import {
     Accordion, AccordionSummary, AccordionDetails,
     ToggleButtonGroup, ToggleButton
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Unstable_Grid2';
 import { useFirestoreData } from '@/hooks/useFirestoreData';
 import { collection } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -206,10 +206,10 @@ const DashboardContent = () => {
                     </ToggleButtonGroup>
                 </Box>
                 <Grid container spacing={3}>
-                    <Grid item xs={12} sm={4}><StatCard title={`Ore Lavorate ${titleSuffix}`} value={oreTotaliRange} /></Grid>
-                    <Grid item xs={12} sm={4}><StatCard title={`Costo Personale ${titleSuffix}`} value={costoTotaleRange} /></Grid>
-                    <Grid item xs={12} sm={4}><StatCard title={`Rapportini Creati ${titleSuffix}`} value={rapportiniCreatiRange} /></Grid>
-                    <Grid item xs={12}><Card><CardContent>
+                    <Grid xs={12} sm={4}><StatCard title={`Ore Lavorate ${titleSuffix}`} value={oreTotaliRange} /></Grid>
+                    <Grid xs={12} sm={4}><StatCard title={`Costo Personale ${titleSuffix}`} value={costoTotaleRange} /></Grid>
+                    <Grid xs={12} sm={4}><StatCard title={`Rapportini Creati ${titleSuffix}`} value={rapportiniCreatiRange} /></Grid>
+                    <Grid xs={12}><Card><CardContent>
                         <Typography variant="subtitle1" gutterBottom>Attività ultima settimana (ore)</Typography>
                         <ResponsiveContainer width="100%" height={300}><BarChart data={activityLast7Days} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend /><Bar dataKey="ore" fill="#8884d8" name="Ore lavorate" /></BarChart></ResponsiveContainer>
                     </CardContent></Card></Grid>
@@ -220,15 +220,15 @@ const DashboardContent = () => {
                 <List>{attivitaRecenti.length > 0 ? attivitaRecenti.map(item => <ListItem key={item.id}><ListItemAvatar><Avatar><WorkIcon /></Avatar></ListItemAvatar><ListItemText primary={`${item.tecnico} - ${item.destinazione}`} secondary={`${item.data} - ${item.descrizione || 'Nessuna descrizione'}`} /></ListItem>) : <Typography sx={{ p: 2 }}>Nessuna attività recente.</Typography>}</List>
             </CardContent></Card></CustomTabPanel>
             <CustomTabPanel value={tabValue} index={2}>{(Object.keys(checkinsByClient).length > 0 || luoghiCheckins.length > 0) ? <Grid container spacing={4}>
-                <Grid item xs={12} md={6}><Typography variant="h6" component="div" gutterBottom>Navi per Cliente</Typography>{Object.keys(checkinsByClient).length > 0 ? clientKeys.map(clienteId => <Box key={clienteId} sx={{ mb: 3 }}><Typography variant="subtitle1" component="div" sx={{ mb: 1, pl: 1, fontWeight: 'bold' }}>{clientiMap.get(clienteId) || 'Nessun Cliente Associato'}</Typography><LocationAccordion locations={checkinsByClient[clienteId]} tecniciMap={tecniciMap} /></Box>) : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico imbarcato oggi.</Typography>}</Grid>
-                <Grid item xs={12} md={6}><Typography variant="h6" component="div" gutterBottom>Luoghi</Typography>{luoghiCheckins.length > 0 ? <LocationAccordion locations={luoghiCheckins} tecniciMap={tecniciMap} /> : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico in altre sedi oggi.</Typography>}</Grid>
+                <Grid xs={12} md={6}><Typography variant="h6" component="div" gutterBottom>Navi per Cliente</Typography>{Object.keys(checkinsByClient).length > 0 ? clientKeys.map(clienteId => <Box key={clienteId} sx={{ mb: 3 }}><Typography variant="subtitle1" component="div" sx={{ mb: 1, pl: 1, fontWeight: 'bold' }}>{clientiMap.get(clienteId) || 'Nessun Cliente Associato'}</Typography><LocationAccordion locations={checkinsByClient[clienteId]} tecniciMap={tecniciMap} /></Box>) : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico imbarcato oggi.</Typography>}</Grid>
+                <Grid xs={12} md={6}><Typography variant="h6" component="div" gutterBottom>Luoghi</Typography>{luoghiCheckins.length > 0 ? <LocationAccordion locations={luoghiCheckins} tecniciMap={tecniciMap} /> : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico in altre sedi oggi.</Typography>}</Grid>
             </Grid> : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun check-in registrato per oggi.</Typography>}</CustomTabPanel>
             <CustomTabPanel value={tabValue} index={3}>
                 <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
                     <FormControl size="small"><InputLabel>Mese</InputLabel><Select value={selectedMonth} label="Mese" onChange={(e) => setSelectedMonth(e.target.value as number)}>{Array.from({ length: 12 }, (_, i) => <MenuItem key={i} value={i}>{dayjs().month(i).format('MMMM')}</MenuItem>)}</Select></FormControl>
                     <FormControl size="small"><InputLabel>Anno</InputLabel><Select value={selectedYear} label="Anno" onChange={(e) => setSelectedYear(e.target.value as number)}>{Array.from({ length: 5 }, (_, i) => dayjs().year() - i).map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}</Select></FormControl>
                 </Stack>
-                <Grid container spacing={1}>{calendarData && Array.from({ length: calendarData.offset }).map((_, index) => <Grid item xs={12/7} key={`offset-${index}`} />)}{calendarData && calendarData.days.map((dayData) => <Grid item xs={12/7} key={dayData.day}><CalendarDayCard day={dayData.day} missingReports={dayData.missingReports} isFuture={dayData.isFuture} /></Grid>)}</Grid>
+                <Grid container spacing={1}>{calendarData && Array.from({ length: calendarData.offset }).map((_, index) => <Grid xs={12/7} key={`offset-${index}`} />)}{calendarData && calendarData.days.map((dayData) => <Grid xs={12/7} key={dayData.day}><CalendarDayCard day={dayData.day} missingReports={dayData.missingReports} isFuture={dayData.isFuture} /></Grid>)}</Grid>
             </CustomTabPanel>
         </Box>
     );

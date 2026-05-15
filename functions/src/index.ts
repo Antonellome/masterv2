@@ -1,8 +1,9 @@
+
 // Importazioni unificate per lo stile V2
 import * as admin from "firebase-admin";
 import { getMessaging } from "firebase-admin/messaging";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
-import { setGlobalOptions } from "firebase-functions/v2";
+import { setGlobalOptions, https } from "firebase-functions/v2"; // Aggiunto https
 import * as logger from "firebase-functions/logger";
 
 // Inizializza l'app UNA SOLA VOLTA
@@ -15,7 +16,7 @@ setGlobalOptions({ region: "europe-west1" });
 
 /**
  * ===================================================================
- *  FUNZIONE PER NOTIFICHE (V2)
+ *  FUNZIONE PER INVIARE NOTIFICHE (V2)
  * ===================================================================
  */
 export const fanOutNotifications = onDocumentCreated(
@@ -39,19 +40,76 @@ export const fanOutNotifications = onDocumentCreated(
       };
       const fcmResponse = await messaging.send(message);
       logger.log("[fanOutNotifications] Notifica FCM inviata:", fcmResponse);
+      
       const sentNotificaData = {
         ...notificaData,
-        sentAt: admin.firestore.Timestamp.now(),
+        // ++ LA CORREZIONE DEFINITIVA ++
+        // Uso il serverTimestamp di Firestore per garantire coerenza assoluta.
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
         fcmMessageId: fcmResponse,
         status: "sent",
       };
+      
       await db.collection("notificheInviate").add(sentNotificaData);
       logger.log(`[fanOutNotifications] Storico creato per doc: ${docId}`);
+      
     } catch (error) {
       logger.error(`[fanOutNotifications] Errore per doc ${docId}:`, error);
     }
   }
 );
+
+/**
+ * ===================================================================
+ *  FUNZIONE PER MARCARE NOTIFICA COME LETTA (V2 - Callable)
+ * ===================================================================
+ */
+export const markNotificationAsRead = https.onCall(async (request) => {
+  logger.info("[markNotificationAsRead] Chiamata ricevuta", { auth: request.auth, data: request.data });
+
+  if (!request.auth) {
+    throw new https.HttpsError(
+      "unauthenticated",
+      "L'utente deve essere autenticato per marcare una notifica come letta."
+    );
+  }
+
+  const { notificationId } = request.data;
+  if (!notificationId) {
+    throw new https.HttpsError(
+      "invalid-argument",
+      "L'ID della notifica è obbligatorio."
+    );
+  }
+
+  const uid = request.auth.uid;
+  const userDoc = await db.collection('users').doc(uid).get();
+  const userName = userDoc.data()?.displayName || 'Utente Master';
+
+  const notificationRef = db.collection("notificheInviate").doc(notificationId);
+
+  try {
+    const fieldToUpdate = `readBy.${uid}`;
+    await notificationRef.update({
+      [fieldToUpdate]: {
+        nome: userName,
+        readAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      status: 'read'
+    });
+    
+    logger.info(`[markNotificationAsRead] Notifica ${notificationId} marcata come letta da ${userName} (${uid})`);
+    return { status: "success", message: `Notifica ${notificationId} marcata come letta.` };
+
+  } catch (error) {
+    logger.error(`[markNotificationAsRead] Errore durante l'aggiornamento della notifica ${notificationId}:`, error);
+    throw new https.HttpsError(
+      "internal",
+      "Errore interno durante l'aggiornamento della notifica."
+    );
+  }
+});
+
 
 /**
  * ===================================================================

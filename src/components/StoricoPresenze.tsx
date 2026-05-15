@@ -17,7 +17,7 @@ import {
     Card,
     CardContent,
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Unstable_Grid2';
 import { type Dayjs } from 'dayjs';
 import { useData } from '@/hooks/useData';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
@@ -166,7 +166,7 @@ const StoricoPresenze: React.FC<StoricoPresenzeProps> = ({ selectedDate }) => {
           </Grid>
 
           <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+              <Grid xs={12} md={6}>
                   <Typography variant="h6" gutterBottom>Mancanti (Attivi) ({mancantiAttivi.length})</Typography>
                   <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
                       <List dense>
@@ -182,7 +182,7 @@ const StoricoPresenze: React.FC<StoricoPresenzeProps> = ({ selectedDate }) => {
                   </Paper>
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid xs={12} md={6}>
                   <Typography variant="h6" gutterBottom>Operativi ({operativi.length})</Typography>
                    <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
                       <List dense>
@@ -198,7 +198,7 @@ const StoricoPresenze: React.FC<StoricoPresenzeProps> = ({ selectedDate }) => {
                   </Paper>
               </Grid>
               
-              <Grid item xs={12} md={6}>
+              <Grid xs={12} md={6}>
                   <Typography variant="h6" gutterBottom>Assenti Giustificati ({assentiGiustificati.length})</Typography>
                    <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
                       <List dense>
@@ -214,7 +214,7 @@ const StoricoPresenze: React.FC<StoricoPresenzeProps> = ({ selectedDate }) => {
                   </Paper>
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid xs={12} md={6}>
                   <Typography variant="h6" gutterBottom>Assenti (Non Attivi) ({assentiNonAttivi.length})</Typography>
                    <Paper variant="outlined" sx={{ p: 1, maxHeight: 300, overflowY: 'auto' }}>
                       <List dense>
@@ -223,7 +223,7 @@ const StoricoPresenze: React.FC<StoricoPresenzeProps> = ({ selectedDate }) => {
                                    <ListItemAvatar><Avatar sx={{ width: 32, height: 32 }}><NoAccountsIcon /></Avatar></ListItemAvatar>
                                   <ListItemText primary={`${tecnico.nome} ${tecnico.cognome}`} secondary="Non attivo"/>
                               </ListItem>
-                          ))}
+                          ))}\
                            {assentiNonAttivi.length === 0 && <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>Nessun tecnico non attivo.</Typography>}
                       </List>
                   </Paper>
@@ -234,7 +234,7 @@ const StoricoPresenze: React.FC<StoricoPresenzeProps> = ({ selectedDate }) => {
 };
 
 const KPIBox: React.FC<{ title: string; count: number; icon: React.ReactNode }> = ({ title, count, icon }) => (
-    <Grid item xs={12} sm={6} md={3}>
+    <Grid xs={12} sm={6} md={3}>
         <Paper elevation={2} sx={{ p: 2, textAlign: 'center', height: '100%', borderRadius: '12px' }}>
             {icon}
             <Typography variant="h4">{count}</Typography>
@@ -245,7 +245,7 @@ const KPIBox: React.FC<{ title: string; count: number; icon: React.ReactNode }> 
 
 // --- NUOVO COMPONENTE KPI PER ANALISI ---
 const AnalysisKPIBox: React.FC<{ title: string; value: string | number; icon: React.ReactNode }> = ({ title, value, icon }) => (
-    <Grid item xs={12} sm={4}>
+    <Grid xs={12} sm={4}>
         <Card elevation={3} sx={{ textAlign: 'center' }}>
             <CardContent>
                 {icon}

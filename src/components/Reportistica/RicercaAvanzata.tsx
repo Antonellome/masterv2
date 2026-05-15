@@ -69,18 +69,23 @@ const safelyCalculateHours = (value: any): number => {
     }
     if (typeof value === 'string') {
         try {
-            // Prova a valutare l'espressione, es. "8+8" o "8.5+4"
-            // Usiamo una funzione per evitare i rischi di eval()
-            const sum = value.split('+').reduce((acc, curr) => acc + parseFloat(curr), 0);
+            // Rimuove spazi e sostituisce virgole con punti, poi splitta
+            const parts = value.replace(/\s/g, '').replace(',', '.').split('+');
+            const sum = parts.reduce((acc, curr) => {
+                const num = parseFloat(curr);
+                return acc + (isNaN(num) ? 0 : num);
+            }, 0);
+            
             if (!isNaN(sum)) {
                 return sum;
             }
         } catch (e) {
-            // Se fallisce, prova a convertirlo direttamente
+            console.error("Errore nel calcolo delle ore da stringa:", e);
             const num = parseFloat(value);
             return isNaN(num) ? 0 : num;
         }
     }
+    // Per ogni altro caso, prova una conversione diretta
     const num = parseFloat(value);
     return isNaN(num) ? 0 : num;
 };
@@ -148,16 +153,25 @@ const RicercaAvanzata: React.FC = () => {
             const clienteObj = clienteId ? clientiMap.get(clienteId) : null;
             const clienteNome = clienteObj?.nome || "N/D";
 
-            // Logica per estrarre le ore con funzione di sicurezza
-            const oreTotaliRapporto = safelyCalculateHours(rapportino.oreLavoro);
+            // Logica per estrarre le ore
+            let oreTotaliRapporto: number;
+
+            // La fonte di verità sono i dettagli per tecnico, se esistono.
+            if (rapportino.dettaglioOreTecnici && rapportino.dettaglioOreTecnici.length > 0) {
+                // Somma le ore di tutti i tecnici nel dettaglio
+                oreTotaliRapporto = rapportino.dettaglioOreTecnici.reduce((sum, d) => sum + (d.ore || 0), 0);
+            } else {
+                // Altrimenti, fallback sul vecchio campo `oreLavoro`
+                oreTotaliRapporto = safelyCalculateHours(rapportino.oreLavoro);
+            }
 
             const dettaglioResponsabile = rapportino.dettaglioOreTecnici?.find(d => d.tecnicoId === rapportino.tecnicoId);
             
-            // Se esiste un dettaglio, usa quello, altrimenti usa il totale (che potrebbe essere 0 se non c'è responsabile)
             let oreResponsabile = dettaglioResponsabile?.ore ?? 0;
-            // Fallback per vecchi report: se non c'è dettaglio, le ore del responsabile sono il totale
+
+            // Se non ci sono dettagli, le ore del responsabile sono le ore totali (vecchia logica)
             if (!rapportino.dettaglioOreTecnici || rapportino.dettaglioOreTecnici.length === 0) {
-                 oreResponsabile = oreTotaliRapporto;
+                oreResponsabile = oreTotaliRapporto;
             }
 
             return {

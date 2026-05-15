@@ -1,3 +1,4 @@
+
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { Box, Typography, Paper, Grid, Divider, Table, TableBody, TableCell, TableHead, TableRow, Button, GlobalStyles } from '@mui/material';
@@ -64,6 +65,7 @@ const RapportinoPrint = () => {
     }
 
     const { data, veicolo, tipoGiornata, descrizioneBreve, lavoroEseguito, materialiImpiegati, dettaglioOreTecnici, nave, luogo } = rapportino;
+    const oreTotali = (dettaglioOreTecnici || []).reduce((sum: number, d: any) => sum + (d.ore || 0), 0);
 
     return (
         <>
@@ -105,7 +107,7 @@ const RapportinoPrint = () => {
 
                         {/* TABELLA TECNICI */}
                         <Typography variant="h6" sx={{ mt: 3, mb: 1.5 }}>Personale e Ore</Typography>
-                        <Table size="small" sx={{ mb: 3 }}>
+                        <Table size="small" sx={{ mb: 2 }}>
                             <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
                                 <TableRow>
                                     <TableCell>Tecnico</TableCell>
@@ -127,6 +129,13 @@ const RapportinoPrint = () => {
                                 ))}
                             </TableBody>
                         </Table>
+                        
+                        {/* RIGA TOTALI */}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', pr: 2, mb: 3 }}>
+                            <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
+                                Totale Ore: {oreTotali.toFixed(2)}
+                            </Typography>
+                        </Box>
 
                         {/* DESCRIZIONE INTERVENTO */}
                         <Typography variant="h6" sx={{ mt: 3, mb: 1.5 }}>Dettagli Intervento</Typography>

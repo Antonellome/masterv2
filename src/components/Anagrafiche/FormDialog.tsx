@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Autocomplete, CircularProgress } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Unstable_Grid2';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -145,7 +145,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
                  <LocalizationProvider dateAdapter={AdapterDayjs}>
                     <Grid container spacing={2} sx={{ mt: 1 }}>
                         {fields.map((field) => (
-                            <Grid key={field.name} item {...field.gridProps}>
+                            <Grid key={field.name} {...field.gridProps}>
                                 {renderField(field)}
                             </Grid>
                         ))}

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -160,6 +161,7 @@ const RapportinoEdit: React.FC = () => {
                     const reportSnap = await getDoc(doc(db, 'rapportini', reportId));
                     if (reportSnap.exists()) {
                         const reportData = reportSnap.data() as Rapportino;
+
                         setTecnicoResponsabileId(reportData.tecnicoId);
                         setData(dayjs(reportData.data.toDate()));
                         const resolvedGiornataId = reportData.tipoGiornataId || reportData.giornataId || '';

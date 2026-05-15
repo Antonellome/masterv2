@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
     Typography,
     Box,
@@ -25,9 +25,10 @@ import {
     Chip
 } from '@mui/material';
 import { Delete as DeleteIcon, Done as DoneIcon, DoneAll as DoneAllIcon, People as PeopleIcon, Refresh as RefreshIcon } from '@mui/icons-material';
-import { collection, query, doc, deleteDoc, Timestamp, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, doc, deleteDoc, Timestamp, orderBy, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db } from '@/firebase';
 import dayjs from 'dayjs';
+import { markNotificationAsReadOnServer } from '@/utils/notificationService';
 
 interface NotificaInviata {
   id: string;
@@ -35,8 +36,8 @@ interface NotificaInviata {
   body: string; 
   sentAt: Timestamp; 
   readBy?: { [key: string]: { nome: string, readAt: Timestamp } };
+  status?: 'sent' | 'read';
   fcmMessageId: string;
-  status: 'sent';
   to_ids?: string[];
   target?: 'all';
   to_category_ids?: string[];
@@ -52,37 +53,33 @@ const SentNotificationsList = () => {
     const [confirmDelete, setConfirmDelete] = useState<{ open: boolean, id: string | null }>({ open: false, id: null });
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
 
-    const fetchNotifications = useCallback(async (showSnackbar = false) => {
+    useEffect(() => {
         setLoading(true);
-        try {
-            // Ripristinato ordinamento corretto con indice Firestore
-            const q = query(collection(db, 'notificheInviate'), orderBy('sentAt', 'desc'));
-            const querySnapshot = await getDocs(q);
+        const q = query(collection(db, 'notificheInviate'), orderBy('sentAt', 'desc'));
+        
+        const unsubscribe: Unsubscribe = onSnapshot(q, (querySnapshot) => {
             const notifications = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificaInviata));
             
-            setSentNotifications(notifications);
+            // ++ AZIONE CORRETTIVA ++
+            // Assicura che la lista sia sempre ordinata lato client, per gestire ogni tipo di aggiornamento da Firestore.
+            notifications.sort((a, b) => (b.sentAt?.toDate()?.getTime() || 0) - (a.sentAt?.toDate()?.getTime() || 0));
 
-            if (showSnackbar) {
-                setSnackbar({ open: true, message: 'Lista notifiche aggiornata', severity: 'success' });
-            }
-        } catch (error) {
-            console.error("Errore nel caricamento dello storico notifiche:", error);
-            const errorMessage = (error as Error).message;
-            if (errorMessage.includes('firestore/failed-precondition')) {
-                setSnackbar({ open: true, message: 'Indice Firestore mancante. Controlla la console per il link di creazione.', severity: 'error' });
-            } else {
-                setSnackbar({ open: true, message: 'Impossibile aggiornare le notifiche.', severity: 'error' });
-            }
-        } finally {
+            setSentNotifications(notifications);
             setLoading(false);
-        }
+        }, (error) => {
+            console.error("Errore nello snapshot dello storico notifiche:", error);
+            setSnackbar({ open: true, message: 'Impossibile caricare le notifiche in tempo reale.', severity: 'error' });
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
     }, []);
 
-    useEffect(() => {
-        fetchNotifications();
-    }, [fetchNotifications]);
-
     const handleOpenDetail = (notifica: NotificaInviata) => {
+        if (notifica.status !== 'read' && notifica.id) {
+             console.log(`Frontend: L'utente ha aperto la notifica ${notifica.id}. Inoltro al server.`);
+             markNotificationAsReadOnServer(notifica.id);
+        }
         setSelectedNotifica(notifica);
         setDetailOpen(true);
     };
@@ -102,7 +99,6 @@ const SentNotificationsList = () => {
             try {
                 await deleteDoc(doc(db, 'notificheInviate', confirmDelete.id));
                 setSnackbar({ open: true, message: 'Notifica eliminata dallo storico', severity: 'info' });
-                fetchNotifications(); // Ricarica la lista dopo l'eliminazione
             } catch (error) {
                 console.error("Errore durante l'eliminazione:", error);
                 setSnackbar({ open: true, message: "Errore durante l'eliminazione", severity: 'error' });
@@ -111,7 +107,7 @@ const SentNotificationsList = () => {
         setConfirmDelete({ open: false, id: null });
     };
     
-    const generateTooltipContent = (readersMap: NotificaInviata['readBy']): React.ReactNode => {
+    const generateTooltipContent = (readersMap?: NotificaInviata['readBy']): React.ReactNode => {
         if (!readersMap) {
             return <Typography variant="caption">Nessuna lettura registrata.</Typography>;
         }
@@ -131,6 +127,10 @@ const SentNotificationsList = () => {
         );
     };
 
+    const isNotificationRead = (notifica: NotificaInviata): boolean => {
+        return notifica.status === 'read' || (notifica.readBy && Object.keys(notifica.readBy).length > 0);
+    }
+
     return (
         <>
             <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -138,9 +138,9 @@ const SentNotificationsList = () => {
                     <Typography variant="h6" sx={{ flexGrow: 1, ml: 1 }}>
                         Storico Notifiche Inviate
                     </Typography>
-                    <Tooltip title="Aggiorna Lista">
+                    <Tooltip title="La lista si aggiorna automaticamente!">
                         <span>
-                            <IconButton onClick={() => fetchNotifications(true)} disabled={loading}>
+                            <IconButton disabled>
                                 <RefreshIcon />
                             </IconButton>
                         </span>
@@ -156,9 +156,8 @@ const SentNotificationsList = () => {
                 ) : (
                     <List sx={{ overflow: 'auto', p: 0, flexGrow: 1 }}>
                         {sentNotifications.map((notifica, index) => {
-                            const readers = notifica.readBy ? Object.values(notifica.readBy) : [];
-                            const readerCount = readers.length;
-                            const hasBeenRead = readerCount > 0;
+                            const hasBeenReadByAnyone = isNotificationRead(notifica);
+                            const readerCount = notifica.readBy ? Object.keys(notifica.readBy).length : 0;
                             
                             return (
                                 <React.Fragment key={notifica.id}>
@@ -173,8 +172,8 @@ const SentNotificationsList = () => {
                                         <ListItemButton onClick={() => handleOpenDetail(notifica)}>
                                             <ListItemAvatar>
                                                 <Tooltip title={generateTooltipContent(notifica.readBy)} arrow placement="right">
-                                                    <Avatar sx={{ bgcolor: hasBeenRead ? 'success.main' : 'grey.500' }}>
-                                                        {hasBeenRead ? <DoneAllIcon /> : <DoneIcon />}\
+                                                    <Avatar sx={{ bgcolor: hasBeenReadByAnyone ? 'success.main' : 'grey.500' }}>
+                                                        {hasBeenReadByAnyone ? <DoneAllIcon /> : <DoneIcon />}
                                                     </Avatar>
                                                 </Tooltip>
                                             </ListItemAvatar>
@@ -185,7 +184,7 @@ const SentNotificationsList = () => {
                                                         <Typography component="span" variant="body2" color="text.secondary">
                                                             {`Inviata il: ${dayjs(notifica.sentAt?.toDate()).format('DD/MM/YYYY HH:mm')}`}
                                                         </Typography>
-                                                        {hasBeenRead && (
+                                                        {readerCount > 0 && (
                                                             <Chip 
                                                                 icon={<PeopleIcon />}
                                                                 label={`Letto da ${readerCount} ${readerCount > 1 ? 'tecnici' : 'tecnico'}`}
@@ -197,7 +196,11 @@ const SentNotificationsList = () => {
                                                         )}
                                                     </Box>
                                                 }
-                                                primaryTypographyProps={{ variant: 'h6', noWrap: true, sx: { mb: 0.5 } }}
+                                                primaryTypographyProps={{ 
+                                                    variant: 'h6', 
+                                                    noWrap: true, 
+                                                    sx: { mb: 0.5, fontWeight: hasBeenReadByAnyone ? 'normal' : 'bold' } 
+                                                }}
                                                 secondaryTypographyProps={{ component: 'div' }}
                                             />
                                         </ListItemButton>

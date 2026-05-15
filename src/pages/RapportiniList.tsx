@@ -1,11 +1,12 @@
+
 import React, { useState, useMemo, useCallback } from 'react';
-import { collection, getDocs, QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useNavigate } from 'react-router-dom';
-import { 
-    Paper, Typography, Button, CircularProgress, Box, 
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-    Grid, TextField, Autocomplete, IconButton 
+import {
+    Paper, Typography, Button, CircularProgress, Box,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+    Grid, TextField, Autocomplete, IconButton, Chip
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs, { Dayjs } from 'dayjs';
@@ -13,18 +14,16 @@ import 'dayjs/locale/it';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
-import { useData } from '@/hooks/useData'; // Importiamo l'hook centralizzato
-import { Rapportino, Tecnico, Cliente, Nave, Luogo, TipoGiornata } from '@/models/definitions';
+import { useData } from '@/hooks/useData';
+import { Rapportino } from '@/models/definitions';
 
 dayjs.locale('it');
 
-// L'interfaccia del rapportino così come arriva da Firestore
 interface RapportinoDocument extends Omit<Rapportino, 'data'> {
     id: string;
     data: { toDate: () => Date };
 }
 
-// Filtri di ricerca
 interface FilterState {
     dataDa: Dayjs | null;
     dataA: Dayjs | null;
@@ -40,14 +39,12 @@ const RapportiniList = () => {
     const [loadingRapportini, setLoadingRapportini] = useState(true);
     const navigate = useNavigate();
     
-    // Usiamo il nostro hook per avere dati e stato di caricamento delle anagrafiche
     const { tecnici, clienti, navi, luoghi, tipiGiornata, loading: loadingAnagrafiche, error } = useData();
 
     const [filters, setFilters] = useState<FilterState>({
         dataDa: null, dataA: null, tecnicoId: null, naveId: null, luogoId: null, clienteId: null, tipoGiornataId: null
     });
 
-    // Caricamento dei soli rapportini
     const fetchRapportini = useCallback(async () => {
         setLoadingRapportini(true);
         try {
@@ -61,7 +58,6 @@ const RapportiniList = () => {
         setLoadingRapportini(false);
     }, []);
 
-    // Eseguiamo il fetch all'avvio
     React.useEffect(() => {
         fetchRapportini();
     }, [fetchRapportini]);
@@ -74,7 +70,6 @@ const RapportiniList = () => {
         setFilters({ dataDa: null, dataA: null, tecnicoId: null, naveId: null, luogoId: null, clienteId: null, tipoGiornataId: null });
     };
 
-    // Memoizzazione per le anagrafiche mappate per ID, per ricerche veloci
     const anagraficheMap = useMemo(() => ({
         tecnici: new Map(tecnici.map(t => [t.id, t])),
         clienti: new Map(clienti.map(c => [c.id, c])),
@@ -84,13 +79,13 @@ const RapportiniList = () => {
     }), [tecnici, clienti, navi, luoghi, tipiGiornata]);
 
     const filteredRapportini = useMemo(() => {
-        if (loadingAnagrafiche) return []; // Non filtriamo finché le anagrafiche non sono pronte
+        if (loadingAnagrafiche) return [];
 
         return rapportini.filter(r => {
             const rapportinoDate = dayjs(r.data.toDate());
             if (filters.dataDa && rapportinoDate.isBefore(filters.dataDa, 'day')) return false;
             if (filters.dataA && rapportinoDate.isAfter(filters.dataA, 'day')) return false;
-            if (filters.tecnicoId && r.tecnicoId !== filters.tecnicoId) return false;
+            if (filters.tecnicoId && !(r.presenze || [r.tecnicoId]).includes(filters.tecnicoId)) return false;
             if (filters.naveId && r.naveId !== filters.naveId) return false;
             if (filters.luogoId && r.luogoId !== filters.luogoId) return false;
             if (filters.clienteId && r.clienteId !== filters.clienteId) return false;
@@ -100,7 +95,11 @@ const RapportiniList = () => {
     }, [rapportini, filters, loadingAnagrafiche]);
 
     const handlePrint = (rapportino: RapportinoDocument) => {
-        // Popoliamo l'oggetto con i dati completi prima di passarlo alla pagina di stampa
+        const tecniciInclusi = (rapportino.dettaglioOreTecnici || []).map(d => {
+            const tecnico = anagraficheMap.tecnici.get(d.tecnicoId);
+            return { ...d, nome: tecnico ? `${tecnico.cognome} ${tecnico.nome}`.trim() : 'Tecnico non trovato' };
+        });
+
         const populatedRapportino = {
             ...rapportino,
             data: rapportino.data.toDate(),
@@ -109,16 +108,11 @@ const RapportiniList = () => {
             nave: anagraficheMap.navi.get(rapportino.naveId || ''),
             luogo: anagraficheMap.luoghi.get(rapportino.luogoId || ''),
             tipoGiornata: anagraficheMap.tipiGiornata.get(rapportino.tipoGiornataId || ''),
-            // Aggiungiamo anche i dettagli dei tecnici per la tabella nel print
-            dettaglioOreTecnici: rapportino.dettaglioOreTecnici?.map(d => ({
-                ...d,
-                nome: anagraficheMap.tecnici.get(d.tecnicoId)?.nome || 'N/D'
-            }))
+            dettaglioOreTecnici: tecniciInclusi
         };
         navigate('/rapportino/print', { state: { rapportino: populatedRapportino } });
     };
 
-    // Mostra un caricamento generale finché entrambe le fonti non sono pronte
     if (loadingAnagrafiche || loadingRapportini) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}><CircularProgress /></Box>;
     }
@@ -152,31 +146,42 @@ const RapportiniList = () => {
           <Table stickyHeader size="small">
             <TableHead><TableRow>
                 <TableCell>Data</TableCell>
+                <TableCell>Tecnici</TableCell>
                 <TableCell>Tipo Giornata</TableCell>
-                <TableCell>Tecnico Resp.</TableCell>
-                <TableCell>Cliente</TableCell>
                 <TableCell>Nave</TableCell>
                 <TableCell>Luogo</TableCell>
+                <TableCell>Cliente</TableCell>
+                <TableCell>Ore Resp.</TableCell>
                 <TableCell>Ore Totali</TableCell>
                 <TableCell align='right'>Azioni</TableCell>
             </TableRow></TableHead>
             <TableBody>
               {filteredRapportini.map(r => {
                 const tipoGiornataNome = anagraficheMap.tipiGiornata.get(r.tipoGiornataId || '')?.nome || 'N/D';
-                const tecnicoNome = anagraficheMap.tecnici.get(r.tecnicoId || '');
-                const clienteNome = anagraficheMap.clienti.get(r.clienteId || '')?.nome || 'N/D';
-                const naveNome = anagraficheMap.navi.get(r.naveId || '')?.nome || 'N/D';
-                const luogoNome = anagraficheMap.luoghi.get(r.luogoId || '')?.nome || 'N/D';
-                
+                const clienteNome = r.clienteId ? anagraficheMap.clienti.get(r.clienteId)?.nome || 'N/D' : 'N/D';
+                const naveNome = r.naveId ? anagraficheMap.navi.get(r.naveId)?.nome || 'N/D' : 'N/D';
+                const luogoNome = r.luogoId ? anagraficheMap.luoghi.get(r.luogoId)?.nome || 'N/D' : 'N/D';
+
+                // --- LOGICA DI CALCOLO DEFINITIVA E ROBUSTA ---
+                const oreResponsabile = parseFloat(r.dettaglioOreTecnici?.find(d => d.tecnicoId === r.tecnicoId)?.ore?.toString() || '0');
+                const oreTotali = (r.dettaglioOreTecnici || []).reduce((acc, curr) => acc + (parseFloat(curr.ore?.toString() || '0')), 0);
+
                 return (
                   <TableRow key={r.id} hover>
                     <TableCell>{dayjs(r.data.toDate()).format('DD/MM/YY')}</TableCell>
+                    <TableCell>
+                        {(r.presenze || [r.tecnicoId]).map(id => {
+                             if (!id) return null;
+                             const tecnico = anagraficheMap.tecnici.get(id);
+                             return <Chip key={id} label={tecnico ? `${tecnico.cognome} ${tecnico.nome}` : 'ID non trovato'} size="small" sx={{mr: 0.5, mb: 0.5}}/>;
+                        })}
+                    </TableCell>
                     <TableCell>{tipoGiornataNome}</TableCell>
-                    <TableCell>{tecnicoNome ? `${tecnicoNome.cognome} ${tecnicoNome.nome}` : 'N/D'}</TableCell>
-                    <TableCell>{clienteNome}</TableCell>
                     <TableCell>{naveNome}</TableCell>
                     <TableCell>{luogoNome}</TableCell>
-                    <TableCell>{r.oreLavorate?.toFixed(2) || 0}</TableCell>
+                    <TableCell>{clienteNome}</TableCell>
+                    <TableCell>{oreResponsabile.toFixed(1)}h</TableCell>
+                    <TableCell>{oreTotali.toFixed(1)}h</TableCell>
                     <TableCell align="right">
                       <IconButton size="small" onClick={() => navigate(`/rapportino/edit/${r.id}`)}><EditIcon /></IconButton>
                       <IconButton size="small" onClick={() => handlePrint(r)}><PrintIcon /></IconButton>
@@ -185,7 +190,7 @@ const RapportiniList = () => {
                 );
               })}
               {filteredRapportini.length === 0 && (
-                  <TableRow><TableCell colSpan={8} align="center">Nessun rapportino corrisponde ai filtri selezionati.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} align="center">Nessun rapportino corrisponde ai filtri selezionati.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
