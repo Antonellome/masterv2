@@ -33,124 +33,75 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rapportiniTrigger = exports.fanOutNotifications = void 0;
-// Importazioni unificate per lo stile V2
-const admin = __importStar(require("firebase-admin"));
-const messaging_1 = require("firebase-admin/messaging");
-const firestore_1 = require("firebase-functions/v2/firestore");
-const v2_1 = require("firebase-functions/v2");
+exports.sendNotification = void 0;
+const https_1 = require("firebase-functions/v2/https");
 const logger = __importStar(require("firebase-functions/logger"));
-// Inizializza l'app UNA SOLA VOLTA
+const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
-const messaging = (0, messaging_1.getMessaging)();
-// Imposto la regione GLOBALE per tutte le funzioni v2
-(0, v2_1.setGlobalOptions)({ region: "europe-west1" });
-/**
- * ===================================================================
- *  FUNZIONE PER NOTIFICHE (V2)
- * ===================================================================
- */
-exports.fanOutNotifications = (0, firestore_1.onDocumentCreated)("notificheRichieste/{docId}", async (event) => {
-    const snapshot = event.data;
-    if (!snapshot) {
-        logger.log("[fanOutNotifications] Nessun dato associato all'evento.");
-        return;
+exports.sendNotification = (0, https_1.onCall)(async (request) => {
+    // 1. Controllo di Autenticazione
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "L'utente deve essere autenticato per inviare notifiche.");
     }
-    const docId = event.params.docId;
-    const notificaData = snapshot.data();
-    logger.log(`[fanOutNotifications] Triggered for doc: ${docId}`);
+    const { targetType, targetId, title, message } = request.data;
+    // Validazione dell'input
+    if (!targetType || !title || !message) {
+        throw new https_1.HttpsError("invalid-argument", "L'input deve includere targetType, title, e message.");
+    }
+    let recipientUids = [];
     try {
-        const message = {
-            notification: {
-                title: notificaData.title || "Nuova Notifica",
-                body: notificaData.body || "Hai un nuovo messaggio",
-            },
-            topic: "all",
-        };
-        const fcmResponse = await messaging.send(message);
-        logger.log("[fanOutNotifications] Notifica FCM inviata:", fcmResponse);
-        const sentNotificaData = Object.assign(Object.assign({}, notificaData), { sentAt: admin.firestore.Timestamp.now(), fcmMessageId: fcmResponse, status: "sent" });
-        await db.collection("notificheInviate").add(sentNotificaData);
-        logger.log(`[fanOutNotifications] Storico creato per doc: ${docId}`);
-    }
-    catch (error) {
-        logger.error(`[fanOutNotifications] Errore per doc ${docId}:`, error);
-    }
-});
-/**
- * ===================================================================
- *  FUNZIONE PER AGGREGAZIONE RAPPORTINI (Convertita a V2)
- * ===================================================================
- */
-exports.rapportiniTrigger = (0, firestore_1.onDocumentWritten)("rapportini/{rapportinoId}", async (event) => {
-    var _a, _b, _c;
-    const change = event.data;
-    if (!change) {
-        logger.log("[rapportiniTrigger] Nessun dato di modifica trovato nell'evento.");
-        return null;
-    }
-    const data = (_b = (_a = change.after) === null || _a === void 0 ? void 0 : _a.data()) !== null && _b !== void 0 ? _b : (_c = change.before) === null || _c === void 0 ? void 0 : _c.data();
-    if (!data) {
-        logger.log("[rapportiniTrigger] Nessun dato da processare.");
-        return null;
-    }
-    const { tecnicoId } = data;
-    if (!tecnicoId) {
-        logger.error("[rapportiniTrigger] ID Tecnico mancante.");
-        return null;
-    }
-    const timestamp = data.data || data.dataInizio;
-    if (!timestamp || !timestamp.toDate) {
-        logger.error("[rapportiniTrigger] Timestamp non valido.");
-        return null;
-    }
-    const date = timestamp.toDate();
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const monthKey = `${year}-${month}`;
-    logger.log(`[rapportiniTrigger] Ricalcolo per tecnico ${tecnicoId} nel mese ${monthKey}.`);
-    const riepilogoId = `${monthKey}_${tecnicoId}`;
-    const riepilogoRef = db.collection("riepiloghiMensili").doc(riepilogoId);
-    const startOfMonth = new Date(year, date.getMonth(), 1);
-    const endOfMonth = new Date(year, date.getMonth() + 1, 0, 23, 59, 59);
-    const rapportiniSnapshot = await db
-        .collection("rapportini")
-        .where("tecnicoId", "==", tecnicoId)
-        .where("data", ">=", startOfMonth)
-        .where("data", "<=", endOfMonth)
-        .get();
-    const aggregato = {
-        oreLavorate: 0,
-        giorniLavorati: 0,
-        giorniFerie: 0,
-        giorniMalattia: 0,
-        giorniPermesso: 0,
-    };
-    rapportiniSnapshot.forEach((doc) => {
-        var _a;
-        const rapportino = doc.data();
-        switch ((_a = rapportino.tipoGiornata) === null || _a === void 0 ? void 0 : _a.nome.toLowerCase()) {
-            case "lavoro":
-            case "lavoro straordinario":
-                aggregato.oreLavorate += rapportino.oreLavoro || 0;
-                aggregato.giorniLavorati += 1;
+        // 2. Recupera gli UID dei destinatari
+        switch (targetType) {
+            case "all":
+                const allTecniciSnapshot = await db.collection("tecnici").get();
+                recipientUids = allTecniciSnapshot.docs.map((doc) => doc.id);
                 break;
-            case "ferie":
-                aggregato.giorniFerie += 1;
+            case "category":
+                if (!targetId) {
+                    throw new https_1.HttpsError("invalid-argument", "targetId è richiesto per targetType 'category'.");
+                }
+                const categoryTecniciSnapshot = await db
+                    .collection("tecnici")
+                    .where("category", "==", targetId)
+                    .get();
+                recipientUids = categoryTecniciSnapshot.docs.map((doc) => doc.id);
                 break;
-            case "malattia":
-                aggregato.giorniMalattia += 1;
-                break;
-            case "permesso":
-                aggregato.giorniPermesso += 1;
+            case "user":
+                if (!targetId) {
+                    throw new https_1.HttpsError("invalid-argument", "targetId è richiesto per targetType 'user'.");
+                }
+                recipientUids.push(targetId);
                 break;
             default:
-                break;
+                throw new https_1.HttpsError("invalid-argument", `targetType non valido. Usare 'all', 'category', o 'user'.`);
         }
-    });
-    await riepilogoRef.set(Object.assign(Object.assign({ tecnicoId: tecnicoId, mese: monthKey }, aggregato), { lastUpdated: admin.firestore.FieldValue.serverTimestamp() }), { merge: false });
-    logger.log(`[rapportiniTrigger] Riepilogo per ${tecnicoId} nel mese ${monthKey} aggiornato.`);
-    return null;
+        if (recipientUids.length === 0) {
+            logger.warn("Nessun destinatario trovato per la notifica.", { data: request.data });
+            return { success: false, message: "Nessun destinatario trovato." };
+        }
+        // 3. Crea i documenti di notifica con una Batch Write
+        const batch = db.batch();
+        const notificationsCollection = db.collection("notifications");
+        recipientUids.forEach((uid) => {
+            const newNotificationRef = notificationsCollection.doc();
+            batch.set(newNotificationRef, {
+                title,
+                message,
+                recipientId: uid,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                status: "unread",
+                readAt: null,
+                readBy: null,
+            });
+        });
+        await batch.commit();
+        logger.info(`Notifiche create con successo per ${recipientUids.length} destinatari.`);
+        return { success: true, message: `Notifiche inviate a ${recipientUids.length} destinatari.` };
+    }
+    catch (error) {
+        logger.error("Errore durante l'invio delle notifiche:", error);
+        throw new https_1.HttpsError("internal", "Si è verificato un errore interno durante la creazione delle notifiche.", error);
+    }
 });
 //# sourceMappingURL=index.js.map

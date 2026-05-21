@@ -32,6 +32,7 @@ import { auth } from '@/firebase';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useScadenze } from '@/hooks/useScadenze';
 import { useRefresh } from '@/contexts/RefreshContext';
+import { useNotifications } from '@/contexts/NotificationProvider'; // 1. IMPORTIAMO L'HOOK
 import Logo from '@/components/Logo';
 import NavMenuItem from './NavMenuItem';
 
@@ -78,6 +79,7 @@ const MainLayout = () => {
     const { user, loading } = useAuth();
     const { activeScadenzeCount, overallStatus } = useScadenze();
     const { triggerRefresh } = useRefresh();
+    const { unreadCount } = useNotifications(); // 2. USIAMO L'HOOK
     const navigate = useNavigate();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -195,7 +197,8 @@ const MainLayout = () => {
 
                         <Tooltip title="Notifiche">
                              <IconButton color="inherit" component={NavLink} to="/notifications">
-                                 <Badge badgeContent={0} color="error">
+                                 {/* 3. COLLEGIAMO IL CONTEGGIO AL BADGE */}
+                                 <Badge badgeContent={unreadCount} color="error">
                                      <Notifications />
                                  </Badge>
                              </IconButton>

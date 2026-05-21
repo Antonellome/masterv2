@@ -1,31 +1,30 @@
-import React, { createContext, useState, useCallback, ReactNode, useContext } from 'react';
 
-// --- TIPI E INTERFACCIA ---
-interface IRefreshContext {
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+
+// Definisce la forma del contesto
+interface RefreshContextType {
   refreshKey: number;
   triggerRefresh: () => void;
 }
 
-// --- CREAZIONE DEL CONTESTO ---
-// Creato con undefined come valore di default, come da best practice.
-const RefreshContext = createContext<IRefreshContext | undefined>(undefined);
+// Crea il contesto con un valore di default
+const RefreshContext = createContext<RefreshContextType | undefined>(undefined);
 
-// --- HOOK USEFRESH ---
-// Hook pubblico per accedere al contesto in modo sicuro.
+// Hook personalizzato per usare il contesto facilmente
 export const useRefresh = () => {
-    const context = useContext(RefreshContext);
-    if (context === undefined) {
-        throw new Error("useRefresh deve essere utilizzato all'interno di un RefreshProvider");
-    }
-    return context;
+  const context = useContext(RefreshContext);
+  if (!context) {
+    throw new Error('useRefresh deve essere usato all\'interno di un RefreshProvider');
+  }
+  return context;
 };
 
-// --- COMPONENTE PROVIDER ---
-export const RefreshProvider = ({ children }: { children: ReactNode }) => {
+// Componente Provider
+export const RefreshProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // La funzione per triggerare l'aggiornamento, memoizzata per stabilità.
   const triggerRefresh = useCallback(() => {
+    // Aggiornando lo stato (la chiave), si causa un ri-render nei consumatori
     setRefreshKey(prevKey => prevKey + 1);
   }, []);
 

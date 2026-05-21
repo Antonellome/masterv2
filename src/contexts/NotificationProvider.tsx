@@ -1,15 +1,20 @@
+
 // src/contexts/NotificationProvider.tsx
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore'; // Import orderBy
 import { db } from '@/firebase';
-import { useAuth } from '@/contexts/AuthProvider'; // MODIFICATO: Percorso corretto
+import { useAuth } from '@/contexts/AuthProvider';
+
+interface INotification {
+  id: string;
+  [key: string]: any; // Allow other properties
+}
 
 interface INotificationContext {
-  notifications: any[]; // Sostituire any con un tipo specifico se disponibile
+  notifications: INotification[];
   loading: boolean;
 }
 
-// Creazione del contesto con un valore di default
 export const NotificationContext = createContext<INotificationContext | undefined>(undefined);
 
 export const useNotifications = () => {
@@ -21,13 +26,11 @@ export const useNotifications = () => {
 };
 
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<INotification[]>([]);
   const [loading, setLoading] = useState(true);
-  // Adesso usiamo `user` invece di `currentUser` per coerenza con AuthProvider
-  const { user } = useAuth(); 
+  const { user } = useAuth();
 
   useEffect(() => {
-    // Se non c'è utente, svuota le notifiche e ferma il caricamento
     if (!user) {
       setNotifications([]);
       setLoading(false);
@@ -35,14 +38,15 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setLoading(true);
-    // La query usa l'UID dell'utente per trovare le notifiche pertinenti
-    const q = query(collection(db, 'notifiche'), where("userId", "==", user.uid));
+    // CORREZIONE: Usa la collezione 'notifications', filtra per 'recipientId' e ordina per 'createdAt'
+    const q = query(
+      collection(db, 'notifications'), 
+      where("recipientId", "==", user.uid),
+      orderBy("createdAt", "desc") // Ordina le notifiche dalle più recenti
+    );
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const notifs: any[] = [];
-      querySnapshot.forEach((doc) => {
-        notifs.push({ id: doc.id, ...doc.data() });
-      });
+      const notifs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as INotification));
       setNotifications(notifs);
       setLoading(false);
     }, (error) => {
@@ -50,9 +54,8 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
 
-    // Funzione di pulizia per annullare la sottoscrizione quando il componente si smonta o l'utente cambia
     return () => unsubscribe();
-  }, [user]); // L'effetto dipende dall'oggetto `user`
+  }, [user]);
 
   const value = { notifications, loading };
 

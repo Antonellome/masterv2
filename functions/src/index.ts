@@ -1,199 +1,108 @@
 
-// Importazioni unificate per lo stile V2
-import * as admin from "firebase-admin";
-import { getMessaging } from "firebase-admin/messaging";
-import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
-import { setGlobalOptions, https } from "firebase-functions/v2"; // Aggiunto https
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
+import * as admin from "firebase-admin";
 
-// Inizializza l'app UNA SOLA VOLTA
 admin.initializeApp();
+
 const db = admin.firestore();
-const messaging = getMessaging();
+const messaging = admin.messaging();
 
-// Imposto la regione GLOBALE per tutte le funzioni v2
-setGlobalOptions({ region: "europe-west1" });
+interface SendNotificationData {
+    targetType: "all" | "category" | "user";
+    targetId: string;
+    title: string;
+    message: string;
+}
 
-/**
- * ===================================================================
- *  FUNZIONE PER INVIARE NOTIFICHE (V2)
- * ===================================================================
- */
-export const fanOutNotifications = onDocumentCreated(
-  "notificheRichieste/{docId}",
-  async (event) => {
-    const snapshot = event.data;
-    if (!snapshot) {
-      logger.log("[fanOutNotifications] Nessun dato associato all'evento.");
-      return;
+export const sendNotification = onCall<SendNotificationData>(async (request) => {
+    // 1. Authentication Check
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
     }
-    const docId = event.params.docId;
-    const notificaData = snapshot.data();
-    logger.log(`[fanOutNotifications] Triggered for doc: ${docId}`);
+
+    // 2. Input Validation
+    const { targetType, targetId, title, message } = request.data;
+    logger.info("Inizio invio notifica con dati:", request.data);
+
+    if (!title || !message) {
+        throw new HttpsError("invalid-argument", "Il titolo e il messaggio sono obbligatori.");
+    }
+    if (!targetType || !["all", "category", "user"].includes(targetType)) {
+        throw new HttpsError("invalid-argument", "Tipo di target non valido.");
+    }
+    if ((targetType === "category" || targetType === "user") && !targetId) {
+        throw new HttpsError("invalid-argument", `L'ID del target è obbligatorio per il tipo '${targetType}'.`);
+    }
+
     try {
-      const message = {
-        notification: {
-          title: notificaData.title || "Nuova Notifica",
-          body: notificaData.body || "Hai un nuovo messaggio",
-        },
-        topic: "all",
-      };
-      const fcmResponse = await messaging.send(message);
-      logger.log("[fanOutNotifications] Notifica FCM inviata:", fcmResponse);
-      
-      const sentNotificaData = {
-        ...notificaData,
-        // ++ LA CORREZIONE DEFINITIVA ++
-        // Uso il serverTimestamp di Firestore per garantire coerenza assoluta.
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        fcmMessageId: fcmResponse,
-        status: "sent",
-      };
-      
-      await db.collection("notificheInviate").add(sentNotificaData);
-      logger.log(`[fanOutNotifications] Storico creato per doc: ${docId}`);
-      
-    } catch (error) {
-      logger.error(`[fanOutNotifications] Errore per doc ${docId}:`, error);
+        // 3. Get Recipient UIDs
+        let query: admin.firestore.Query;
+        switch (targetType) {
+            case "all":
+                query = db.collection("tecnici").where("abilitato", "==", true);
+                break;
+            case "category":
+                query = db.collection("tecnici").where("abilitato", "==", true).where("categoria", "==", targetId);
+                break;
+            case "user":
+                // Firestore does not allow querying by document ID and another field directly in this manner.
+                // We query by ID first, then check for 'abilitato' status.
+                const userDoc = await db.collection("tecnici").doc(targetId).get();
+                query = db.collection("tecnici").where(admin.firestore.FieldPath.documentId(), "==", (userDoc.exists && userDoc.data()?.abilitato === true) ? targetId : "INVALID_UID");
+                break;
+        }
+        const recipientsSnapshot = await query.get();
+        const uids = recipientsSnapshot.docs.map((doc) => doc.id);
+
+        if (uids.length === 0) {
+            logger.warn("Nessun tecnico trovato per la notifica.", { data: request.data });
+            return { success: true, message: "Nessun tecnico corrispondente trovato." };
+        }
+        logger.info(`Trovati ${uids.length} tecnici destinatari.`);
+
+        // 4. Send FCM Message
+        const tokenPromises = uids.map(uid => db.collection(`tecnici/${uid}/tokens`).get());
+        const tokenSnapshots = await Promise.all(tokenPromises);
+        const allTokens = tokenSnapshots.flatMap(snap => snap.docs.map(doc => doc.id)).filter(Boolean);
+
+        let fcmMessageId = "no-fcm";
+        if (allTokens.length > 0) {
+            logger.info(`Invio di notifiche FCM a ${allTokens.length} token.`);
+            const payload = {
+                notification: { title, body: message },
+                webpush: { notification: { icon: "https://risomobile.it/images/logo.png" } },
+            };
+            const response = await messaging.sendToDevice(allTokens, payload, { priority: "high" });
+            fcmMessageId = response.multicastId;
+        } else {
+            logger.info("Nessun token FCM trovato per i destinatari.");
+        }
+
+        // 5. Create Sent Notification Document
+        const sentNotificationRef = db.collection("notificheInviate").doc();
+        await sentNotificationRef.set({
+            title,
+            message,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+            target: { type: targetType, id: targetId || "all" },
+            recipientsCount: uids.length,
+            fcmMessageId: fcmMessageId,
+        });
+        logger.info("Documento 'notificheInviate' creato con successo:", { id: sentNotificationRef.id });
+        
+        // This part from the old function was WRONG. It created a 'notifications' doc for each user.
+        // The new logic uses a single 'notificheInviate' doc and tracks reads there.
+        // I am explicitly removing the old batch write to the 'notifications' collection.
+
+        return { success: true, message: `Operazione completata. Notifiche inviate a ${uids.length} tecnici.` };
+
+    } catch (error: any) {
+        logger.error("Errore imprevisto durante l'invio delle notifiche:", {
+            errorMessage: error.message,
+            errorStack: error.stack,
+            requestData: request.data,
+        });
+        throw new HttpsError("internal", error.message || "Si è verificato un errore interno.");
     }
-  }
-);
-
-/**
- * ===================================================================
- *  FUNZIONE PER MARCARE NOTIFICA COME LETTA (V2 - Callable)
- * ===================================================================
- */
-export const markNotificationAsRead = https.onCall(async (request) => {
-  logger.info("[markNotificationAsRead] Chiamata ricevuta", { auth: request.auth, data: request.data });
-
-  if (!request.auth) {
-    throw new https.HttpsError(
-      "unauthenticated",
-      "L'utente deve essere autenticato per marcare una notifica come letta."
-    );
-  }
-
-  const { notificationId } = request.data;
-  if (!notificationId) {
-    throw new https.HttpsError(
-      "invalid-argument",
-      "L'ID della notifica è obbligatorio."
-    );
-  }
-
-  const uid = request.auth.uid;
-  const userDoc = await db.collection('users').doc(uid).get();
-  const userName = userDoc.data()?.displayName || 'Utente Master';
-
-  const notificationRef = db.collection("notificheInviate").doc(notificationId);
-
-  try {
-    const fieldToUpdate = `readBy.${uid}`;
-    await notificationRef.update({
-      [fieldToUpdate]: {
-        nome: userName,
-        readAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      status: 'read'
-    });
-    
-    logger.info(`[markNotificationAsRead] Notifica ${notificationId} marcata come letta da ${userName} (${uid})`);
-    return { status: "success", message: `Notifica ${notificationId} marcata come letta.` };
-
-  } catch (error) {
-    logger.error(`[markNotificationAsRead] Errore durante l'aggiornamento della notifica ${notificationId}:`, error);
-    throw new https.HttpsError(
-      "internal",
-      "Errore interno durante l'aggiornamento della notifica."
-    );
-  }
 });
-
-
-/**
- * ===================================================================
- *  FUNZIONE PER AGGREGAZIONE RAPPORTINI (Convertita a V2)
- * ===================================================================
- */
-export const rapportiniTrigger = onDocumentWritten(
-  "rapportini/{rapportinoId}",
-  async (event) => {
-    const change = event.data;
-    if (!change) {
-        logger.log("[rapportiniTrigger] Nessun dato di modifica trovato nell'evento.");
-        return null;
-    }
-
-    const data = change.after?.data() ?? change.before?.data();
-
-    if (!data) {
-      logger.log("[rapportiniTrigger] Nessun dato da processare.");
-      return null;
-    }
-    const { tecnicoId } = data;
-    if (!tecnicoId) {
-      logger.error("[rapportiniTrigger] ID Tecnico mancante.");
-      return null;
-    }
-    const timestamp = data.data || data.dataInizio;
-    if (!timestamp || !timestamp.toDate) {
-      logger.error("[rapportiniTrigger] Timestamp non valido.");
-      return null;
-    }
-    const date = timestamp.toDate();
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const monthKey = `${year}-${month}`;
-    logger.log(`[rapportiniTrigger] Ricalcolo per tecnico ${tecnicoId} nel mese ${monthKey}.`);
-    const riepilogoId = `${monthKey}_${tecnicoId}`;
-    const riepilogoRef = db.collection("riepiloghiMensili").doc(riepilogoId);
-    const startOfMonth = new Date(year, date.getMonth(), 1);
-    const endOfMonth = new Date(year, date.getMonth() + 1, 0, 23, 59, 59);
-    const rapportiniSnapshot = await db
-      .collection("rapportini")
-      .where("tecnicoId", "==", tecnicoId)
-      .where("data", ">=", startOfMonth)
-      .where("data", "<=", endOfMonth)
-      .get();
-    const aggregato = {
-      oreLavorate: 0,
-      giorniLavorati: 0,
-      giorniFerie: 0,
-      giorniMalattia: 0,
-      giorniPermesso: 0,
-    };
-    rapportiniSnapshot.forEach((doc) => {
-      const rapportino = doc.data();
-      switch (rapportino.tipoGiornata?.nome.toLowerCase()) {
-        case "lavoro":
-        case "lavoro straordinario":
-          aggregato.oreLavorate += rapportino.oreLavoro || 0;
-          aggregato.giorniLavorati += 1;
-          break;
-        case "ferie":
-          aggregato.giorniFerie += 1;
-          break;
-        case "malattia":
-          aggregato.giorniMalattia += 1;
-          break;
-        case "permesso":
-          aggregato.giorniPermesso += 1;
-          break;
-        default:
-          break;
-      }
-    });
-    await riepilogoRef.set(
-      {
-        tecnicoId: tecnicoId,
-        mese: monthKey,
-        ...aggregato,
-        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: false }
-    );
-    logger.log(`[rapportiniTrigger] Riepilogo per ${tecnicoId} nel mese ${monthKey} aggiornato.`);
-    return null;
-  }
-);
