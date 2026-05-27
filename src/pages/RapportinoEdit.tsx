@@ -18,24 +18,10 @@ import { db } from '@/firebase';
 import { doc, getDoc, addDoc, updateDoc, collection, Timestamp, serverTimestamp } from 'firebase/firestore';
 import type { Rapportino, TipoGiornata, Tecnico } from '@/models/definitions';
 import { useAlert } from '@/contexts/AlertContext';
-
 dayjs.locale('it');
-
-// --- COMPONENTE ORE CON SELECT A STEP 0.5 ---
-interface DettaglioOreData {
-    tecnicoId: string;
-    nome: string;
-    isManual: boolean;
-    oraInizio: string | null;
-    oraFine: string | null;
-    pausa: number | null;
-    ore: number | null;
-}
-
 const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly }) => {
     
-    const oreOptions = useMemo(() => Array.from({ length: 49 }, (_, i) => i * 0.5), []); // 0 to 24 in 0.5 steps
-
+    const oreOptions = useMemo(() => Array.from({ length: 49 }, (_, i) => i * 0.5), []);
     const handleValueChange = (field: keyof DettaglioOreData, value: any) => {
         const newDati = { ...datiOre, [field]: value };
         if ((field === 'oraInizio' || field === 'oraFine' || field === 'pausa') && !newDati.isManual && newDati.oraInizio && newDati.oraFine) {
@@ -43,12 +29,11 @@ const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly 
             const fine = dayjs(`1970-01-01T${newDati.oraFine}`);
             if (fine.isAfter(inizio)) {
                 const oreCalcolate = (fine.diff(inizio, 'minute') - (newDati.pausa || 0)) / 60;
-                newDati.ore = Math.round(oreCalcolate * 4) / 4; // Arrotonda al quarto d'ora più vicino (es. 7.75)
+                newDati.ore = Math.round(oreCalcolate * 4) / 4; 
             }
         }
         onUpdate(newDati);
     };
-
     return (
         <Paper variant="outlined" sx={{ p: 2, mt: 1, mb: 1}}>
             <Grid container spacing={2} alignItems="center">
@@ -61,7 +46,6 @@ const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly 
                         <Grid item xs={12} sm={3}><FormControl fullWidth disabled={isReadOnly}><InputLabel>Pausa (min)</InputLabel><Select value={datiOre.pausa ?? 60} label="Pausa (min)" onChange={e => handleValueChange('pausa', Number(e.target.value))}>{[0, 30, 60, 90, 120].map(p => <MenuItem key={p} value={p}>{p}</MenuItem>)}</Select></FormControl></Grid>
                     </>
                 ) : null}
-
                  <Grid item xs={12} sm={datiOre.isManual ? 12 : 3}>
                      <FormControl fullWidth disabled={isReadOnly || !datiOre.isManual}>
                         <InputLabel>Ore Lavorate</InputLabel>
@@ -85,10 +69,8 @@ const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly 
         </Paper>
     );
 };
-
 const NON_LAVORATIVO_KEYWORDS = ['ferie'];
 const isGiornataLavorativa = (tipo: TipoGiornata | undefined): boolean => !tipo ? true : !NON_LAVORATIVO_KEYWORDS.some(k => (tipo.nome || '').toLowerCase().includes(k));
-
 const emptyDettaglioOre: DettaglioOreData = {
     tecnicoId: 'placeholder',
     nome: '',
@@ -98,26 +80,19 @@ const emptyDettaglioOre: DettaglioOreData = {
     pausa: 60,
     ore: 8
 };
-
-
-// --- INIZIO VERO COMPONENTE RapportinoEdit ---
 const RapportinoEdit: React.FC = () => {
     const navigate = useNavigate();
-    const { user } = useAuth(); // Admin user
+    const { user } = useAuth();
     const { id: reportId } = useParams<{ id: string }>();
     const { showAlert } = useAlert();
     const isEditMode = Boolean(reportId);
-
     const { tipiGiornata, tecnici, veicoli, navi, luoghi, loading: collectionsLoading } = useData();
-
     const sortedTipiGiornata = useMemo(() => [...tipiGiornata].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [tipiGiornata]);
     const tipiGiornataMap = useMemo(() => new Map(tipiGiornata.map(t => [t.id, t])), [tipiGiornata]);
     const sortedNavi = useMemo(() => [...navi].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [navi]);
     const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [luoghi]);
     const sortedVeicoli = useMemo(() => [...veicoli].sort((a, b) => (a.targa || '').localeCompare(b.targa || '')), [veicoli]);
     const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => (`${a.cognome || ''} ${a.nome || ''}`.trim()).localeCompare((`${b.cognome || ''} ${b.nome || ''}`.trim()))), [tecnici]);
-
-    // State del form
     const [tecnicoResponsabileId, setTecnicoResponsabileId] = useState<string | null>(null);
     const [data, setData] = useState<Dayjs | null>(dayjs());
     const [giornataId, setGiornataId] = useState('');
@@ -161,9 +136,8 @@ const RapportinoEdit: React.FC = () => {
                     const reportSnap = await getDoc(doc(db, 'rapportini', reportId));
                     if (reportSnap.exists()) {
                         const reportData = reportSnap.data() as Rapportino;
-
                         setTecnicoResponsabileId(reportData.tecnicoId);
-                        setData(dayjs(reportData.data.toDate()));
+                        setData(reportData.data ? dayjs(reportData.data.toDate()) : null);
                         const resolvedGiornataId = reportData.tipoGiornataId || reportData.giornataId || '';
                         if (resolvedGiornataId && !tipiGiornataMap.has(resolvedGiornataId)) {
                             showAlert(`Tipo Giornata non più valido. Selezionane uno nuovo.`, 'warning');
@@ -179,10 +153,8 @@ const RapportinoEdit: React.FC = () => {
                         setDescrizioneBreve(reportData.descrizioneBreve || '');
                         setLavoroEseguito(reportData.lavoroEseguito || '');
                         setMaterialiImpiegati(reportData.materialiImpiegati || '');
-
                         const allTecnicoIds = Array.from(new Set(reportData.presenze || [reportData.tecnicoId]));
                         const hasDettaglioOre = !!reportData.dettaglioOreTecnici && reportData.dettaglioOreTecnici.length > 0;
-
                         const dettagliCaricati: DettaglioOreData[] = allTecnicoIds.map(id => {
                             const tecnico = tecnici.find(t => t.id === id);
                             let oreAssegnate = 0;
@@ -220,19 +192,16 @@ const RapportinoEdit: React.FC = () => {
             };
             loadReport();
         } else {
-            // In new mode, set default empty values to show the form structure
-            setDettaglioOre([]); // Start empty, will be populated on technician selection
+            setDettaglioOre([]);
             setPageLoading(false);
         }
     }, [isEditMode, reportId, navigate, collectionsLoading, tecnici, tipiGiornataMap, showAlert]);
     
     const handleTipoGiornataChange = (id: string) => { setGiornataId(id); const tipo = tipiGiornataMap.get(id); setIsLavorativo(isGiornataLavorativa(tipo)); };
     const handleCancel = () => navigate('/reportistica');
-
     const handleOreUpdate = useCallback((updatedData: DettaglioOreData) => {
          setDettaglioOre(prev => prev.map(d => d.tecnicoId === updatedData.tecnicoId ? updatedData : d));
     }, []);
-
     const handleMasterOreUpdate = (updatedData: DettaglioOreData) => {
         setDettaglioOre(prev => prev.map(d => {
             if(d.tecnicoId === updatedData.tecnicoId) return updatedData;
@@ -240,7 +209,6 @@ const RapportinoEdit: React.FC = () => {
             return { ...d, isManual: updatedData.isManual, oraInizio: updatedData.oraInizio, oraFine: updatedData.oraFine, pausa: updatedData.pausa, ore: updatedData.ore };
         }));
     };
-
     const handleAltriTecniciChange = (_: any, nuoviTecnici: Tecnico[]) => {
         const responsabile = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
         if (!responsabile) return;
@@ -254,16 +222,18 @@ const RapportinoEdit: React.FC = () => {
         const uniqueTecnici = Array.from(new Map(allSelectedTecnici.map(item => [item.tecnicoId, item])).values());
         setDettaglioOre(uniqueTecnici);
     };
-
     const removeTecnico = (idToRemove: string) => setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== idToRemove));
     const handleOpenModal = (tecnico: DettaglioOreData) => { setEditingTecnico(tecnico); setTempDettaglioOre(tecnico); setIsModalOpen(true); };
     const handleCloseModal = () => setIsModalOpen(false);
     const handleSaveFromModal = () => { if (tempDettaglioOre) { handleOreUpdate(tempDettaglioOre); } handleCloseModal(); };
-
+    
     const handleSubmit = async () => {
-        // ... (Submit logic is unchanged)
-        if (!tecnicoResponsabileId) { showAlert("Seleziona un Tecnico Responsabile.", "error"); return; }
-        if (!giornataId) { showAlert("Compila i campi obbligatori: Data e Tipo Giornata.", "warning"); return; }
+        // VALIDATION
+        if (!tecnicoResponsabileId || !giornataId || !data) {
+            showAlert("Compila tutti i campi obbligatori: Tecnico, Data e Tipo Giornata.", "warning");
+            return;
+        }
+
         setIsSaving(true);
         try {
             const responsabileDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
@@ -272,23 +242,34 @@ const RapportinoEdit: React.FC = () => {
                 setIsSaving(false);
                 return;
             }
+            
             const presenze = dettaglioOre.map(d => d.tecnicoId);
             const dettaglioOreTecniciToSave = dettaglioOre.map(d => ({ tecnicoId: d.tecnicoId, ore: d.ore || 0 }));
             const oreLavoroTotali = dettaglioOreTecniciToSave.reduce((sum, item) => sum + item.ore, 0);
-            const rapportinoData = {
-                data: Timestamp.fromDate(data!.toDate()),
-                tipoGiornataId: giornataId, tecnicoId: tecnicoResponsabileId, presenze, nome: isLavorativo ? 'Rapportino giornaliero' : 'Rapportino non lavorativo', 
+            
+            const rapportinoData: Omit<Rapportino, 'id'> = {
+                data: Timestamp.fromDate(data.toDate()),
+                tipoGiornataId: giornataId,
+                tecnicoId: tecnicoResponsabileId,
+                presenze,
+                nome: isLavorativo ? 'Rapportino giornaliero' : 'Rapportino non lavorativo',
                 oreLavoro: isLavorativo ? oreLavoroTotali : 0,
                 dettaglioOreTecnici: isLavorativo ? dettaglioOreTecniciToSave : [],
                 isTrasferta: isLavorativo ? responsabileDettaglio?.isManual : false,
                 oraInizio: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraInizio : null,
                 oraFine: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraFine : null,
                 pausa: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.pausa : null,
-                veicoloId: isLavorativo ? veicoloId : null, naveId: isLavorativo ? naveId : null, luogoId: isLavorativo ? luogoId : null,
-                descrizioneBreve: isLavorativo ? descrizioneBreve : '', lavoroEseguito: isLavorativo ? lavoroEseguito : '', materialiImpiegati: isLavorativo ? materialiImpiegati : '',
+                veicoloId: isLavorativo ? veicoloId : null,
+                naveId: isLavorativo ? naveId : null,
+                luogoId: isLavorativo ? luogoId : null,
+                descrizioneBreve: isLavorativo ? descrizioneBreve : '',
+                lavoroEseguito: isLavorativo ? lavoroEseguito : '',
+                materialiImpiegati: isLavorativo ? materialiImpiegati : '',
                 updatedAt: serverTimestamp(),
-                ...(isEditMode ? {} : { createdBy: user?.uid, createdAt: serverTimestamp() })
+                createdBy: isEditMode ? undefined : user?.uid,
+                createdAt: isEditMode ? undefined : serverTimestamp(),
             };
+
             if (isEditMode && reportId) {
                 await updateDoc(doc(db, 'rapportini', reportId), rapportinoData);
                 showAlert("Rapportino aggiornato!", "success");
@@ -299,7 +280,7 @@ const RapportinoEdit: React.FC = () => {
             navigate('/reportistica');
         } catch (error: any) { 
             console.error("Errore salvataggio: ", error); 
-            showAlert(`Errore: ${error.message}`, "error");
+            showAlert(`Errore durante il salvataggio: ${error.message}`, "error");
         } finally { 
             setIsSaving(false); 
         }
@@ -308,9 +289,7 @@ const RapportinoEdit: React.FC = () => {
     const responsabileDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId) || emptyDettaglioOre;
     const altriTecniciSelezionati = useMemo(() => sortedTecnici.filter(t => dettaglioOre.some(d => d.tecnicoId === t.id && d.tecnicoId !== tecnicoResponsabileId)), [dettaglioOre, sortedTecnici, tecnicoResponsabileId]);
     const altriTecniciOpzioni = useMemo(() => sortedTecnici.filter(t => t.id !== tecnicoResponsabileId), [sortedTecnici, tecnicoResponsabileId]);
-
     if (pageLoading || collectionsLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>;
-
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Box sx={{ p: { xs: 2, sm: 3 }, mx: 'auto', maxWidth: 900 }}>
@@ -325,7 +304,6 @@ const RapportinoEdit: React.FC = () => {
                                 {sortedTipiGiornata.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
                             </Select>
                         </FormControl>
-
                         {isLavorativo && (
                              <fieldset disabled={!tecnicoResponsabileId || isSaving} style={{border: 'none', padding: 0, margin: 0}}>
                                 <Divider sx={{ my: 1 }}><Typography variant="overline">Dettaglio Ore Lavoro</Typography></Divider>
@@ -357,7 +335,6 @@ const RapportinoEdit: React.FC = () => {
                     </Box>
                 </Paper>
             </Box>
-
             <Dialog open={isModalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
                 <DialogTitle>Modifica orario di {editingTecnico?.nome}</DialogTitle>
                 <DialogContent>
@@ -369,8 +346,16 @@ const RapportinoEdit: React.FC = () => {
                 </DialogContent>
                 <DialogActions><Button onClick={handleCloseModal}>Annulla</Button><Button onClick={handleSaveFromModal} variant="contained">Salva Orario</Button></DialogActions>
             </Dialog>
-
         </LocalizationProvider>
     );
 };
+interface DettaglioOreData {
+    tecnicoId: string;
+    nome: string;
+    isManual: boolean;
+    oraInizio: string | null;
+    oraFine: string | null;
+    pausa: number | null;
+    ore: number | null;
+}
 export default RapportinoEdit;

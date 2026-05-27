@@ -42,6 +42,14 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
                         value: doc.id, 
                         label: doc.data()[field.options!.labelField] 
                     }));
+                } else if (field.type === 'select' && Array.isArray(field.options?.items)) {
+                    // Gestisce le opzioni statiche definite come array di oggetti
+                    options[field.name] = field.options.items.map(option => {
+                        if (typeof option === 'string') {
+                            return { value: option, label: option };
+                        }
+                        return option; // Già nel formato { value, label }
+                    });
                 }
             }
             setSelectOptions(options);
@@ -64,8 +72,8 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
     };
 
     const renderField = (field: FormField) => {
+        // Rimosso `key` da baseProps
         const baseProps = {
-            key: field.name,
             name: field.name,
             label: field.label,
             value: formData[field.name] || '',
@@ -76,11 +84,13 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
 
         switch (field.type) {
             case 'select':
+                const currentOptions = selectOptions[field.name] || [];
                 return (
                     <FormControl fullWidth required={field.required}>
                         <InputLabel>{field.label}</InputLabel>
+                        {/* Passiamo le props senza la key, che non è necessaria qui */}
                         <Select {...baseProps}>
-                            {(selectOptions[field.name] || []).map(option => (
+                            {currentOptions.map(option => (
                                 <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
                             ))}
                         </Select>
@@ -112,7 +122,8 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
             <DialogContent>
                 <Grid container spacing={2} sx={{ pt: 1 }}>
                     {fields.map(field => (
-                        <Grid item xs={field.gridProps?.size?.xs || 12} sm={field.gridProps?.size?.sm} md={field.gridProps?.size?.md}>
+                        // La key va qui, sull'elemento più esterno del loop
+                        <Grid item key={field.name} xs={field.gridProps?.size?.xs || 12} sm={field.gridProps?.size?.sm} md={field.gridProps?.size?.md}>
                             {renderField(field)}
                         </Grid>
                     ))}

@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { useData } from '@/hooks/useData'; 
 import { anagraficheConfig, AnagraficaConfig } from '@/config/anagrafiche.config';
 
 import { Box, Button, Typography, CircularProgress } from '@mui/material';
@@ -15,7 +14,6 @@ import DeleteIcon from '@mui/icons-material/Delete';
 
 const GestioneAnagrafica: React.FC = () => {
     const { anagraficaId } = useParams<{ anagraficaId: string }>();
-    const { refreshData } = useData();
 
     const [config, setConfig] = useState<AnagraficaConfig | null>(null);
     const [data, setData] = useState<any[]>([]);
@@ -69,7 +67,6 @@ const GestioneAnagrafica: React.FC = () => {
         setFormOpen(false);
         if (config) {
             fetchData(config.collectionName);
-            refreshData([config.collectionName]); 
         }
     };
 
@@ -88,7 +85,6 @@ const GestioneAnagrafica: React.FC = () => {
         
         const dataToSave = {
             ...itemData,
-            tipo: config.anagraficaType,
         };
 
         try {
@@ -109,7 +105,6 @@ const GestioneAnagrafica: React.FC = () => {
                 await deleteDoc(doc(db, config.collectionName, selectedItem.id));
                 handleCloseConfirm();
                 fetchData(config.collectionName);
-                refreshData([config.collectionName]);
             } catch (error) {
                 console.error("Errore nell'eliminazione: ", error);
             }
@@ -126,10 +121,9 @@ const GestioneAnagrafica: React.FC = () => {
                     headerName: 'Cliente',
                     renderCell: (params: GridRenderCellParams) => {
                         const clienteId = params.value as string;
-                        // MODIFICA: Ritorna una stringa vuota se non c'è un cliente
                         if (!clienteId) return '';
                         const cliente = clienti.find(c => c.id === clienteId);
-                        return cliente ? cliente.nome : ''; // E anche qui
+                        return cliente ? cliente.nome : '';
                     }
                 };
             }

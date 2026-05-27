@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db } from '@/firebase'; // Ripristino il riferimento diretto a db
 import {
     Dialog,
     DialogTitle,
@@ -22,6 +22,7 @@ interface InviaNotificaDialogProps {
     target: NotificationTarget | null;
 }
 
+// RIPRISTINO DEL COMPONENTE ORIGINALE
 const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose, target }) => {
     const [title, setTitle] = useState('');
     const [message, setMessage] = useState('');
@@ -33,24 +34,30 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
             setError('Titolo e messaggio sono obbligatori.');
             return;
         }
+        if (!target) {
+            setError('Destinatario della notifica non specificato.');
+            return;
+        }
 
         setLoading(true);
         setError('');
 
         try {
+            // ** RIPRISTINO LOGICA ORIGINALE CON addDoc **
+            // Questo scrive un documento in Firestore, che scatena la VERA Cloud Function.
             await addDoc(collection(db, 'notifications'), {
                 title: title.trim(),
                 message: message.trim(),
-                target: target, 
+                target: target,
                 createdAt: serverTimestamp(),
-                status: 'unread',
-                readAt: null,
-                readBy: null,
+                sent: false, // Flag per indicare che la notifica deve essere processata
             });
+
             handleClose();
         } catch (err) {
-            console.error("Errore nell'invio della notifica:", err);
-            setError('Si è verificato un errore durante l\'invio.'); // CORREZIONE
+            console.error("Errore nella creazione del documento di notifica:", err);
+            const genericError = err as any; 
+            setError(genericError.message || 'Si è verificato un errore durante la scrittura nel database.');
         } finally {
             setLoading(false);
         }
@@ -100,7 +107,7 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
                     <Button 
                         onClick={handleSend} 
                         variant="contained" 
-                        disabled={loading}
+                        disabled={loading || !title.trim() || !message.trim()}
                     >
                         Invia
                     </Button>

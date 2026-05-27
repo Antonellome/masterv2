@@ -5,6 +5,7 @@
 
   packages = [
     pkgs.nodejs_22
+    pkgs.zip
   ];
 
   idx = {

@@ -195,7 +195,22 @@ export const anagraficheConfig: Record<string, AnagraficaConfig> = {
         anagraficaType: 'veicolo',
         fields: [
             { name: 'targa', label: 'Targa', type: 'text', required: true, gridProps: { size: { xs: 12, sm: 4 } } },
-            { name: 'tipo', label: 'Tipo', type: 'select', options: { items: ['auto', 'furgone', 'camion', 'speciale', 'muletto'] }, gridProps: { size: { xs: 12, sm: 4 } } },
+            { 
+                name: 'tipo', 
+                label: 'Tipo', 
+                type: 'select', 
+                options: {
+                    items: [
+                        { value: 'Auto', label: 'Auto' },
+                        { value: 'Furgone', label: 'Furgone' },
+                        { value: 'Camion', label: 'Camion' },
+                        { value: 'Speciale', label: 'Speciale' },
+                        { value: 'Muletto', label: 'Muletto' },
+                        { value: 'Altro', label: 'Altro' }
+                    ]
+                }, 
+                gridProps: { size: { xs: 12, sm: 4 } } 
+            },
             { name: 'marca', label: 'Marca', type: 'text', gridProps: { size: { xs: 12, sm: 4 } } },
             { name: 'modello', label: 'Modello', type: 'text', gridProps: { size: { xs: 12, sm: 4 } } },
             { name: 'anno', label: 'Anno', type: 'number', gridProps: { size: { xs: 12, sm: 4 } } },

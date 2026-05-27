@@ -140,7 +140,7 @@ const DashboardContent = () => {
 
         const tipiGiornataMap = new Map(tipiGiornata.map(tg => [tg.id, tg]));
         const simpleTecniciMap = new Map(tecnici.map(t => [t.id, `${t.nome} ${t.cognome}`]));
-        const rapportiniWithDate = rapportini.map(r => ({ ...r, date: dayjs((r.data as any).toDate()) }));
+        const rapportiniWithDate = rapportini.map(r => ({ ...r, date: dayjs(r.data) }));
 
         const targetMonth = timeRange === 'current' ? today : today.subtract(1, 'month');
         const rapportiniNelRange = rapportiniWithDate.filter(r => r.date.isSame(targetMonth, 'month'));

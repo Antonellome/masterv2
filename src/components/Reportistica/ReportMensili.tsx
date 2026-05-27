@@ -1,5 +1,6 @@
 
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
     Box, 
     Typography, 
@@ -9,21 +10,26 @@ import {
     TextField, 
     Paper, 
     Alert, 
-    Grid
+    Grid,
+    LinearProgress,
+    List,
+    ListItem,
+    ListItemText
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DataGrid, GridColDef, GridFooterContainer, GridToolbar } from '@mui/x-data-grid';
-import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
+import { DataGrid, GridColDef, GridFooterContainer, GridToolbar, GridRowParams } from '@mui/x-data-grid';
+import { collection, onSnapshot, Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import { useData } from '@/hooks/useData';
-import { Rapportino, Tecnico } from '@/models/definitions';
+import { Rapportino, Tecnico, Veicolo, Nave, Luogo, TipoGiornata } from '@/models/definitions';
+import jsPDF from 'jspdf';
+import { generateRapportinoPage } from '@/utils/pdfGenerator'; // Import the new utility function
 
 dayjs.locale('it');
 
-// --- Definizioni dei tipi ---
 interface Presenza {
     id: string;
     data: string;
@@ -42,10 +48,10 @@ interface Totali {
     perTipoGiornata: { [key: string]: { ore: number; giorni: number } };
 }
 
-// --- Componente Principale ---
 const ConsuntivoMensile = () => {
-    // --- Stati del componente ---
-    const { tecnici, navi, tipiGiornata, luoghi, loading: anagraficheLoading, error: anagraficheError } = useData();
+    const navigate = useNavigate();
+    const anagrafiche = useData();
+    const { tecnici, veicoli, navi, luoghi, tipiGiornata, loading: anagraficheLoading, error: anagraficheError } = anagrafiche;
     const [rapportini, setRapportini] = useState<Rapportino[]>([]);
     const [rapportiniLoading, setRapportiniLoading] = useState(true);
     const [rapportiniError, setRapportiniError] = useState<string | null>(null);
@@ -54,13 +60,17 @@ const ConsuntivoMensile = () => {
     const [selectedMonth, setSelectedMonth] = useState<Dayjs | null>(dayjs());
     const [reportGenerated, setReportGenerated] = useState(false);
     
+    const [isExporting, setIsExporting] = useState(false);
+    const [progressExport, setProgressExport] = useState(0);
+    const [exportErrors, setExportErrors] = useState<string[]>([]);
+    
     const SOGLIA_ORE_ORDINARIE = 8;
 
     useEffect(() => {
         setRapportiniLoading(true);
         const unsub = onSnapshot(collection(db, "rapportini"), 
             (snapshot) => {
-                const rapportiniData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rapportino));
+                const rapportiniData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Rapportino));
                 setRapportini(rapportiniData);
                 setRapportiniLoading(false);
             }, 
@@ -80,6 +90,73 @@ const ConsuntivoMensile = () => {
         }
         setRapportiniError(null);
         setReportGenerated(true);
+        setExportErrors([]); 
+    };
+
+    const handleRowClick = (params: GridRowParams) => {
+        navigate(`/rapportino/edit/${params.id}`);
+    };
+
+    const handleExportAll = async () => {
+        setIsExporting(true);
+        setProgressExport(0);
+        setExportErrors([]);
+        const errors: string[] = [];
+
+        if (anagraficheLoading) {
+            setExportErrors(["Dati anagrafici non ancora caricati. Riprova tra un istante."]);
+            setIsExporting(false);
+            return;
+        }
+
+        const pdfDoc = new jsPDF();
+        const filteredRapportiniIds = presenze.map(p => p.id);
+        let pagesAdded = 0;
+
+        for (let i = 0; i < filteredRapportiniIds.length; i++) {
+            const rapportinoId = filteredRapportiniIds[i];
+            
+            try {
+                const docRef = doc(db, 'rapportini', rapportinoId);
+                const docSnap = await getDoc(docRef);
+
+                if (!docSnap.exists()) {
+                    errors.push(`Rapportino ID ${rapportinoId} non trovato.`);
+                    continue;
+                }
+                
+                const rapportinoData = { id: docSnap.id, ...docSnap.data() } as Rapportino;
+
+                if (!rapportinoData.data) {
+                    errors.push(`Rapportino ${rapportinoId} non ha una data valida.`);
+                    continue;
+                }
+
+                if (pagesAdded > 0) {
+                    pdfDoc.addPage();
+                }
+                pagesAdded++;
+
+                // Use the centralized utility function to generate the page content
+                generateRapportinoPage(pdfDoc, rapportinoData, anagrafiche);
+
+            } catch(e: any) {
+                errors.push(`Errore imprevisto su ID ${rapportinoId}: ${e.message}`);
+            }
+            setProgressExport(((i + 1) / filteredRapportiniIds.length) * 100);
+        }
+
+        if (errors.length > 0) {
+            setExportErrors(errors);
+        }
+
+        if (pagesAdded > 0) {
+            pdfDoc.save(`report_mensili_${selectedTecnico?.cognome}_${selectedMonth?.format('MM-YYYY')}.pdf`);
+        } else {
+            setExportErrors(prev => [...prev, "Nessun rapportino valido è stato generato. Il PDF non è stato creato."]);
+        }
+
+        setIsExporting(false);
     };
     
     const presenze = useMemo((): Presenza[] => {
@@ -90,9 +167,9 @@ const ConsuntivoMensile = () => {
         const startOfMonth = selectedMonth.startOf('month');
         const endOfMonth = selectedMonth.endOf('month');
 
-        const naviMap = new Map(navi.map(doc => [doc.id, doc.nome]));
-        const tipiGiornataMap = new Map(tipiGiornata.map(doc => [doc.id, doc.nome]));
-        const luoghiMap = new Map(luoghi.map(doc => [doc.id, doc.nome]));
+        const naviMap = new Map(navi.map(d => [d.id, d.nome]));
+        const tipiGiornataMap = new Map(tipiGiornata.map(d => [d.id, d.nome]));
+        const luoghiMap = new Map(luoghi.map(d => [d.id, d.nome]));
         
         const filteredRapportini = rapportini.filter(r => {
             const dataRapportino = r.data instanceof Timestamp ? dayjs(r.data.toDate()) : null;
@@ -105,22 +182,21 @@ const ConsuntivoMensile = () => {
             return isTecnicoPresente && isNelMese;
         });
 
-        const presenzeData = filteredRapportini.map(doc => {
-            // Logica Corretta: Cerca le ore specifiche del tecnico
-            const dettaglioTecnico = doc.dettaglioOreTecnici?.find(d => d.tecnicoId === selectedTecnico.id);
-            const oreLavoro = dettaglioTecnico ? dettaglioTecnico.ore : (doc.oreLavoro || 0);
+        const presenzeData = filteredRapportini.map(r => {
+            const dettaglioTecnico = r.dettaglioOreTecnici?.find(d => d.tecnicoId === selectedTecnico.id);
+            const oreLavoro = dettaglioTecnico ? dettaglioTecnico.ore : (r.oreLavoro || 0);
 
             const oreOrdinarie = Math.min(oreLavoro, SOGLIA_ORE_ORDINARIE);
             const oreStraordinarie = Math.max(0, oreLavoro - SOGLIA_ORE_ORDINARIE);
             
-            const formattedDate = doc.data instanceof Timestamp ? dayjs(doc.data.toDate()).format('DD/MM/YYYY') : 'Data Invalida';
+            const formattedDate = r.data instanceof Timestamp ? dayjs(r.data.toDate()).format('DD/MM/YYYY') : 'Data Invalida';
 
             return {
-                id: doc.id,
+                id: r.id,
                 data: formattedDate,
-                tipoGiornata: doc.giornataId ? tipiGiornataMap.get(doc.giornataId) || 'N/D' : 'N/D',
-                nave: doc.naveId ? naviMap.get(doc.naveId) || 'N/D' : 'N/D',
-                luogo: doc.luogoId ? luoghiMap.get(doc.luogoId) || 'N/D' : 'N/D',
+                tipoGiornata: r.giornataId ? tipiGiornataMap.get(r.giornataId) || 'N/D' : 'N/D',
+                nave: r.naveId ? naviMap.get(r.naveId) || 'N/D' : 'N/D',
+                luogo: r.luogoId ? luoghiMap.get(r.luogoId) || 'N/D' : 'N/D',
                 oreOrdinarie,
                 oreStraordinarie,
                 totaleOreGiorno: oreLavoro,
@@ -199,7 +275,7 @@ const ConsuntivoMensile = () => {
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Paper sx={{ p: 3, height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
-                <Grid container spacing={2} alignItems="center" sx={{ mb: 3, flexShrink: 0 }}>
+                <Grid container spacing={2} alignItems="center" sx={{ mb: 2, flexShrink: 0 }}>
                      <Grid item xs={12} sm={6} md={4}>
                         <Autocomplete
                             options={tecnici.sort((a, b) => a.cognome.localeCompare(b.cognome))}
@@ -210,7 +286,7 @@ const ConsuntivoMensile = () => {
                             isOptionEqualToValue={(option, value) => option.id === value.id}
                         />
                     </Grid>
-                     <Grid item xs={12} sm={6} md={4}>
+                     <Grid item xs={12} sm={6} md={3}>
                         <DatePicker
                             label="Seleziona Mese"
                             views={['month', 'year']}
@@ -219,30 +295,63 @@ const ConsuntivoMensile = () => {
                             slotProps={{ textField: { fullWidth: true } }}
                         />
                     </Grid>
-                     <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={2}>
                         <Button 
                             variant="contained" 
                             onClick={handleGenerateReport} 
-                            disabled={loading || !selectedTecnico || !selectedMonth}
+                            disabled={loading || !selectedTecnico || !selectedMonth || isExporting}
                             fullWidth
                             size="large"
                         >
-                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Genera Report'}
+                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Genera'}
+                        </Button>
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                        <Button 
+                            variant="outlined"
+                            onClick={handleExportAll} 
+                            disabled={!reportGenerated || isExporting || presenze.length === 0}
+                            fullWidth
+                            size="large"
+                        >
+                            {isExporting ? <CircularProgress size={24} /> : 'Esporta PDF'}
                         </Button>
                     </Grid>
                 </Grid>
 
+                {isExporting && (
+                    <Box sx={{ width: '100%', my: 2 }}>
+                        <Typography variant="caption" display="block" align="center">Creazione PDF in corso...</Typography>
+                        <LinearProgress variant="determinate" value={progressExport} />
+                    </Box>
+                )}
+
+                {exportErrors.length > 0 && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                        <Typography variant="h6" gutterBottom>Rapporto di esportazione</Typography>
+                        <List dense>
+                            {exportErrors.map((err, index) => (
+                                <ListItem key={index}>
+                                    <ListItemText primary={`- ${err}`} />
+                                </ListItem>
+                            ))}
+                        </List>
+                    </Alert>
+                )}
+
                 {error && <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }}>{error}</Alert>}
 
                 {(reportGenerated && !loading) && (
-                    <Box sx={{ flexGrow: 1, width: '100%' }}>
+                    <Box sx={{ flexGrow: 1, width: '100%', mt: 2 }}>
                          <DataGrid
                             rows={presenze}
                             columns={columns}
                             slots={{ toolbar: GridToolbar, footer: CustomFooter }}
                             density="compact"
+                            onRowClick={handleRowClick}
                             disableRowSelectionOnClick
                             localeText={{ noRowsLabel: "Nessun rapportino trovato per il tecnico e il mese selezionati." }}
+                            sx={{ '& .MuiDataGrid-row:hover': { cursor: 'pointer' } }}
                         />
                     </Box>
                 )}
