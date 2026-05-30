@@ -136,8 +136,19 @@ const RapportinoEdit: React.FC = () => {
                     const reportSnap = await getDoc(doc(db, 'rapportini', reportId));
                     if (reportSnap.exists()) {
                         const reportData = reportSnap.data() as Rapportino;
+
+                        let reportDate: Dayjs | null = null;
+                        if (reportData.data) {
+                            if (typeof reportData.data.toDate === 'function') {
+                                reportDate = dayjs(reportData.data.toDate());
+                            } else if ((reportData.data as any).seconds) {
+                                const timestamp = new Timestamp((reportData.data as any).seconds, (reportData.data as any).nanoseconds);
+                                reportDate = dayjs(timestamp.toDate());
+                            }
+                        }
+                        setData(reportDate);
+
                         setTecnicoResponsabileId(reportData.tecnicoId);
-                        setData(reportData.data ? dayjs(reportData.data.toDate()) : null);
                         const resolvedGiornataId = reportData.tipoGiornataId || reportData.giornataId || '';
                         if (resolvedGiornataId && !tipiGiornataMap.has(resolvedGiornataId)) {
                             showAlert(`Tipo Giornata non più valido. Selezionane uno nuovo.`, 'warning');
