@@ -64,7 +64,7 @@ const SendNotificationView = ({ onCancel, allTecnici, categories, loading }) => 
     const hasNoCategories = !loading && categories.length === 0;
 
     return (
-        <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column' }}>
+        <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <Typography variant="h4" component="h1" gutterBottom>Invia Nuova Notifica</Typography>
@@ -148,7 +148,7 @@ const SendNotificationView = ({ onCancel, allTecnici, categories, loading }) => 
 
 // --- VISTA DELLO STORICO --- //
 const HistoryView = ({ onNewNotification }) => (
-    <Paper variant="outlined" sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <Paper variant="outlined" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
             <div>
                 <Typography variant="h4" component="h1">Cronologia Notifiche</Typography>
@@ -156,7 +156,7 @@ const HistoryView = ({ onNewNotification }) => (
             </div>
             <Button variant="contained" startIcon={<AddIcon />} onClick={onNewNotification}>Invia Nuova Notifica</Button>
         </Box>
-        <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+        <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
             <SentNotificationsList />
         </Box>
     </Paper>
@@ -166,22 +166,18 @@ const HistoryView = ({ onNewNotification }) => (
 const NotificationsPage = () => {
     const [view, setView] = useState<'history' | 'send'>('history');
 
-    // **Query per i tecnici abilitati**
     const tecniciQuery = query(collection(db, 'tecnici'), where('abilitato', '==', true));
     const [tecniciSnapshot, loadingTecnici, errorTecnici] = useCollection(tecniciQuery);
 
-    // **Query per la collezione CATEGORIE, come richiesto**
     const categoriesQuery = query(collection(db, 'categorie'), orderBy('nome'));
     const [categoriesSnapshot, loadingCategories, errorCategories] = useCollection(categoriesQuery);
 
-    // Processo i tecnici
     const allTecnici = useMemo(() => {
         if (!tecniciSnapshot) return [];
         const tecniciList = tecniciSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Tecnico[];
         return tecniciList.sort((a, b) => (a.cognome || '').localeCompare(b.cognome || ''));
     }, [tecniciSnapshot]);
 
-    // **Processo le categorie dalla loro collezione**
     const categories = useMemo(() => {
         if (!categoriesSnapshot) return [];
         return categoriesSnapshot.docs.map(doc => doc.data().nome as string);
@@ -191,20 +187,25 @@ const NotificationsPage = () => {
     const error = errorTecnici || errorCategories;
 
     if (error) return <Alert severity="error">Errore nel caricamento dei dati: {error.message}</Alert>;
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
 
     return (
         <SectionLayout>
-            {view === 'history' ? (
-                <HistoryView onNewNotification={() => setView('send')} />
-            ) : (
-                <SendNotificationView 
-                    onCancel={() => setView('history')} 
-                    allTecnici={allTecnici}
-                    categories={categories}
-                    loading={loading}
-                />
-            )}
+             <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
+                {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+                ) : (
+                    view === 'history' ? (
+                        <HistoryView onNewNotification={() => setView('send')} />
+                    ) : (
+                        <SendNotificationView 
+                            onCancel={() => setView('history')} 
+                            allTecnici={allTecnici}
+                            categories={categories}
+                            loading={loading}
+                        />
+                    )
+                )}
+            </Box>
         </SectionLayout>
     );
 };
