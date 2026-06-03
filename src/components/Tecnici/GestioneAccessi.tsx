@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import {
   Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert, Divider
@@ -18,11 +18,10 @@ interface Tecnico {
   nome: string;
   cognome: string;
   email: string;
-  abilitato: boolean;
+  appAccess: boolean; 
   attivo: boolean;
 }
 
-// Stato per il dialogo di conferma
 interface DialogState {
   open: boolean;
   title: string;
@@ -38,7 +37,7 @@ const GestioneAccessi = () => {
   const [loading, setLoading] = useState(true);
   const [operating, setOperating] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
-  const [dialog, setDialog] = useState<DialogState>({ open: false, title: '', content: '', onConfirm: () => {} }); // Stato per il dialogo
+  const [dialog, setDialog] = useState<DialogState>({ open: false, title: '', content: '', onConfirm: () => {} });
 
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbar({ open: true, message, severity });
@@ -66,7 +65,7 @@ const GestioneAccessi = () => {
         cognome: doc.data().cognome || '',
         email: doc.data().email || '',
         attivo: doc.data().attivo === true,
-        abilitato: doc.data().abilitato === true,
+        appAccess: doc.data().appAccess === true,
       } as Tecnico));
       setTecnici(tecniciList);
     } catch (err) {
@@ -86,19 +85,25 @@ const GestioneAccessi = () => {
       return;
     }
     setOperating(true);
-    const nuovoStato = !tecnico.abilitato;
+    const newState = !tecnico.appAccess;
     try {
-      await manageAccess({ uid: tecnico.id, abilitato: nuovoStato });
-      showSnackbar(`Accesso ${nuovoStato ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
-      await fetchData();
-    } catch (err) {
-      handleDetailedError(err, "Abilitazione Fallita");
-    } finally {
-      setOperating(false);
-    }
-  };
+        // Aggiorna prima l'autenticazione Firebase
+        await manageAccess({ email: tecnico.email, disabled: !newState });
+        // Poi aggiorna il campo in Firestore
+        const tecnicoRef = doc(db, 'tecnici', tecnico.id);
+        await updateDoc(tecnicoRef, { appAccess: newState });
 
-  // Funzione che esegue effettivamente il reset
+        showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
+        // Aggiorna lo stato locale per riflettere il cambiamento immediatamente
+        setTecnici(prevTecnici => prevTecnici.map(t => t.id === tecnico.id ? { ...t, appAccess: newState } : t));
+    } catch (err) {
+        handleDetailedError(err, "Abilitazione Fallita");
+    } finally {
+        setOperating(false);
+    }
+};
+
+
   const executeResetPassword = async (email: string) => {
     setOperating(true);
     try {
@@ -112,7 +117,6 @@ const GestioneAccessi = () => {
     }
   };
 
-  // Funzione che apre il dialogo di conferma
   const handleResetPassword = (email: string | null | undefined) => {
     if (!email) {
       showSnackbar('Email non disponibile per questo tecnico. Impossibile inviare il reset.', 'error');
@@ -148,14 +152,14 @@ const GestioneAccessi = () => {
       )
     },
     {
-      field: 'abilitato',
+      field: 'appAccess',
       headerName: 'Accesso App',
       width: 130, align: 'center', headerAlign: 'center',
       renderCell: (params: GridRowParams<Tecnico>) => (
-        <Tooltip title={params.row.abilitato ? 'Revoca accesso' : 'Abilita accesso'}>
+        <Tooltip title={params.row.appAccess ? 'Revoca accesso' : 'Abilita accesso'}>
           <span>
             <Switch
-              checked={params.row.abilitato}
+              checked={params.row.appAccess}
               onChange={() => handleToggleAccess(params.row)}
               disabled={operating || !params.row.email}
               color="success"
@@ -174,7 +178,7 @@ const GestioneAccessi = () => {
                 <IconButton
                     onClick={() => handleResetPassword(params.row.email)}
                     color="primary"
-                    disabled={operating || !params.row.abilitato || !params.row.email}
+                    disabled={operating || !params.row.appAccess || !params.row.email}
                 >
                     <VpnKeyIcon />
                 </IconButton>

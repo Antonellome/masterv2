@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Unstable_Grid2';
 import { useFirestoreData } from '@/hooks/useFirestoreData';
-import { collection } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Rapportino, Tecnico, TipoGiornata, Nave, Luogo, Checkin, Cliente } from '../models/definitions';
 import dayjs from 'dayjs';
@@ -26,7 +26,7 @@ import { useCheckinData } from '@/hooks/useCheckinData';
 import { useAnagrafiche } from '@/hooks/useAnagrafiche';
 
 dayjs.extend(isBetween);
-dayjs.extend(isSameOrBefore)
+dayjs.extend(isSameOrBefore);
 dayjs.locale('it');
 
 // --- Componenti UI stateless ---
@@ -75,13 +75,25 @@ const LocationAccordion: React.FC<{ locations: { id: string; name: string; type:
 // --- Logica e Caricamento Dati ---
 const DashboardContent = () => {
     const [tabValue, setTabValue] = useState(0);
-    const [selectedMonth, setSelectedMonth] = useState(dayjs().month());
-    const [selectedYear, setSelectedYear] = useState(dayjs().year());
-    const [timeRange, setTimeRange] = useState<'current' | 'previous'>('current');
-
+    const [selectedDate, setSelectedDate] = useState(dayjs());
+    const [rapportini, setRapportini] = useState<Rapportino[] | null>(null);
+    const [lRapportini, setLRapportini] = useState(true);
+    
     const today = dayjs();
 
-    const { data: rapportini, loading: lRapportini } = useFirestoreData<Rapportino>(collection(db, 'rapportini'));
+    useEffect(() => {
+        const rapportiniCollection = collection(db, 'rapportini');
+        const unsubscribe = onSnapshot(rapportiniCollection, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rapportino));
+            setRapportini(data);
+            setLRapportini(false);
+        }, (error) => {
+            console.error("Errore nel caricamento dei rapportini: ", error);
+            setLRapportini(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
     const { data: tipiGiornata, loading: lTipiGiornata } = useFirestoreData<TipoGiornata>(collection(db, 'tipiGiornata'));
     const { tecnici, navi, luoghi, loading: lAnagrafiche, error: eAnagrafiche } = useAnagrafiche();
     const { data: clienti, loading: lClienti, error: eClienti } = useFirestoreData<Cliente>(collection(db, 'clienti'));
@@ -89,12 +101,16 @@ const DashboardContent = () => {
 
     const isLoading = lRapportini || lTipiGiornata || lAnagrafiche || lCheckins || lClienti;
     const error = eAnagrafiche || eCheckins || eClienti;
-
+    
     const handleTimeRangeChange = (event: React.MouseEvent<HTMLElement>, newTimeRange: 'current' | 'previous') => {
         if (newTimeRange !== null) {
-            setTimeRange(newTimeRange);
+            const newDate = newTimeRange === 'current' ? dayjs() : dayjs().subtract(1, 'month');
+            setSelectedDate(newDate);
         }
     };
+
+    const selectedMonth = selectedDate.month();
+    const selectedYear = selectedDate.year();
 
     const tecniciMap = useMemo(() => new Map(tecnici?.map(t => [t.id, t]) || []), [tecnici]);
     const naviMap = useMemo(() => new Map(navi?.map(n => [n.id, {nome: n.nome, clienteId: n.clienteId}]) || []), [navi]);
@@ -137,45 +153,76 @@ const DashboardContent = () => {
 
     const memoizedStats = useMemo(() => {
         if (!rapportini || !tecnici || !tipiGiornata || !navi || !luoghi) return null;
-
+    
         const tipiGiornataMap = new Map(tipiGiornata.map(tg => [tg.id, tg]));
         const simpleTecniciMap = new Map(tecnici.map(t => [t.id, `${t.nome} ${t.cognome}`]));
-        const rapportiniWithDate = rapportini.map(r => ({ ...r, date: dayjs(r.data) }));
-
-        const targetMonth = timeRange === 'current' ? today : today.subtract(1, 'month');
-        const rapportiniNelRange = rapportiniWithDate.filter(r => r.date.isSame(targetMonth, 'month'));
-
-        const oreTotaliRange = rapportiniNelRange.reduce((sum, r) => sum + (r.oreLavoro || 0), 0);
-        const costoTotaleRange = rapportiniNelRange.reduce((sum, r) => {
-            const costoOrario = tipiGiornataMap.get(r.tipoGiornataId)?.costoOrario || 0;
-            return sum + (r.oreLavoro || 0) * costoOrario;
+        
+        const rapportiniWithDate = rapportini.map(r => {
+            const rawData = r.data as any;
+            const date = rawData && typeof rawData.toDate === 'function' ? dayjs(rawData.toDate()) : dayjs(rawData);
+            return { ...r, date: date.isValid() ? date : null };
+        }).filter(r => r.date !== null);
+    
+        const rapportiniNelRange = rapportiniWithDate.filter(r => 
+            r.date && r.date.isSame(selectedDate, 'month')
+        );
+    
+        const oreTotaliRange = rapportiniNelRange.reduce((sum, r) => {
+            const oreRapportino = r.dettaglioOreTecnici?.reduce((subSum, dettaglio) => subSum + (Number(dettaglio.ore) || 0), 0) || 0;
+            return sum + oreRapportino;
         }, 0);
 
+        const costoTotaleRange = rapportiniNelRange.reduce((sum, r) => {
+            const oreRapportino = r.dettaglioOreTecnici?.reduce((subSum, dettaglio) => subSum + (Number(dettaglio.ore) || 0), 0) || 0;
+            const costoOrario = tipiGiornataMap.get(r.tipoGiornataId)?.costoOrario || 0;
+            return sum + (oreRapportino * costoOrario);
+        }, 0);
+    
         const sevenDaysAgo = today.subtract(7, 'day');
-        const activityLast7Days = Array.from({ length: 7 }, (_, i) => ({ date: today.subtract(6 - i, 'day').format('DD/MM'), ore: 0 }));
-        rapportiniWithDate.filter(r => r.date.isAfter(sevenDaysAgo)).forEach(r => {
-            const dayData = activityLast7Days.find(d => d.date === r.date.format('DD/MM'));
-            if (dayData) dayData.ore += r.oreLavoro || 0;
-        });
-
-        const attivitaRecenti = [...rapportiniWithDate].sort((a, b) => b.date.valueOf() - a.date.valueOf()).slice(0, 5).map(r => ({ id: r.id, tecnico: r.presenze?.map(id => simpleTecniciMap.get(id)).filter(Boolean).join(', ') || 'N/A', data: r.date.format('DD/MM/YYYY'), destinazione: r.naveId ? naviMap.get(r.naveId)?.nome : (r.luogoId ? luoghiMap.get(r.luogoId) : 'Nessuna'), descrizione: r.note }));
+        const activityLast7Days = Array.from({ length: 7 }, (_, i) => ({
+            date: today.subtract(6 - i, 'day').format('DD/MM'),
+            ore: 0
+        }));
         
+        rapportiniWithDate
+            .filter(r => r.date && r.date.isAfter(sevenDaysAgo))
+            .forEach(r => {
+                const dayData = activityLast7Days.find(d => d.date === r.date!.format('DD/MM'));
+                if (dayData) {
+                    const oreRapportino = r.dettaglioOreTecnici?.reduce((subSum, dettaglio) => subSum + (Number(dettaglio.ore) || 0), 0) || 0;
+                    dayData.ore += oreRapportino;
+                }
+            });
+    
+        const attivitaRecenti = [...rapportiniWithDate]
+            .sort((a, b) => b.date!.valueOf() - a.date!.valueOf())
+            .slice(0, 5)
+            .map(r => ({
+                id: r.id,
+                tecnico: r.presenze?.map(id => simpleTecniciMap.get(id)).filter(Boolean).join(', ') || 'N/A',
+                data: r.date!.format('DD/MM/YYYY'),
+                destinazione: r.naveId ? naviMap.get(r.naveId)?.nome : (r.luogoId ? luoghiMap.get(r.luogoId) : 'Nessuna'),
+                descrizione: r.note
+            }));
+            
         const activeTechnicians = tecnici.filter(t => t.attivo).length;
-        const currentSelection = dayjs().year(selectedYear).month(selectedMonth);
-        const daysInMonth = currentSelection.daysInMonth();
-        const firstDayOfMonth = currentSelection.startOf('month').day();
+        const daysInMonth = selectedDate.daysInMonth();
+        const firstDayOfMonth = selectedDate.startOf('month').day();
         const calendarDays = Array.from({ length: daysInMonth }, (_, i) => {
             const day = i + 1;
-            const currentDate = currentSelection.date(day);
+            const currentDate = selectedDate.date(day);
             const isFuture = currentDate.isAfter(today, 'day');
             let missingReports = 0;
             if (!isFuture && currentDate.day() !== 0 && currentDate.day() !== 6 && currentDate.isSameOrBefore(today, 'day')) {
-                const uniqueTechnicians = new Set(rapportiniWithDate.filter(r => r.date.isSame(currentDate, 'day')).flatMap(r => r.presenze || []));
+                const uniqueTechnicians = new Set(rapportiniWithDate
+                    .filter(r => r.date && r.date.isSame(currentDate, 'day'))
+                    .flatMap(r => r.presenze || [])
+                );
                 missingReports = activeTechnicians - uniqueTechnicians.size;
             }
             return { day, missingReports: Math.max(0, missingReports), isFuture };
         });
-
+    
         return {
             oreTotaliRange: oreTotaliRange.toFixed(1),
             costoTotaleRange: `€ ${costoTotaleRange.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -184,23 +231,25 @@ const DashboardContent = () => {
             attivitaRecenti,
             calendarData: { days: calendarDays, offset: (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1) },
         };
-    }, [rapportini, tipiGiornata, tecnici, navi, luoghi, selectedMonth, selectedYear, naviMap, luoghiMap, today, timeRange]);
+    }, [rapportini, tipiGiornata, tecnici, navi, luoghi, selectedDate, naviMap, luoghiMap, today]);
     
     if (isLoading) return <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>;
-    if (error) return <Box sx={{ p: 3 }}><Alert severity="error">{`Errore nel caricamento dei dati: ${error.message}`}</Alert></Box>;
+    if (error) return <Box sx={{ p: 3 }}><Alert severity="error">{`Errore nel caricamento dei dati: ${error}`}</Alert></Box>;
     if (!memoizedStats) return <Box sx={{ p: 3 }}><Alert severity="warning">Dati non sufficienti per la dashboard.</Alert></Box>;
 
     const { oreTotaliRange, costoTotaleRange, rapportiniCreatiRange, activityLast7Days, attivitaRecenti, calendarData } = memoizedStats;
     const clientKeys = Object.keys(checkinsByClient).sort((a,b) => (clientiMap.get(a) || 'zzz').localeCompare(clientiMap.get(b) || 'zzz'));
 
-    const titleSuffix = timeRange === 'current' ? '(Mese Corrente)' : '(Mese Precedente)';
+    // Determina quale pulsante del ToggleButtonGroup deve essere attivo
+    const timeRangeValue = selectedDate.isSame(dayjs(), 'month') ? 'current' : (selectedDate.isSame(dayjs().subtract(1, 'month'), 'month') ? 'previous' : null);
+    const titleSuffix = timeRangeValue === 'current' ? '(Mese Corrente)' : timeRangeValue === 'previous' ? '(Mese Precedente)' : `(${selectedDate.format('MMMM YYYY')})`;
 
     return (
         <Box sx={{ width: '100%', p: 3 }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}><Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} aria-label="dashboard tabs"><Tab label="Riepilogo" /><Tab label="Attività Recenti" /><Tab label="Presenze di Oggi" /><Tab label="Rapportini Mancanti" /></Tabs></Box>
             <CustomTabPanel value={tabValue} index={0}>
                 <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
-                    <ToggleButtonGroup value={timeRange} exclusive onChange={handleTimeRangeChange} aria-label="seleziona periodo">
+                    <ToggleButtonGroup value={timeRangeValue} exclusive onChange={handleTimeRangeChange} aria-label="seleziona periodo">
                         <ToggleButton value="current" aria-label="mese corrente">Mese Corrente</ToggleButton>
                         <ToggleButton value="previous" aria-label="mese precedente">Mese Precedente</ToggleButton>
                     </ToggleButtonGroup>
@@ -225,8 +274,8 @@ const DashboardContent = () => {
             </Grid> : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun check-in registrato per oggi.</Typography>}</CustomTabPanel>
             <CustomTabPanel value={tabValue} index={3}>
                 <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-                    <FormControl size="small"><InputLabel>Mese</InputLabel><Select value={selectedMonth} label="Mese" onChange={(e) => setSelectedMonth(e.target.value as number)}>{Array.from({ length: 12 }, (_, i) => <MenuItem key={i} value={i}>{dayjs().month(i).format('MMMM')}</MenuItem>)}</Select></FormControl>
-                    <FormControl size="small"><InputLabel>Anno</InputLabel><Select value={selectedYear} label="Anno" onChange={(e) => setSelectedYear(e.target.value as number)}>{Array.from({ length: 5 }, (_, i) => dayjs().year() - i).map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}</Select></FormControl>
+                    <FormControl size="small"><InputLabel>Mese</InputLabel><Select value={selectedMonth} label="Mese" onChange={(e) => setSelectedDate(selectedDate.month(e.target.value as number))}>{Array.from({ length: 12 }, (_, i) => <MenuItem key={i} value={i}>{dayjs().month(i).format('MMMM')}</MenuItem>)}</Select></FormControl>
+                    <FormControl size="small"><InputLabel>Anno</InputLabel><Select value={selectedYear} label="Anno" onChange={(e) => setSelectedDate(selectedDate.year(e.target.value as number))}>{Array.from({ length: 5 }, (_, i) => dayjs().year() - i).map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}</Select></FormControl>
                 </Stack>
                 <Grid container spacing={1}>{calendarData && Array.from({ length: calendarData.offset }).map((_, index) => <Grid xs={12/7} key={`offset-${index}`} />)}{calendarData && calendarData.days.map((dayData) => <Grid xs={12/7} key={dayData.day}><CalendarDayCard day={dayData.day} missingReports={dayData.missingReports} isFuture={dayData.isFuture} /></Grid>)}</Grid>
             </CustomTabPanel>

@@ -90,6 +90,18 @@ const GestioneTecnici = () => {
         }
     }, [updateDocument]);
 
+    const handleAppAccessChange = useCallback(async (id: string, newStatus: boolean) => {
+        setUpdatingId(id);
+        try {
+            await updateDocument(collectionName, id, { appAccess: newStatus });
+            setSnackbar({ open: true, message: `Accesso all\'app per il tecnico ${newStatus ? 'abilitato' : 'disabilitato'}.`, severity: 'success' });
+        } catch (e) {
+            handleError(e, "Errore nell'aggiornamento dell'accesso all'app");
+        } finally {
+            setUpdatingId(null);
+        }
+    }, [updateDocument]);
+
 
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
@@ -113,7 +125,7 @@ const GestioneTecnici = () => {
                 onEdit={handleEdit}
                 onDelete={(_e, id) => handleDelete(id)}
                 onStatusChange={handleStatusChange} 
-                onSyncChange={() => {}} 
+                onSyncChange={handleAppAccessChange} 
                 onViewDetails={() => {}}
                 isSaving={isSaving}
                 updatingId={updatingId}

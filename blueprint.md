@@ -77,3 +77,12 @@ L'operazione di conferma lettura verrà gestita **interamente dal client (App Te
 *   **Performance Elevate:** L'operazione è istantanea per l'utente perché avviene prima localmente.
 *   **Coerenza Architetturale:** Si segue il principio "Scrittura Diretta Efficiente" già validato per i rapportini.
 *   **Supporto Offline:** La conferma di lettura funziona anche in assenza di connessione e viene sincronizzata in seguito.
+
+---
+
+### **Configurazione Sito Web Definitivo:**
+
+*   **Nome Sito:** `riso-master-office-prod`
+*   **URL Sito:** `https://riso-master-office-prod.web.app`
+*   **Target in `firebase.json`:** `master-office-prod`
+*   **Target in `.firebaserc`:** `master-office-prod`

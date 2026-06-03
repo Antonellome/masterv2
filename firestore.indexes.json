@@ -13,6 +13,24 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "tecnici",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "attivo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cognome",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nome",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

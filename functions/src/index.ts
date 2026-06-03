@@ -6,7 +6,56 @@ import * as admin from "firebase-admin";
 admin.initializeApp();
 
 const db = admin.firestore();
+const auth = admin.auth();
 const messaging = admin.messaging();
+
+// Funzione per abilitare/disabilitare l'accesso di un tecnico
+export const manageAccess = onCall(async (request) => {
+    // 1. Controllo di autenticazione: solo gli utenti autenticati possono chiamare questa funzione
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    }
+
+    const { uid, abilitato } = request.data;
+
+    // 2. Validazione dell'input
+    if (typeof uid !== 'string' || uid.length === 0) {
+        throw new HttpsError("invalid-argument", "L'UID del tecnico non è valido.");
+    }
+    if (typeof abilitato !== 'boolean') {
+        throw new HttpsError("invalid-argument", "Lo stato 'abilitato' deve essere un booleano.");
+    }
+
+    logger.info(`Inizio processo per UID: ${uid}, nuovo stato abilitato: ${abilitato}`);
+
+    try {
+        // 3. Aggiorna l'utente in Firebase Authentication
+        //    La proprietà `disabled` in Firebase Auth è l'inverso di `abilitato`
+        await auth.updateUser(uid, { disabled: !abilitato });
+        logger.info(`Utente in Auth aggiornato con successo per UID: ${uid}. Stato disabled: ${!abilitato}`);
+
+        // 4. Aggiorna il documento in Firestore
+        await db.collection("tecnici").doc(uid).update({ abilitato: abilitato });
+        logger.info(`Documento in Firestore aggiornato con successo per UID: ${uid}.`);
+
+        return { success: true, message: `Accesso per l'utente ${uid} aggiornato con successo.` };
+
+    } catch (error: any) {
+        logger.error(`Errore durante l'aggiornamento dell'accesso per UID: ${uid}`, {
+            errorMessage: error.message,
+            errorStack: error.stack,
+        });
+
+        // Se l'errore è di tipo "not-found", significa che l'utente non esiste in Firebase Auth
+        if (error.code === 'auth/user-not-found') {
+            throw new HttpsError("not-found", `L'utente con UID ${uid} non è stato trovato in Firebase Authentication.`);
+        }
+
+        // Per tutti gli altri errori, restituisci un errore interno generico
+        throw new HttpsError("internal", "Si è verificato un errore interno durante l'aggiornamento dell'accesso.");
+    }
+});
+
 
 interface SendNotificationData {
     targetType: "all" | "category" | "user";
@@ -46,8 +95,6 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
                 query = db.collection("tecnici").where("abilitato", "==", true).where("categoria", "==", targetId);
                 break;
             case "user":
-                // Firestore does not allow querying by document ID and another field directly in this manner.
-                // We query by ID first, then check for 'abilitato' status.
                 const userDoc = await db.collection("tecnici").doc(targetId).get();
                 query = db.collection("tecnici").where(admin.firestore.FieldPath.documentId(), "==", (userDoc.exists && userDoc.data()?.abilitato === true) ? targetId : "INVALID_UID");
                 break;
@@ -91,10 +138,6 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
         });
         logger.info("Documento 'notificheInviate' creato con successo:", { id: sentNotificationRef.id });
         
-        // This part from the old function was WRONG. It created a 'notifications' doc for each user.
-        // The new logic uses a single 'notificheInviate' doc and tracks reads there.
-        // I am explicitly removing the old batch write to the 'notifications' collection.
-
         return { success: true, message: `Operazione completata. Notifiche inviate a ${uids.length} tecnici.` };
 
     } catch (error: any) {
