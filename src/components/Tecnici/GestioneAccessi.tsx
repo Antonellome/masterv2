@@ -11,7 +11,7 @@ import { DataGrid, GridColDef, GridRowParams, GridToolbar } from '@mui/x-data-gr
 import { itIT } from '@mui/x-data-grid/locales';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import ConfirmationDialog from '@/components/ConfirmationDialog'; // Importa il dialog
+import ConfirmationDialog from '@/components/ConfirmationDialog';
 
 interface Tecnico {
   id: string;
@@ -30,7 +30,8 @@ interface DialogState {
 }
 
 const functions = getFunctions(undefined, 'europe-west1');
-const manageAccess = httpsCallable(functions, 'manageAccess');
+// Funzione Cloud singola e più potente
+const manageTecnicoAccess = httpsCallable(functions, 'manageTecnicoAccess');
 
 const GestioneAccessi = () => {
   const [tecnici, setTecnici] = useState<Tecnico[]>([]);
@@ -65,6 +66,7 @@ const GestioneAccessi = () => {
         cognome: doc.data().cognome || '',
         email: doc.data().email || '',
         attivo: doc.data().attivo === true,
+        // Assicuriamoci che appAccess sia sempre un booleano
         appAccess: doc.data().appAccess === true,
       } as Tecnico));
       setTecnici(tecniciList);
@@ -84,25 +86,33 @@ const GestioneAccessi = () => {
       showSnackbar('Impossibile abilitare un utente senza email. Aggiorna l\'anagrafica.', 'error');
       return;
     }
+
     setOperating(true);
     const newState = !tecnico.appAccess;
+
     try {
-        // Aggiorna prima l'autenticazione Firebase
-        await manageAccess({ email: tecnico.email, disabled: !newState });
-        // Poi aggiorna il campo in Firestore
+        // La nuova funzione si aspetta l'email e l'azione desiderata (enable/disable)
+        // Se l'utente non esiste durante un'abilitazione, la funzione cloud lo creerà.
+        await manageTecnicoAccess({ 
+            email: tecnico.email, 
+            action: newState ? 'enable' : 'disable' 
+        });
+
+        // L'aggiornamento di Firestore avviene ora nella Cloud Function per coerenza,
+        // ma lo facciamo anche qui per una risposta immediata dell'UI.
         const tecnicoRef = doc(db, 'tecnici', tecnico.id);
         await updateDoc(tecnicoRef, { appAccess: newState });
 
         showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
-        // Aggiorna lo stato locale per riflettere il cambiamento immediatamente
         setTecnici(prevTecnici => prevTecnici.map(t => t.id === tecnico.id ? { ...t, appAccess: newState } : t));
+
     } catch (err) {
-        handleDetailedError(err, "Abilitazione Fallita");
+        handleDetailedError(err, "Operazione Fallita");
+        // Se l'operazione fallisce, non aggiorniamo lo stato locale per mantenere la coerenza
     } finally {
         setOperating(false);
     }
 };
-
 
   const executeResetPassword = async (email: string) => {
     setOperating(true);

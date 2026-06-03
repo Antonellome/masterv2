@@ -41,7 +41,10 @@ const initialFormData: Partial<Tecnico> = {
     dittaId: '', categoriaId: '', tipoContratto: '', // Rimosso qualificaId
     numeroPatente: '', categoriaPatente: '', numeroCQC: '', 
     numeroCartaIdentita: '', numeroPassaporto: '',
-    note: '', attivo: true, dataSync: null,
+    note: '', 
+    attivo: true, 
+    appAccess: false, // <-- AGGIUNTO: Inizializza l'accesso all'app a false
+    dataSync: null,
     dataAssunzione: null, scadenzaContratto: null, scadenzaVisita: null, scadenzaUnilav: null,
     scadenzaCartaIdentita: null, scadenzaPassaporto: null, scadenzaPatente: null, scadenzaCQC: null,
     scadenzaCorsoSicurezza: null, scadenzaPrimoSoccorso: null, scadenzaAntincendio: null
