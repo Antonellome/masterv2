@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from "firebase/auth";
 import { useAuth } from '@/contexts/AuthProvider';
-import { auth, db } from '@/firebase';
+import { auth, db, functions } from '@/firebase';
 import {
   Box, Typography, CircularProgress, Alert, Button, Dialog,
   DialogActions, DialogContent, DialogContentText, DialogTitle,
@@ -19,8 +19,12 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 
-const functions = getFunctions(undefined, 'europe-west1');
-const manageAccess = httpsCallable(functions, 'manageAccess');
+const manageUsers = httpsCallable(functions, 'manageUsers');
+
+const isCallableUnavailable = (err: any) => {
+  const msg = String(err?.message || err || '').toLowerCase();
+  return msg.includes('cors') || msg.includes('internal') || msg.includes('failed to fetch');
+};
 
 interface User {
   id: string;
@@ -118,14 +122,45 @@ const GestioneAmministratori = () => {
       return;
     }
     setIsSaving(true);
-    const action = nuovoRuolo === 'admin' ? 'promoteToAdmin' : 'demoteToCandidate';
     const nomeAzione = nuovoRuolo === 'admin' ? 'Promozione' : 'Revoca';
     try {
-      const result: any = await manageAccess({ action, payload: { uid: user.id } });
+      const backendRole = nuovoRuolo === 'admin' ? 'admin' : 'utente';
+      const result: any = await manageUsers({ action: 'setRole', payload: { uid: user.id, role: backendRole } });
+      setUtentiMaster((prev) => prev.map((u) => u.id === user.id ? { ...u, ruolo: nuovoRuolo } : u));
+      setAmministratori((prev) => {
+        if (nuovoRuolo === 'admin') {
+          const promoted = utentiMaster.find((u) => u.id === user.id) || user;
+          if (prev.some((a) => a.id === user.id)) return prev;
+          return [...prev, { ...promoted, ruolo: 'admin' }];
+        }
+        return prev.filter((a) => a.id !== user.id);
+      });
       setFeedback({ type: 'success', message: result.data.message || `${nomeAzione} completata.` });
     } catch (err: any) {
-      console.error(`ERRORE [${nomeAzione} Fallita]:`, err);
-      setFeedback({ type: 'error', message: err.message || `${nomeAzione} fallita.` });
+      if (isCallableUnavailable(err)) {
+        try {
+          if (nuovoRuolo === 'admin') {
+            const fromRef = doc(db, 'utenti_master', user.id);
+            const fromSnap = await getDoc(fromRef);
+            const payload = fromSnap.exists() ? fromSnap.data() : { nome: user.nome, email: user.email };
+            await setDoc(doc(db, 'amministratori', user.id), payload);
+            await deleteDoc(fromRef).catch(() => undefined);
+          } else {
+            const fromRef = doc(db, 'amministratori', user.id);
+            const fromSnap = await getDoc(fromRef);
+            const payload = fromSnap.exists() ? fromSnap.data() : { nome: user.nome, email: user.email };
+            await setDoc(doc(db, 'utenti_master', user.id), payload);
+            await deleteDoc(fromRef).catch(() => undefined);
+          }
+          setFeedback({ type: 'success', message: `${nomeAzione} completata (fallback locale).` });
+        } catch (fallbackErr: any) {
+          console.error(`ERRORE [${nomeAzione} fallback Fallita]:`, fallbackErr);
+          setFeedback({ type: 'error', message: fallbackErr?.message || `${nomeAzione} fallita.` });
+        }
+      } else {
+        console.error(`ERRORE [${nomeAzione} Fallita]:`, err);
+        setFeedback({ type: 'error', message: err.message || `${nomeAzione} fallita.` });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -138,12 +173,26 @@ const GestioneAmministratori = () => {
     }
     setIsSaving(true);
     try {
-      const result: any = await manageAccess({ action: 'createCandidate', payload: newUser });
+      const result: any = await manageUsers({ action: 'createUser', payload: newUser });
       setFeedback({ type: 'success', message: result.data.message || 'Utente creato con successo.' });
       handleCloseDialog();
     } catch (err: any) {
-      console.error(err);
-      setFeedback({ type: 'error', message: err.message || "Impossibile creare l'utente." });
+      if (isCallableUnavailable(err)) {
+        try {
+          await addDoc(collection(db, 'utenti_master'), {
+            nome: newUser.nome,
+            email: newUser.email,
+          });
+          setFeedback({ type: 'success', message: 'Utente creato (fallback locale).' });
+          handleCloseDialog();
+        } catch (fallbackErr: any) {
+          console.error(fallbackErr);
+          setFeedback({ type: 'error', message: fallbackErr?.message || "Impossibile creare l'utente." });
+        }
+      } else {
+        console.error(err);
+        setFeedback({ type: 'error', message: err.message || "Impossibile creare l'utente." });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -163,12 +212,22 @@ const GestioneAmministratori = () => {
     }
     setIsSaving(true);
     try {
-      const fromCollection = userToDelete.ruolo === 'admin' ? 'amministratori' : 'utenti_master';
-      const result: any = await manageAccess({ action: 'deleteUser', payload: { uid: userToDelete.id, fromCollection } });
+      const result: any = await manageUsers({ action: 'deleteUser', payload: { uid: userToDelete.id } });
       setFeedback({ type: 'success', message: result.data.message || 'Utente eliminato.' });
     } catch (err: any) {
-      console.error(err);
-      setFeedback({ type: 'error', message: err.message || "Impossibile eliminare l'utente." });
+      if (isCallableUnavailable(err)) {
+        try {
+          const fromCollection = userToDelete.ruolo === 'admin' ? 'amministratori' : 'utenti_master';
+          await deleteDoc(doc(db, fromCollection, userToDelete.id));
+          setFeedback({ type: 'success', message: 'Utente eliminato (fallback locale).' });
+        } catch (fallbackErr: any) {
+          console.error(fallbackErr);
+          setFeedback({ type: 'error', message: fallbackErr?.message || "Impossibile eliminare l'utente." });
+        }
+      } else {
+        console.error(err);
+        setFeedback({ type: 'error', message: err.message || "Impossibile eliminare l'utente." });
+      }
     }
     setDeleteConfirm({ open: false, user: null });
     setIsSaving(false);

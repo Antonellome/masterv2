@@ -37,6 +37,11 @@ export interface EnrichedRapportino extends Omit<Rapportino, 'data'> {
 export interface TipoGiornata {
   id: string;
   nome: string;
+  /**
+   * Categoria informativa usata per distinguere tipi speciali.
+   * Valori previsti: 'normale' | 'trasferta' | 'ferie' | 'malattia' | 'altro'
+   */
+  categoria?: 'normale' | 'trasferta' | 'ferie' | 'malattia' | 'altro' | string;
 }
 
 export interface Commessa {
@@ -51,6 +56,8 @@ export interface AppNotification {
     title: string;
     message: string;
     createdAt: Timestamp;
+  batchId?: string;
+  recipientId: string;
     status: 'read' | 'unread';
     target: {
         type: 'user' | 'category' | 'all';
@@ -59,4 +66,19 @@ export interface AppNotification {
     };
     readAt?: Timestamp;
     readBy?: string;
+}
+
+export interface NotificaInviata {
+  id: string;
+  batchId: string;
+  title: string;
+  message: string;
+  sentAt: Timestamp;
+  recipientsCount: number;
+  target: {
+    type: 'user' | 'category' | 'all';
+    id: string;
+    name: string;
+  };
+  fcmMessageId?: string;
 }

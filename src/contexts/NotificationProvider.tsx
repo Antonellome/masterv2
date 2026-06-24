@@ -1,7 +1,7 @@
 
 // src/contexts/NotificationProvider.tsx
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore'; // Import orderBy
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/contexts/AuthProvider';
 
@@ -38,15 +38,20 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setLoading(true);
-    // CORREZIONE: Usa la collezione 'notifications', filtra per 'recipientId' e ordina per 'createdAt'
+    // Filtra per destinatario e ordina in memoria per evitare dipendenze da indici compositi
     const q = query(
       collection(db, 'notifications'), 
-      where("recipientId", "==", user.uid),
-      orderBy("createdAt", "desc") // Ordina le notifiche dalle più recenti
+      where("recipientId", "==", user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const notifs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as INotification));
+      const notifs = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as INotification))
+        .sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? 0;
+          const bTime = b.createdAt?.toMillis?.() ?? 0;
+          return bTime - aTime;
+        });
       setNotifications(notifs);
       setLoading(false);
     }, (error) => {

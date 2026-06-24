@@ -69,8 +69,17 @@ const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly 
         </Paper>
     );
 };
-const NON_LAVORATIVO_KEYWORDS = ['ferie'];
-const isGiornataLavorativa = (tipo: TipoGiornata | undefined): boolean => !tipo ? true : !NON_LAVORATIVO_KEYWORDS.some(k => (tipo.nome || '').toLowerCase().includes(k));
+const NON_LAVORATIVO_KEYWORDS = ['ferie', 'malattia', 'legge 104'];
+const isTrasfertaTipo = (tipo: TipoGiornata | undefined): boolean => {
+    if (!tipo) return false;
+    if ((tipo as any).categoria === 'trasferta') return true;
+    return (tipo.nome || '').toLowerCase().includes('trasferta');
+};
+const isGiornataLavorativa = (tipo: TipoGiornata | undefined): boolean => {
+    if (!tipo) return true;
+    if ((tipo as any).categoria === 'ferie' || (tipo as any).categoria === 'malattia') return false;
+    return !NON_LAVORATIVO_KEYWORDS.some(k => (tipo.nome || '').toLowerCase().includes(k));
+};
 const emptyDettaglioOre: DettaglioOreData = {
     tecnicoId: 'placeholder',
     nome: '',
@@ -88,6 +97,8 @@ const RapportinoEdit: React.FC = () => {
     const isEditMode = Boolean(reportId);
     const { tipiGiornata, tecnici, veicoli, navi, luoghi, loading: collectionsLoading } = useData();
     const sortedTipiGiornata = useMemo(() => [...tipiGiornata].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [tipiGiornata]);
+    const tipiGiornataLavorativi = useMemo(() => sortedTipiGiornata.filter(t => !isTrasfertaTipo(t)), [sortedTipiGiornata]);
+    const tipiGiornataTrasferta = useMemo(() => sortedTipiGiornata.filter(t => isTrasfertaTipo(t)), [sortedTipiGiornata]);
     const tipiGiornataMap = useMemo(() => new Map(tipiGiornata.map(t => [t.id, t])), [tipiGiornata]);
     const sortedNavi = useMemo(() => [...navi].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [navi]);
     const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [luoghi]);
@@ -96,6 +107,8 @@ const RapportinoEdit: React.FC = () => {
     const [tecnicoResponsabileId, setTecnicoResponsabileId] = useState<string | null>(null);
     const [data, setData] = useState<Dayjs | null>(dayjs());
     const [giornataId, setGiornataId] = useState('');
+    const [includeTrasferta, setIncludeTrasferta] = useState(false);
+    const [trasfertaId, setTrasfertaId] = useState('');
     const [isLavorativo, setIsLavorativo] = useState(true);
     const [veicoloId, setVeicoloId] = useState<string | null>(null);
     const [naveId, setNaveId] = useState<string | null>(null);
@@ -156,6 +169,9 @@ const RapportinoEdit: React.FC = () => {
                         } else {
                             setGiornataId(resolvedGiornataId);
                         }
+                        const loadedTrasfertaId = (reportData as any).trasfertaId || '';
+                        setIncludeTrasferta(Boolean(loadedTrasfertaId));
+                        setTrasfertaId(loadedTrasfertaId);
                         const tipo = tipiGiornataMap.get(resolvedGiornataId);
                         setIsLavorativo(isGiornataLavorativa(tipo));
                         setVeicoloId(reportData.veicoloId || null);
@@ -204,6 +220,8 @@ const RapportinoEdit: React.FC = () => {
             loadReport();
         } else {
             setDettaglioOre([]);
+            setIncludeTrasferta(false);
+            setTrasfertaId('');
             setPageLoading(false);
         }
     }, [isEditMode, reportId, navigate, collectionsLoading, tecnici, tipiGiornataMap, showAlert]);
@@ -244,6 +262,10 @@ const RapportinoEdit: React.FC = () => {
             showAlert("Compila tutti i campi obbligatori: Tecnico, Data e Tipo Giornata.", "warning");
             return;
         }
+        if (includeTrasferta && !trasfertaId) {
+            showAlert("Se attivi la trasferta devi selezionare il tipo di trasferta.", "warning");
+            return;
+        }
 
         setIsSaving(true);
         try {
@@ -257,8 +279,7 @@ const RapportinoEdit: React.FC = () => {
             const presenze = dettaglioOre.map(d => d.tecnicoId);
             const dettaglioOreTecniciToSave = dettaglioOre.map(d => ({ tecnicoId: d.tecnicoId, ore: d.ore || 0 }));
             const oreLavoroTotali = dettaglioOreTecniciToSave.reduce((sum, item) => sum + item.ore, 0);
-            
-            const rapportinoData: Omit<Rapportino, 'id'> = {
+            const baseRapportinoData: Omit<Rapportino, 'id'> = {
                 data: Timestamp.fromDate(data.toDate()),
                 tipoGiornataId: giornataId,
                 tecnicoId: tecnicoResponsabileId,
@@ -279,6 +300,10 @@ const RapportinoEdit: React.FC = () => {
                 updatedAt: serverTimestamp(),
                 createdBy: isEditMode ? undefined : user?.uid,
                 createdAt: isEditMode ? undefined : serverTimestamp(),
+            };
+            const rapportinoData: Omit<Rapportino, 'id'> = {
+                ...baseRapportinoData,
+                ...(includeTrasferta && trasfertaId ? ({ trasfertaId } as any) : {}),
             };
 
             if (isEditMode && reportId) {
@@ -312,9 +337,36 @@ const RapportinoEdit: React.FC = () => {
                         <FormControl fullWidth required>
                             <InputLabel>Tipo Giornata</InputLabel>
                             <Select value={giornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>
-                                {sortedTipiGiornata.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
+                                {tipiGiornataLavorativi.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
                             </Select>
                         </FormControl>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={includeTrasferta}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setIncludeTrasferta(checked);
+                                        if (!checked) setTrasfertaId('');
+                                    }}
+                                />
+                            }
+                            label="Aggiungi Trasferta"
+                            disabled={isSaving}
+                        />
+                        {includeTrasferta && (
+                            <FormControl fullWidth required>
+                                <InputLabel>Tipo di Trasferta</InputLabel>
+                                <Select
+                                    value={trasfertaId}
+                                    label="Tipo di Trasferta"
+                                    onChange={e => setTrasfertaId(e.target.value)}
+                                    disabled={isSaving}
+                                >
+                                    {tipiGiornataTrasferta.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
+                                </Select>
+                            </FormControl>
+                        )}
                         {isLavorativo && (
                              <fieldset disabled={!tecnicoResponsabileId || isSaving} style={{border: 'none', padding: 0, margin: 0}}>
                                 <Divider sx={{ my: 1 }}><Typography variant="overline">Dettaglio Ore Lavoro</Typography></Divider>

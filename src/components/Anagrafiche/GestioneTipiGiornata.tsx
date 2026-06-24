@@ -24,10 +24,18 @@ const GestioneTipiGiornata: React.FC = () => {
 
     const tipiGiornataFields = [
         { name: 'nome', label: 'Nome', type: 'text', required: true },
+        { name: 'categoria', label: 'Categoria', type: 'select', required: true, options: { items: [
+            { value: 'normale', label: 'Normale' },
+            { value: 'trasferta', label: 'Trasferta' },
+            { value: 'ferie', label: 'Ferie' },
+            { value: 'malattia', label: 'Malattia' },
+            { value: 'altro', label: 'Altro' },
+        ] }, gridProps: { size: { xs: 12, md: 6 } } },
     ];
 
     const columns = [
         { field: 'nome', headerName: 'Nome', flex: 1 },
+        { field: 'categoria', headerName: 'Categoria', flex: 1, minWidth: 140 },
     ];
 
     return (

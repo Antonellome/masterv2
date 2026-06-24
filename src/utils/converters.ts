@@ -3,7 +3,14 @@ import { Tecnico, Veicolo, Documento } from '@/models/definitions';
 
 const createConverter = <T extends { id: string, [key: string]: any }>(defaults: Omit<T, 'id'>): FirestoreDataConverter<T> => ({
     toFirestore(modelObject: T): DocumentData {
-        return modelObject;
+        // Rimuove i campi con valore undefined (Firestore non accetta undefined)
+        const cleanedData: DocumentData = {};
+        Object.keys(modelObject).forEach(key => {
+            if (modelObject[key] !== undefined) {
+                cleanedData[key] = modelObject[key];
+            }
+        });
+        return cleanedData;
     },
     fromFirestore(snapshot: QueryDocumentSnapshot, options: SnapshotOptions): T {
         const data = snapshot.data(options)!;

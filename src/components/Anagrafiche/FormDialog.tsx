@@ -20,23 +20,28 @@ const SelectField: React.FC<SelectFieldProps> = ({ field, value, onChange }) => 
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        if (field.options && 'collectionName' in field.options) {
-            const fetchOptions = async () => {
-                setLoading(true);
-                try {
-                    const snapshot = await getDocs(collection(db, field.options.collectionName));
-                    const fetchedOptions = snapshot.docs.map(doc => ({
-                        label: doc.data()[field.options.labelField] as string || 'Label non trovato',
-                        value: doc.id,
-                    }));
-                    setOptions(fetchedOptions);
-                } catch (error) {
-                    console.error(`Errore caricamento opzioni per ${field.options.collectionName}:`, error);
-                    setOptions([]);
-                }
-                setLoading(false);
-            };
-            fetchOptions();
+        if (field.options) {
+            if ('items' in field.options && Array.isArray((field.options as any).items)) {
+                const items = (field.options as any).items.map((it: any) => ({ label: it.label, value: it.value }));
+                setOptions(items);
+            } else if ('collectionName' in field.options) {
+                const fetchOptions = async () => {
+                    setLoading(true);
+                    try {
+                        const snapshot = await getDocs(collection(db, field.options.collectionName));
+                        const fetchedOptions = snapshot.docs.map(doc => ({
+                            label: doc.data()[field.options.labelField] as string || 'Label non trovato',
+                            value: doc.id,
+                        }));
+                        setOptions(fetchedOptions);
+                    } catch (error) {
+                        console.error(`Errore caricamento opzioni per ${field.options.collectionName}:`, error);
+                        setOptions([]);
+                    }
+                    setLoading(false);
+                };
+                fetchOptions();
+            }
         }
     }, [field.options]);
 

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useCollection } from 'react-firebase-hooks/firestore';
-import { collection, query, orderBy, limit, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, doc, deleteDoc, writeBatch, where, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
 import {
     Typography,
@@ -21,13 +21,14 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckIcon from '@mui/icons-material/Check';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
+import type { NotificaInviata } from '@/models/definitions';
 
 const SentNotificationsList = () => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const notificationsQuery = query(
-        collection(db, 'notifications'), 
-        orderBy('createdAt', 'desc'),
+        collection(db, 'notificheInviate'), 
+        orderBy('sentAt', 'desc'),
         limit(100)
     );
 
@@ -37,10 +38,18 @@ const SentNotificationsList = () => {
         setExpandedId(expandedId === id ? null : id);
     };
 
-    const handleDelete = async (id: string) => {
-        // Rimuovo il confirm che era il primo sospettato, ma era innocente.
+    const handleDelete = async (id: string, batchId?: string) => {
         try {
-            await deleteDoc(doc(db, 'notifications', id));
+            if (batchId) {
+                const batch = writeBatch(db);
+                const recipientsQuery = query(collection(db, 'notifications'), where('batchId', '==', batchId));
+                const recipientsSnapshot = await getDocs(recipientsQuery);
+                recipientsSnapshot.forEach((recipientDoc) => batch.delete(recipientDoc.ref));
+                batch.delete(doc(db, 'notificheInviate', id));
+                await batch.commit();
+            } else {
+                await deleteDoc(doc(db, 'notificheInviate', id));
+            }
             alert('NOTIFICA ELIMINATA.');
         } catch (err: any) {
             console.error("ERRORE DI CANCELLAZIONE:", err);
@@ -48,7 +57,7 @@ const SentNotificationsList = () => {
         }
     };
 
-    const renderTargetChip = (notification) => {
+    const renderTargetChip = (notification: NotificaInviata) => {
         const { target } = notification;
         if (!target || !target.type) return null;
         const chipProps = { size: "small", variant: "outlined", sx: { ml: 1 } };
@@ -67,9 +76,9 @@ const SentNotificationsList = () => {
     return (
         <Box sx={{ p: 0 }}> {/* --- SOSTITUITO <List> CON <Box> --- */}
             {notificationsSnapshot.docs.map((doc, index) => {
-                const notification = doc.data();
+                const notification = { id: doc.id, ...doc.data() } as NotificaInviata;
                 const isExpanded = expandedId === doc.id;
-                const createdAtDate = notification.createdAt?.toDate ? notification.createdAt.toDate() : null;
+                const createdAtDate = notification.sentAt?.toDate ? notification.sentAt.toDate() : null;
                 const formattedDate = isValid(createdAtDate) ? format(createdAtDate, "PPP 'alle' HH:mm", { locale: it }) : 'Data non disponibile';
 
                 return (
@@ -79,8 +88,8 @@ const SentNotificationsList = () => {
                             <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     <Typography variant="caption" color="text.secondary">{formattedDate}</Typography>
-                                    {notification.status === 'read' ? (
-                                        <Tooltip title={`Letto da ${notification.readBy?.name || 'sconosciuto'}`}>
+                                    {notification.recipientsCount > 0 ? (
+                                        <Tooltip title={`Inviata a ${notification.recipientsCount} destinatari`}>
                                             <DoneAllIcon sx={{ fontSize: 16, color: 'primary.main' }} />
                                         </Tooltip>
                                     ) : (
@@ -97,6 +106,7 @@ const SentNotificationsList = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', mt: 0.5 }}>
                                 <Typography variant="body1" component="div" fontWeight="bold">{notification.title}</Typography>
                                 {renderTargetChip(notification)}
+                                    <Chip label={`${notification.recipientsCount} destinatari`} size="small" sx={{ ml: 1 }} />
                             </Box>
 
                             <Collapse in={isExpanded} timeout="auto" unmountOnExit sx={{ width: '100%', mt: 1 }}>
@@ -105,7 +115,7 @@ const SentNotificationsList = () => {
                                     {notification.message}
                                 </Typography>
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', pt: 1 }}>
-                                    <IconButton size="small" onClick={() => handleDelete(doc.id)}>
+                                    <IconButton size="small" onClick={() => handleDelete(doc.id, notification.batchId)}>
                                         <DeleteIcon fontSize="small" />
                                     </IconButton>
                                 </Box>

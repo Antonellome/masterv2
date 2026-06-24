@@ -106,6 +106,159 @@ export const manageTecnicoAccess = onCall(async (request) => {
     return { success: true, message: `Accesso per l'utente ${email} è stato ${action === 'enable' ? 'abilitato' : 'disabilitato'}.` };
 });
 
+interface ManageUsersPayload {
+    action: "promoteToAdmin" | "list" | "createUser" | "setRole" | "deleteUser";
+    payload?: {
+        uid?: string;
+        email?: string;
+        nome?: string;
+        cognome?: string;
+        role?: string;
+    };
+}
+
+export const manageUsers = onCall({ region: "europe-west1" }, async (request) => {
+    const data = request.data as ManageUsersPayload;
+    const action = data?.action;
+    const payload = data?.payload;
+    const callerUid = request.auth?.uid;
+    const usersCollection = db.collection("utenti_master");
+    const adminsCollection = db.collection("amministratori");
+
+    if (!action) {
+        throw new HttpsError("invalid-argument", "Azione non specificata.");
+    }
+
+    if (action === "promoteToAdmin") {
+        if (!callerUid) {
+            throw new HttpsError("unauthenticated", "Devi essere autenticato per auto-promuoverti.");
+        }
+
+        const listUsersResult = await auth.listUsers(1000);
+        const existingAdmin = listUsersResult.users.find((u) => u.customClaims?.role === "admin");
+        if (existingAdmin && existingAdmin.uid !== callerUid) {
+            throw new HttpsError("permission-denied", "Un amministratore esiste già.");
+        }
+
+        await auth.setCustomUserClaims(callerUid, { role: "admin" });
+        return { status: "success", message: "Complimenti! L'utente è ora il primo amministratore." };
+    }
+
+    const isCallerAdmin = request.auth?.token?.role === "admin";
+    if (!isCallerAdmin) {
+        throw new HttpsError("permission-denied", "Accesso negato. Operazione riservata agli amministratori.");
+    }
+
+    switch (action) {
+        case "list": {
+            try {
+                const listUsersResult = await auth.listUsers(1000);
+                let users = listUsersResult.users.map((userRecord) => ({
+                    uid: userRecord.uid,
+                    email: userRecord.email,
+                    role: userRecord.customClaims?.role || "utente",
+                }));
+
+                const requestedRole = payload?.role;
+                if (requestedRole) {
+                    if (requestedRole.startsWith("!")) {
+                        const roleToExclude = requestedRole.substring(1);
+                        users = users.filter((u) => u.role !== roleToExclude);
+                    } else {
+                        users = users.filter((u) => u.role === requestedRole);
+                    }
+                }
+
+                return { users };
+            } catch (error: any) {
+                logger.error("Errore nel listare gli utenti", error);
+                throw new HttpsError("internal", "Errore durante il recupero degli utenti.");
+            }
+        }
+
+        case "createUser": {
+            if (!payload?.email || !payload?.nome) {
+                throw new HttpsError("invalid-argument", "Email e nome sono richiesti per creare un utente.");
+            }
+            try {
+                const userRecord = await auth.createUser({
+                    email: payload.email,
+                    displayName: `${payload.nome} ${payload.cognome || ""}`.trim(),
+                });
+
+                await auth.setCustomUserClaims(userRecord.uid, { role: "tecnico" });
+                await usersCollection.doc(userRecord.uid).set({
+                    nome: payload.nome,
+                    cognome: payload.cognome || "",
+                    email: payload.email,
+                });
+
+                return {
+                    status: "success",
+                    message: `Utente ${payload.email} creato con successo.`,
+                    user: {
+                        uid: userRecord.uid,
+                        email: userRecord.email,
+                        role: "tecnico",
+                    },
+                };
+            } catch (error: any) {
+                logger.error("Errore nella creazione dell'utente", error);
+                if (error?.code === "auth/email-already-exists") {
+                    throw new HttpsError("already-exists", `L'utente con email ${payload.email} esiste già.`);
+                }
+                throw new HttpsError("internal", "Errore sconosciuto durante la creazione dell'utente.");
+            }
+        }
+
+        case "setRole": {
+            const targetUid = payload?.uid;
+            const role = payload?.role;
+            if (!targetUid || !role) {
+                throw new HttpsError("invalid-argument", "UID utente e nuovo ruolo sono richiesti.");
+            }
+
+            try {
+                await auth.setCustomUserClaims(targetUid, { role });
+                if (role === "admin") {
+                    const sourceDoc = await usersCollection.doc(targetUid).get();
+                    const sourceData = sourceDoc.exists ? sourceDoc.data() : { uid: targetUid };
+                    await adminsCollection.doc(targetUid).set(sourceData || {});
+                    await usersCollection.doc(targetUid).delete().catch(() => undefined);
+                } else {
+                    const sourceDoc = await adminsCollection.doc(targetUid).get();
+                    const sourceData = sourceDoc.exists ? sourceDoc.data() : { uid: targetUid };
+                    await usersCollection.doc(targetUid).set(sourceData || {});
+                    await adminsCollection.doc(targetUid).delete().catch(() => undefined);
+                }
+                return { status: "success", message: "Ruolo aggiornato con successo." };
+            } catch (error: any) {
+                logger.error("Errore nell'impostare il ruolo", error);
+                throw new HttpsError("internal", "Errore durante l'aggiornamento del ruolo.");
+            }
+        }
+
+        case "deleteUser": {
+            const targetUid = payload?.uid;
+            if (!targetUid) {
+                throw new HttpsError("invalid-argument", "L'UID dell'utente è richiesto per l'eliminazione.");
+            }
+            try {
+                await auth.deleteUser(targetUid);
+                await usersCollection.doc(targetUid).delete().catch(() => undefined);
+                await adminsCollection.doc(targetUid).delete().catch(() => undefined);
+                return { status: "success", message: "Utente eliminato con successo." };
+            } catch (error: any) {
+                logger.error("Errore nell'eliminazione dell'utente", error);
+                throw new HttpsError("internal", "Impossibile eliminare l'utente.");
+            }
+        }
+
+        default:
+            throw new HttpsError("invalid-argument", `L'azione richiesta '${action}' non è valida.`);
+    }
+});
+
 
 interface SendNotificationData {
     targetType: "all" | "category" | "user";
@@ -135,6 +288,20 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
     }
 
     try {
+        const batchId = db.collection("notifications").doc().id;
+        let targetName = "";
+
+        if (targetType === "all") {
+            targetName = "Tutti i tecnici abilitati";
+        } else if (targetType === "category") {
+            const categoryDoc = await db.collection("categorie").doc(targetId).get();
+            targetName = categoryDoc.exists ? String(categoryDoc.data()?.nome || targetId) : targetId;
+        } else {
+            const tecnicoDoc = await db.collection("tecnici").doc(targetId).get();
+            const tecnicoData = tecnicoDoc.exists ? tecnicoDoc.data() : null;
+            targetName = tecnicoData ? `${tecnicoData.cognome || ""} ${tecnicoData.nome || ""}`.trim() || targetId : targetId;
+        }
+
         // 3. Get Recipient UIDs (Logica di filtro aggiornata)
         let query: admin.firestore.Query;
         switch (targetType) {
@@ -158,6 +325,28 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
         }
         logger.info(`Trovati ${uids.length} tecnici destinatari.`);
 
+        const notificationsBatch = db.batch();
+        const notificationsCollection = db.collection("notifications");
+        uids.forEach((uid) => {
+            const notificationRef = notificationsCollection.doc();
+            notificationsBatch.set(notificationRef, {
+                batchId,
+                title,
+                message,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                recipientId: uid,
+                status: "unread",
+                readAt: null,
+                readBy: null,
+                target: {
+                    type: targetType,
+                    id: targetId || "all",
+                    name: targetName,
+                },
+            });
+        });
+        await notificationsBatch.commit();
+
         // 4. Send FCM Message
         const tokenPromises = uids.map(uid => db.collection(`tecnici/${uid}/tokens`).get());
         const tokenSnapshots = await Promise.all(tokenPromises);
@@ -166,12 +355,13 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
         let fcmMessageId = "no-fcm";
         if (allTokens.length > 0) {
             logger.info(`Invio di notifiche FCM a ${allTokens.length} token.`);
-            const payload = {
+            const multicastMessage: admin.messaging.MulticastMessage = {
+                tokens: allTokens,
                 notification: { title, body: message },
                 webpush: { notification: { icon: "https://risomobile.it/images/logo.png" } },
             };
-            const response = await messaging.sendToDevice(allTokens, payload, { priority: "high" });
-            fcmMessageId = response.multicastId;
+            const response = await messaging.sendEachForMulticast(multicastMessage);
+            fcmMessageId = `success:${response.successCount}/failure:${response.failureCount}`;
         } else {
             logger.info("Nessun token FCM trovato per i destinatari.");
         }
@@ -179,16 +369,17 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
         // 5. Create Sent Notification Document
         const sentNotificationRef = db.collection("notificheInviate").doc();
         await sentNotificationRef.set({
+            batchId,
             title,
             message,
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
-            target: { type: targetType, id: targetId || "all" },
+            target: { type: targetType, id: targetId || "all", name: targetName },
             recipientsCount: uids.length,
             fcmMessageId: fcmMessageId,
         });
         logger.info("Documento 'notificheInviate' creato con successo:", { id: sentNotificationRef.id });
         
-        return { success: true, message: `Operazione completata. Notifiche inviate a ${uids.length} tecnici.` };
+        return { success: true, message: `Operazione completata. Notifiche inviate a ${uids.length} tecnici.`, batchId };
 
     } catch (error: any) {
         logger.error("Errore imprevisto durante l'invio delle notifiche:", {

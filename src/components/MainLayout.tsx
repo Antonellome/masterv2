@@ -20,12 +20,20 @@ import {
     keyframes,
     ListItemIcon
 } from '@mui/material';
-import {
-    Menu as MenuIcon, People, EventNote, Notifications, EventBusy, 
-    LocalShipping, Description, ExitToApp, Home as HomeIcon, 
-    Settings as SettingsIcon, Archive as ArchiveIcon, Refresh as RefreshIcon, Dns,
-    SentimentSatisfiedAltOutlined as SentimentSatisfiedAltOutlinedIcon
-} from '@mui/icons-material';
+import MenuIcon from '@mui/icons-material/Menu';
+import PeopleIcon from '@mui/icons-material/People';
+import EventNoteIcon from '@mui/icons-material/EventNote';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import DescriptionIcon from '@mui/icons-material/Description';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import HomeIcon from '@mui/icons-material/Home';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import DnsIcon from '@mui/icons-material/Dns';
+import SentimentSatisfiedAltOutlinedIcon from '@mui/icons-material/SentimentSatisfiedAltOutlined';
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/firebase';
@@ -53,12 +61,12 @@ const wink = keyframes`
 const menuItems = [
     { text: 'Dashboard', icon: <HomeIcon />, path: '/dashboard' }, 
     { text: 'Reportistica', icon: <ArchiveIcon />, path: '/reportistica' },
-    { text: 'Tecnici', icon: <People />, path: '/tecnici' },
-    { text: 'Presenze', icon: <EventNote />, path: '/presenze' },
-    { text: 'Anagrafiche', icon: <Dns />, path: '/anagrafiche' },
-    { text: 'Documenti', icon: <Description />, path: '/documenti' },
-    { text: 'Scadenze', icon: <EventBusy />, path: '/scadenze' },
-    { text: 'Notifiche', icon: <Notifications />, path: '/notifications' },
+    { text: 'Tecnici', icon: <PeopleIcon />, path: '/tecnici' },
+    { text: 'Presenze', icon: <EventNoteIcon />, path: '/presenze' },
+    { text: 'Anagrafiche', icon: <DnsIcon />, path: '/anagrafiche' },
+    { text: 'Documenti', icon: <DescriptionIcon />, path: '/documenti' },
+    { text: 'Scadenze', icon: <EventBusyIcon />, path: '/scadenze' },
+    { text: 'Notifiche', icon: <NotificationsIcon />, path: '/notifications' },
 ];
 
 const pageTitles: { [key: string]: string } = {
@@ -185,12 +193,12 @@ const MainLayout = () => {
                     
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Tooltip title="Scadenze">
-                             <IconButton 
+                            <IconButton 
                                  color="inherit" 
                                  onClick={() => navigate('/scadenze')}
                              >
                                  <Badge badgeContent={activeScadenzeCount} color="error">
-                                     <EventBusy sx={getScadenzeIconStyle()} />
+                                     <EventBusyIcon sx={getScadenzeIconStyle()} />
                                  </Badge>
                              </IconButton>
                         </Tooltip>
@@ -199,7 +207,7 @@ const MainLayout = () => {
                              <IconButton color="inherit" component={NavLink} to="/notifications">
                                  {/* 3. COLLEGIAMO IL CONTEGGIO AL BADGE */}
                                  <Badge badgeContent={unreadCount} color="error">
-                                     <Notifications />
+                                     <NotificationsIcon />
                                  </Badge>
                              </IconButton>
                         </Tooltip>
@@ -219,7 +227,7 @@ const MainLayout = () => {
                         </Tooltip>
                         <Menu id="menu-appbar" anchorEl={anchorEl} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} keepMounted transformOrigin={{ vertical: 'top', horizontal: 'right' }} open={Boolean(anchorEl)} onClose={handleClose}>
                             <MenuItem onClick={handleLogout}>
-                                <ListItemIcon><ExitToApp fontSize='small' /></ListItemIcon>
+                                <ListItemIcon><ExitToAppIcon fontSize='small' /></ListItemIcon>
                                 Logout
                             </MenuItem>
                         </Menu>

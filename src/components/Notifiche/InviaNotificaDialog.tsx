@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/firebase'; // Ripristino il riferimento diretto a db
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/firebase';
 import {
     Dialog,
     DialogTitle,
@@ -43,16 +43,13 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
         setError('');
 
         try {
-            // ** RIPRISTINO LOGICA ORIGINALE CON addDoc **
-            // Questo scrive un documento in Firestore, che scatena la VERA Cloud Function.
-            await addDoc(collection(db, 'notifications'), {
+            const sendNotification = httpsCallable(functions, 'sendNotification');
+            await sendNotification({
+                targetType: target.type,
+                targetId: target.id,
                 title: title.trim(),
                 message: message.trim(),
-                target: target,
-                createdAt: serverTimestamp(),
-                sent: false, // Flag per indicare che la notifica deve essere processata
             });
-
             handleClose();
         } catch (err) {
             console.error("Errore nella creazione del documento di notifica:", err);
