@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import {
   onAuthStateChanged,
@@ -29,22 +28,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                // Non impostare loading a true qui per evitare di bloccare l'UI durante il refresh del token
                 try {
                     const idTokenResult = await firebaseUser.getIdTokenResult(true);
                     const claims = idTokenResult.claims;
                     const role = claims.role as string;
 
-                    setUserRole(role === 'admin' ? 'Amministratore' : 'Tecnico');
+                    if (role !== 'admin') {
+                        // Se l'utente non è un admin, forziamo il logout e mostriamo un errore.
+                        await signOut(auth);
+                        setError("Accesso non autorizzato. Solo gli amministratori possono accedere.");
+                        setUser(null);
+                        setUserRole(null);
+                        setLoading(false);
+                        return;
+                    }
+
+                    setUserRole('Amministratore');
                     setUser(firebaseUser);
 
                 } catch (e) {
                     console.error("AuthProvider: Errore nell'ottenere il token o i claims.", e);
                     setError("Impossibile verificare i permessi dell'utente.");
-                    setUser(firebaseUser); // Manteniamo l'utente loggato ma con ruolo nullo
+                    await signOut(auth); // Logout for safety
+                    setUser(null);
                     setUserRole(null);
                 } finally {
-                    setLoading(false); // Disattiva il loading iniziale solo dopo aver gestito l'utente
+                    setLoading(false);
                 }
             } else {
                 setUser(null);
@@ -61,9 +70,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setLoading(true);
         try {
           await signInWithEmailAndPassword(auth, email, pass);
-          // Il successo viene ora gestito da onAuthStateChanged, ma dobbiamo fermare il loading qui
-          // per sbloccare la UI della pagina di login.
-          setLoading(false); 
+          // onAuthStateChanged gestirà il successo o il fallimento del controllo ruolo.
+          // Il loading viene gestito da onAuthStateChanged.
         } catch (err: unknown) {
           const error = err as { code?: string };
           let errorMessage = "Credenziali non valide o errore sconosciuto.";
@@ -79,20 +87,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               break;
           }
           setError(errorMessage);
-          setLoading(false); // Assicura che il loading si fermi anche in caso di errore
+          setLoading(false);
           throw new Error(errorMessage);
         }
     }, []);
 
     const logout = useCallback(async () => {
       setError(null);
-      setLoading(true); // Mostra un feedback durante il logout
+      setLoading(true);
       try {
         await signOut(auth);
-        // onAuthStateChanged gestirà la pulizia dello stato
       } catch (_e: unknown) {
         setError("Errore durante il logout.");
-        setLoading(false); // Assicura che il loading si fermi se il logout fallisce
+      } finally {
+        setLoading(false);
       }
     }, []);
 
