@@ -194,7 +194,7 @@ const ConsuntivoMensile = () => {
             return {
                 id: r.id,
                 data: formattedDate,
-                tipoGiornata: r.giornataId ? tipiGiornataMap.get(r.giornataId) || 'N/D' : 'N/D',
+                tipoGiornata: r.tipoGiornataId ? tipiGiornataMap.get(r.tipoGiornataId) || 'N/D' : 'N/D',
                 nave: r.naveId ? naviMap.get(r.naveId) || 'N/D' : 'N/D',
                 luogo: r.luogoId ? luoghiMap.get(r.luogoId) || 'N/D' : 'N/D',
                 oreOrdinarie,
