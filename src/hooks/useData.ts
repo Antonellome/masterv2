@@ -1,10 +1,9 @@
 
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Cliente, Tecnico, TipoGiornata, Nave, Luogo, Veicolo, Categoria } from '@/models/definitions';
+import type { Cliente, Tecnico, TipoGiornata, Nave, Luogo, Veicolo, Categoria, Impostazioni } from '@/models/definitions';
 
-// 1. Aggiungo Categoria al DataBundle
 export interface DataBundle {
   clienti: Cliente[];
   tecnici: Tecnico[];
@@ -13,10 +12,12 @@ export interface DataBundle {
   luoghi: Luogo[];
   veicoli: Veicolo[];
   categorie: Categoria[]; 
+  impostazioni: Impostazioni | null;
+  loading: boolean;
+  error: string | null;
 }
 
-// 2. Aggiungo 'categorie' all'array delle collezioni da caricare
-const collectionsToLoad: { key: keyof DataBundle; name: string }[] = [
+const collectionsToLoad: { key: keyof Omit<DataBundle, 'loading' | 'error'>; name: string, isSingleDoc?: boolean }[] = [
   { key: 'clienti', name: 'clienti' },
   { key: 'tecnici', name: 'tecnici' },
   { key: 'tipiGiornata', name: 'tipiGiornata' },
@@ -24,55 +25,54 @@ const collectionsToLoad: { key: keyof DataBundle; name: string }[] = [
   { key: 'luoghi', name: 'luoghi' },
   { key: 'veicoli', name: 'veicoli' },
   { key: 'categorie', name: 'categorie' },
+  { key: 'impostazioni', name: 'impostazioni', isSingleDoc: true },
 ];
 
-export const useData = () => {
-  const [data, setData] = useState<DataBundle>({
+export const useData = (): DataBundle => {
+  const [data, setData] = useState<Omit<DataBundle, 'loading' | 'error'>>({
     clienti: [],
     tecnici: [],
     tipiGiornata: [],
     navi: [],
     luoghi: [],
     veicoli: [],
-    categorie: [], // 3. Inizializzo lo stato
+    categorie: [],
+    impostazioni: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadStatus: Partial<Record<keyof DataBundle, boolean>> = {};
+    const loadAllData = async () => {
+        try {
+            const allData: Partial<Omit<DataBundle, 'loading' | 'error'>> = {};
+            const promises = collectionsToLoad.map(async ({ key, name, isSingleDoc }) => {
+                const collRef = collection(db, name);
+                const snapshot = await getDocs(collRef);
 
-    const unsubscribers = collectionsToLoad.map(({ key, name }) => {
-      return onSnapshot(
-        collection(db, name),
-        (snapshot) => {
-          const collectionData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any;
-          setData((prevData) => ({ ...prevData, [key]: collectionData }));
+                if (isSingleDoc) {
+                    if (!snapshot.empty) {
+                        allData[key] = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as any;
+                    } else {
+                        allData[key] = null;
+                    }
+                } else {
+                    allData[key] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any;
+                }
+            });
 
-          if (!loadStatus[key]) {
-            loadStatus[key] = true;
-            if (Object.keys(loadStatus).length === collectionsToLoad.length) {
-              setLoading(false);
-            }
-          }
-        },
-        (err) => {
-          console.error(`Errore caricamento ${name}:`, err);
-          setError(`Fallito il caricamento di ${name}.`);
-          
-          if (!loadStatus[key]) {
-            loadStatus[key] = true;
-            if (Object.keys(loadStatus).length === collectionsToLoad.length) {
-              setLoading(false);
-            }
-          }
+            await Promise.all(promises);
+            setData(allData as Omit<DataBundle, 'loading' | 'error'>);
+        } catch (err) {
+            console.error("Errore durante il caricamento dei dati: ", err);
+            setError("Impossibile caricare i dati anagrafici necessari.");
+        } finally {
+            setLoading(false);
         }
-      );
-    });
-
-    return () => {
-      unsubscribers.forEach((unsub) => unsub());
     };
+
+    loadAllData();
+
   }, []);
 
   return { ...data, loading, error };

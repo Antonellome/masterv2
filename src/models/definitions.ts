@@ -1,84 +1,137 @@
-
 import { Timestamp } from 'firebase/firestore';
 
-// Definizione per un Tecnico (CORRETTA - senza il campo 'ruolo')
-export interface Tecnico {
+export interface BaseEntity {
   id: string;
+}
+
+export interface Cliente extends BaseEntity {
+  nome: string;
+  indirizzo?: string;
+  citta?: string;
+  piva?: string;
+  codiceFiscale?: string;
+  email?: string;
+  telefono?: string;
+}
+
+export interface Tecnico extends BaseEntity {
   nome: string;
   cognome: string;
   email: string;
-  abilitato: boolean;
-  categoria?: string;
+  userId: string;
+  costoOrarioOrdinario?: number;
+  costoOrarioStraordinario?: number;
+  costoTrasferta?: number;
 }
 
-// Definizione per un Rapportino come salvato in Firestore
-export interface Rapportino {
-  id: string;
+export interface TipoGiornata extends BaseEntity {
+  nome: string;
+  categoria?: 'ordinaria' | 'straordinario' | 'trasferta' | 'special';
+  colore: string;
+  costo: number;
+  unita: 'h' | 'g';
+}
+
+export interface Nave extends BaseEntity {
+  nome: string;
+  clienteId: string;
+}
+
+export interface Luogo extends BaseEntity {
+  nome: string;
+}
+
+export interface Veicolo extends BaseEntity {
+  nome: string;
+}
+
+export interface Categoria extends BaseEntity {
+  nome: string;
+}
+
+export interface DettaglioOreTecnico {
   tecnicoId: string;
-  data: Timestamp; // In Firestore, la data è un Timestamp
+  ore: number;
+}
+
+export interface Rapportino extends BaseEntity {
+  data: any; // O Timestamp
+  userId: string;
+  tecnicoId: string; // Tecnico principale
+  presenze?: string[]; // ID dei tecnici presenti
+  dettaglioOreTecnici?: DettaglioOreTecnico[];
+  naveId: string;
+  luogoId: string;
+  veicoloId: string;
+  oreLavoro?: number;
   tipoGiornataId: string;
-  oreLavorate: number;
-  oreViaggio: number;
-  km: number;
-  note: string;
-  commesse: { commessaId: string; ore: number }[];
+  isTrasferta?: boolean; // Vecchio campo
+  trasfertaId?: string; // Nuovo campo
+  note?: string;
+  approvato: boolean;
+  firmaVettoriale?: string;
+  orarioIngresso?: string; 
+  orarioUscita?: string;
 }
 
-// Definizione per un Rapportino "arricchito" lato client
-// La vostra app Tecnici converte il Timestamp in Date, quindi questo tipo è corretto per voi
-export interface EnrichedRapportino extends Omit<Rapportino, 'data'> {
-  data: Date; // In JavaScript, dopo la conversione, è un Date
-  isEditable: boolean;
-  tipoGiornata: any; 
-  commesseDettagliate: any[]; 
+export interface EnrichedRapportino extends Rapportino {
+  dataFormatted: string;
+  tipoGiornata?: TipoGiornata;
+  tipoGiornataNome: string;
+  naveNome: string; 
+  luogoNome: string;
+  oreGiorno: number;
+  oreOrdinarie: number; 
+  oreStraordinarie: number; 
+  isEditable?: boolean;
 }
 
-// Altre definizioni...
-export interface TipoGiornata {
+
+export interface Impostazioni extends BaseEntity {
+    tariffe: {
+        tipoGiornataId: string;
+        costo: number;
+        unita: 'h' | 'g';
+    }[];
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  nome: string | null;
+  cognome: string | null;
+  isAdmin: boolean;
+  isTecnico: boolean;
+  tecnicoId: string | null;
+}
+
+export interface MasterData {
+  clienti: Cliente[];
+  tecnici: Tecnico[];
+  tipiGiornata: TipoGiornata[];
+  navi: Nave[];
+  luoghi: Luogo[];
+  veicoli: Veicolo[];
+  categorie: Categoria[];
+}
+
+export interface RiepilogoVoce {
   id: string;
   nome: string;
-  /**
-   * Categoria informativa usata per distinguere tipi speciali.
-   * Valori previsti: 'normale' | 'trasferta' | 'ferie' | 'malattia' | 'altro'
-   */
-  categoria?: 'normale' | 'trasferta' | 'ferie' | 'malattia' | 'altro' | string;
+  colore: string;
+  unita: 'h' | 'g';
+  oreTotali: number;
+  giorni: number;
+  costo: number;
+  giorniSet?: Set<string>;
 }
 
-export interface Commessa {
-    id: string;
-    codice: string;
-    descrizione: string;
-}
-
-// Definizione di una Notifica come generata dall'app Master
-export interface AppNotification {
-    id: string;
-    title: string;
-    message: string;
-    createdAt: Timestamp;
-  batchId?: string;
-  recipientId: string;
-    status: 'read' | 'unread';
-    target: {
-        type: 'user' | 'category' | 'all';
-        id: string;
-        name: string;
-    };
-    readAt?: Timestamp;
-    readBy?: string;
-}
-
-export interface NotificaInviata {
-  id: string;
-  batchId: string;
-  title: string;
-  message: string;
-  sentAt: Timestamp;
-  recipientsCount: number;
-  target: {
-    type: 'user' | 'category' | 'all';
-    id: string;
-    name: string;
-  };
-  fcmMessageId?: string;
+export interface RiepilogoMese {
+  dettaglio: Map<string, RiepilogoVoce>;
+  oreTotali: number;
+  oreOrdinarie: number;
+  oreStraordinarie: number;
+  giorniTotaliLavorati: number;
+  giorniTrasferta: number;
+  costoTotale: number;
 }

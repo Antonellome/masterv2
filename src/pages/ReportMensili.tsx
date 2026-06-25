@@ -1,23 +1,38 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { Paper, Typography, Box, Grid, Autocomplete, TextField, CircularProgress, Tooltip } from '@mui/material';
+import { Paper, Typography, Box, Grid, Autocomplete, TextField, CircularProgress, Tooltip, Button } from '@mui/material';
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';
 import { useData } from '@/hooks/useData';
-import { Rapportino, Tecnico } from '@/models/definitions';
+import { Rapportino, Tecnico, EnrichedRapportino, RiepilogoMese, MasterData } from '@/models/definitions';
 import { useNavigate } from 'react-router-dom';
 import EditIcon from '@mui/icons-material/Edit';
-import PrintIcon from '@mui/icons-material/Print';
+import PrintIcon from '@mui/icons-print/Print';
 import CheckIcon from '@mui/icons-material/Check';
 import { useAlert } from '@/contexts/AlertContext';
-import { generateRapportinoPDF } from '@/services/pdfService';
+import { calculateMonthlyReportData } from '@/services/reportService';
+import { generateMonthlyReportPDF } from '@/services/pdfMonthlyReportService';
 import PdfPreviewDialog from '@/components/Rapportini/PdfPreviewDialog';
 
 dayjs.locale('it');
+
+// Funzione di debug per scrivere su file
+const writeDebugData = async (data: any) => {
+    try {
+        // Usa un'API fittizia o un metodo per inviare i dati a un file
+        // Nel nostro ambiente, useremo un comando speciale tramite console.
+        console.log("DEBUG_DATA_START");
+        console.log(JSON.stringify(data, null, 2));
+        console.log("DEBUG_DATA_END");
+    } catch (error) {
+        console.error("Errore nella scrittura del file di debug:", error);
+    }
+};
+
 
 const ReportMensili: React.FC = () => {
     const navigate = useNavigate();
@@ -32,120 +47,79 @@ const ReportMensili: React.FC = () => {
     const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-    const [selectedRapportino, setSelectedRapportino] = useState<Rapportino | null>(null);
+    const [pdfFileName, setPdfFileName] = useState('report.pdf');
+
+    // DEBUG: Aggiungi un effetto per scrivere i dati di tipiGiornata quando cambiano
+    useEffect(() => {
+        if (tipiGiornata && tipiGiornata.length > 0) {
+            const debugData = { tipiGiornata };
+            // Scrive i dati in un file per l'analisi
+            // Nota: questa chiamata è solo un esempio, l'effettiva scrittura avverrà tramite tool
+             writeDebugData(debugData);
+        }
+    }, [tipiGiornata]);
 
     useEffect(() => {
+        setRapportiniLoading(true);
         const unsub = onSnapshot(collection(db, 'rapportini'), snapshot => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rapportino));
             setRapportini(data);
             setRapportiniLoading(false);
         }, () => {
+            showAlert('Errore nel caricamento dei rapportini', 'error');
             setRapportiniLoading(false);
         });
         return () => unsub();
-    }, []);
+    }, [showAlert]);
 
-    useEffect(() => {
-        if (selectedRapportino && isPdfPreviewOpen) {
-            const generatePdf = async () => {
-                setIsGeneratingPdf(true);
-                try {
-                    const masterData = { tecnici, navi, luoghi, veicoli, tipiGiornata, clienti };
-                    const pdfBlob = await generateRapportinoPDF(selectedRapportino, masterData);
-                    const url = URL.createObjectURL(pdfBlob);
-                    setPdfUrl(url);
-                } catch (error) {
-                    console.error("Errore PDF: ", error);
-                    showAlert("Errore durante la generazione del PDF.", "error");
-                    setIsPdfPreviewOpen(false);
-                } finally {
-                    setIsGeneratingPdf(false);
-                }
-            };
-            generatePdf();
+    const monthlyReportData = useMemo(() => {
+        if (!selectedTecnico || anagraficheLoading || !tipiGiornata?.length) {
+            return { rapportiniArricchiti: [], riepilogoMese: null };
         }
-    }, [selectedRapportino, isPdfPreviewOpen, tecnici, navi, luoghi, veicoli, tipiGiornata, clienti, showAlert]);
+        const masterData: MasterData = { ...anagrafiche, tipiGiornata: anagrafiche.tipiGiornata || [] };
+        return calculateMonthlyReportData(rapportini, masterData, selectedTecnico.id, selectedMonth.toDate());
+    }, [rapportini, selectedMonth, selectedTecnico, anagrafiche, anagraficheLoading, tipiGiornata]);
 
-    const handleShareClick = useCallback((id: string) => {
-        const rapportinoToShare = rapportini.find(r => r.id === id);
-        if (!rapportinoToShare) {
-            showAlert('Rapportino non trovato.', 'error');
-            return;
-        }
-        const rapportinoConDataCorretta = {
-            ...rapportinoToShare,
-            data: rapportinoToShare.data.toDate ? rapportinoToShare.data.toDate() : new Date(rapportinoToShare.data),
-        };
-        
-        setSelectedRapportino(rapportinoConDataCorretta as Rapportino);
-        setIsPdfPreviewOpen(true);
-
-    }, [rapportini, showAlert]);
-
-    const filteredData = useMemo(() => {
-        if (!selectedTecnico) return [];
-        const startOfMonth = selectedMonth.startOf('month');
-        const endOfMonth = selectedMonth.endOf('month');
-        return rapportini.filter(r => {
-            const rapportinoDate = dayjs(r.data.toDate());
-            const isInMonth = rapportinoDate.isBetween(startOfMonth, endOfMonth, null, '[]');
-            const isTecnico = (r.presenze || []).includes(selectedTecnico.id);
-            return isInMonth && isTecnico;
-        }).map(r => {
-            const nave = navi.find(n => n.id === r.naveId);
-            return {
-                id: r.id,
-                data: dayjs(r.data.toDate()).format('DD/MM/YYYY'),
-                nave: nave?.nome || 'N/D',
-                luogo: luoghi.find(l => l.id === r.luogoId)?.nome || 'N/D',
-                cliente: clienti.find(c => c.id === nave?.clienteId)?.nome || 'N/D',
-                ore: r.dettaglioOreTecnici?.find(d => d.tecnicoId === selectedTecnico.id)?.ore || r.oreLavoro || 0,
-                tipoGiornata: tipiGiornata.find(t => t.id === r.tipoGiornataId)?.nome || 'N/D',
-                firmato: !!r.firmaVettoriale,
-                rawData: r.data.toDate(),
-            }
-        });
-    }, [rapportini, selectedMonth, selectedTecnico, navi, clienti, luoghi, tipiGiornata]);
-
-    const totals = useMemo(() => {
-        if (!selectedTecnico) return { ore: 0, giorni: 0, trasferte: 0 };
-        const ore = filteredData.reduce((acc, curr) => acc + (curr.ore || 0), 0);
-        const giorni = filteredData.length;
-        const trasferte = rapportini.filter(r => {
-             const rapportinoDate = dayjs(r.data.toDate());
-             const isInMonth = rapportinoDate.isBetween(selectedMonth.startOf('month'), selectedMonth.endOf('month'), null, '[]');
-             const isTecnico = (r.presenze || []).includes(selectedTecnico.id);
-             return isInMonth && isTecnico && r.isTrasferta;
-        }).length;
-        return { ore, giorni, trasferte };
-    }, [filteredData, rapportini, selectedMonth, selectedTecnico]);
+    const { rapportiniArricchiti, riepilogoMese } = monthlyReportData;
 
     const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
 
-    const columns: GridColDef[] = [
-        { field: 'data', headerName: 'Data', width: 120 },
-        { field: 'cliente', headerName: 'Cliente', flex: 1 },
-        { field: 'nave', headerName: 'Nave', flex: 1 },
-        { field: 'luogo', headerName: 'Luogo', flex: 1 },
-        { field: 'tipoGiornata', headerName: 'Tipo Giornata', flex: 1 },
-        { field: 'ore', headerName: 'Ore Lavorate', width: 120, align: 'right', headerAlign: 'right' },
-        {
-            field: 'firmato',
-            headerName: 'Firmato',
-            width: 80,
-            align: 'center',
-            headerAlign: 'center',
-            renderCell: params => params.value ? <Tooltip title="Firmato"><CheckIcon color="success" /></Tooltip> : null
-        },
-        {
-            field: 'actions',
-            type: 'actions',
-            width: 80,
-            getActions: ({ id }) => [
-                <GridActionsCellItem icon={<Tooltip title="Modifica"><EditIcon /></Tooltip>} label="Modifica" onClick={() => handleEdit(id as string)} />,
-                <GridActionsCellItem icon={<Tooltip title="Stampa/Condividi"><PrintIcon /></Tooltip>} label="Stampa" onClick={() => handleShareClick(id as string)} />,
-            ],
-        },
+    const handlePrintMonthlyReport = async () => {
+        if (!riepilogoMese || !selectedTecnico) return;
+        setIsGeneratingPdf(true);
+        try {
+            const masterData = { ...anagrafiche, tipiGiornata: anagrafiche.tipiGiornata || [] };
+            const pdfBlob = await generateMonthlyReportPDF(rapportiniArricchiti, riepilogoMese, selectedTecnico, selectedMonth.toDate(), masterData);
+            const url = URL.createObjectURL(pdfBlob);
+            setPdfUrl(url);
+            setPdfFileName(`Report_${selectedTecnico.cognome}_${selectedMonth.format('MM-YYYY')}.pdf`);
+            setIsPdfPreviewOpen(true);
+        } catch (error) {
+            console.error("Errore PDF: ", error);
+            showAlert("Errore durante la generazione del PDF.", "error");
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
+
+    const handleClosePdfPreview = () => {
+        setIsPdfPreviewOpen(false);
+        if (pdfUrl) {
+            URL.revokeObjectURL(pdfUrl);
+            setPdfUrl(null);
+        }
+    };
+
+    const columns: GridColDef<EnrichedRapportino>[] = [
+        { field: 'data', headerName: 'Data', width: 110, valueGetter: (params) => dayjs(params.row.data).format('DD/MM/YYYY') },
+        { field: 'cliente', headerName: 'Cliente', flex: 1, valueGetter: (params) => clienti.find(c => c.id === navi.find(n => n.id === params.row.naveId)?.clienteId)?.nome || 'N/D' },
+        { field: 'nave', headerName: 'Nave', flex: 1, valueGetter: (params) => navi.find(n => n.id === params.row.naveId)?.nome || 'N/D' },
+        { field: 'tipoGiornata', headerName: 'Tipo Giornata', flex: 1, valueGetter: (params) => params.row.tipoGiornata?.nome || 'N/D' },
+        { field: 'oreOrdinarie', headerName: 'Ord.', width: 70, align: 'right', headerAlign: 'right' },
+        { field: 'oreStraordinarie', headerName: 'Straord.', width: 80, align: 'right', headerAlign: 'right' },
+        { field: 'isTrasferta', headerName: 'Trasf.', width: 70, align: 'center', headerAlign: 'center', renderCell: params => params.row.trasfertaId ? <CheckIcon color="primary" /> : null },
+        { field: 'firmato', headerName: 'Firmato', width: 80, align: 'center', headerAlign: 'center', renderCell: params => params.row.firmaVettoriale ? <Tooltip title="Firmato"><CheckIcon color="success" /></Tooltip> : null },
+        { field: 'actions', type: 'actions', width: 60, getActions: ({ id }) => [<GridActionsCellItem icon={<Tooltip title="Modifica"><EditIcon /></Tooltip>} label="Modifica" onClick={() => handleEdit(id as string)} />] },
     ];
 
     if (anagraficheLoading || rapportiniLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>;
@@ -154,15 +128,17 @@ const ReportMensili: React.FC = () => {
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Box sx={{ p: { xs: 2, sm: 3 } }}>
                 <Paper elevation={3} sx={{ p: { xs: 2, sm: 3 }, mb: 3 }}>
-                    <Typography variant="h5" gutterBottom>Report Mensile Tecnico</Typography>
-                    <Grid container spacing={2} alignItems="center">
+                     <Grid container spacing={2} alignItems="center" justifyContent="space-between">
+                        <Grid item><Typography variant="h5">Report Mensile Tecnico</Typography></Grid>
+                        <Grid item>
+                            <Button variant="contained" startIcon={<PrintIcon />} onClick={handlePrintMonthlyReport} disabled={!selectedTecnico || isGeneratingPdf || !riepilogoMese}>
+                                {isGeneratingPdf ? 'Generazione...' : 'Stampa Report'}
+                            </Button>
+                        </Grid>
+                    </Grid>
+                    <Grid container spacing={2} alignItems="center" sx={{mt: 1}}>
                         <Grid item xs={12} sm={6}>
-                            <DatePicker
-                                views={['month', 'year']}
-                                label="Mese e Anno"
-                                value={selectedMonth}
-                                onChange={(newDate) => setSelectedMonth(newDate || dayjs())}
-                            />
+                            <DatePicker views={['month', 'year']} label="Mese e Anno" value={selectedMonth} onChange={(d) => setSelectedMonth(d || dayjs())} />
                         </Grid>
                         <Grid item xs={12} sm={6}>
                             <Autocomplete
@@ -171,61 +147,49 @@ const ReportMensili: React.FC = () => {
                                 value={selectedTecnico}
                                 onChange={(_, newValue) => setSelectedTecnico(newValue)}
                                 renderInput={(params) => <TextField {...params} label="Seleziona Tecnico" />}
+                                disableClearable
                             />
                         </Grid>
                     </Grid>
                 </Paper>
 
-                {selectedTecnico && (
+                {selectedTecnico && riepilogoMese && (
                     <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
-                        <Typography variant="h6">Riepilogo per {selectedTecnico.cognome} {selectedTecnico.nome}</Typography>
-                        <Typography>Mese: {selectedMonth.format('MMMM YYYY')}</Typography>
-                        <Typography>Totale Ore Lavorate: {totals.ore}</Typography>
-                        <Typography>Totale Giorni Lavorati: {totals.giorni}</Typography>
-                        <Typography>Totale Trasferte: {totals.trasferte}</Typography>
+                        <Typography variant="h6">Riepilogo per {selectedTecnico.cognome} {selectedTecnico.nome} - {selectedMonth.format('MMMM YYYY')}</Typography>
+                        <Grid container spacing={2} sx={{ mt: 1 }}>
+                            <Grid item xs={6} sm={4} md={2}><Typography>Ore Ordinarie: <strong>{riepilogoMese.oreOrdinarie}</strong></Typography></Grid>
+                            <Grid item xs={6} sm={4} md={2}><Typography>Ore Straordinarie: <strong>{riepilogoMese.oreStraordinarie}</strong></Typography></Grid>
+                            <Grid item xs={6} sm={4} md={2}><Typography>Ore Totali: <strong>{riepilogoMese.oreTotali}</strong></Typography></Grid>
+                            <Grid item xs={6} sm={4} md={3}><Typography>Giorni Lavorati: <strong>{riepilogoMese.giorniTotaliLavorati}</strong></Typography></Grid>
+                            <Grid item xs={6} sm={4} md={3}><Typography>Giorni Trasferta: <strong>{riepilogoMese.giorniTrasferta}</strong></Typography></Grid>
+                            <Grid item xs={12}><Typography variant="h6" sx={{mt: 2}}>Costo Totale Mensile: <strong>{riepilogoMese.costoTotale.toFixed(2)} €</strong></Typography></Grid>
+                        </Grid>
                     </Paper>
                 )}
 
                 {selectedTecnico && (
                     <Paper sx={{ height: 600, width: '100%' }}>
-                        <DataGrid
-                            rows={filteredData.sort((a,b) => b.rawData.getTime() - a.rawData.getTime())}
-                            columns={columns}
-                            density="compact"
-                            rowHeight={42}
-                        />
+                        <DataGrid rows={rapportiniArricchiti} columns={columns} density="compact" rowHeight={42} loading={rapportiniLoading} initialState={{ sorting: { sortModel: [{ field: 'data', sort: 'desc' }] } }} />
                     </Paper>
                 )}
 
                 <PdfPreviewDialog
                     open={isPdfPreviewOpen}
-                    onClose={() => {
-                        setIsPdfPreviewOpen(false);
-                        if (pdfUrl) {
-                            URL.revokeObjectURL(pdfUrl);
-                            setPdfUrl(null);
-                        }
-                        setSelectedRapportino(null);
-                    }}
+                    onClose={handleClosePdfPreview}
                     onShare={async () => {
-                        if (!pdfUrl || !selectedRapportino?.data) return;
+                        if (!pdfUrl) return;
                         try {
                             const response = await fetch(pdfUrl);
                             const blob = await response.blob();
-                            const file = new File([blob], `Rapportino-${dayjs(selectedRapportino.data).format('DD-MM-YYYY')}.pdf`, { type: 'application/pdf' });
-                            if (navigator.share) {
-                                await navigator.share({
-                                    files: [file],
-                                    title: `Rapportino ${dayjs(selectedRapportino.data).format('DD-MM-YYYY')}`,
-                                });
-                            }
+                            const file = new File([blob], pdfFileName, { type: 'application/pdf' });
+                            if (navigator.share) await navigator.share({ files: [file], title: pdfFileName.replace('.pdf', '') });
                         } catch (err) {
                             showAlert('Condivisione non riuscita.', 'error');
                         }
                     }}
                     pdfDataUrl={pdfUrl}
                     isGenerating={isGeneratingPdf}
-                    fileName={selectedRapportino?.data ? `Rapportino-${dayjs(selectedRapportino.data).format('DD-MM-YYYY')}.pdf` : 'Rapportino.pdf'}
+                    fileName={pdfFileName}
                 />
             </Box>
         </LocalizationProvider>

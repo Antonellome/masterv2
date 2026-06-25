@@ -1,88 +1,56 @@
-# GUIDA UFFICIALE: RIPROGETTAZIONE LOGICA NOTIFICHE
+# Blueprint: Correzione e Finalizzazione Report Mensili (App Master)
 
-**A:** App Master (Gestione Master AI)
-**DA:** App Tecnici (Gestione IA Gemini)
+## Lingua e Comunicazione
 
-**Oggetto: Nuovo Dettaglio Lavori - Riprogettazione Logica Notifiche**
+**Questa applicazione è sviluppata e pensata per un'utenza italiana. Tutta l'interfaccia, la documentazione e le comunicazioni relative al progetto devono essere in lingua italiana.**
 
-Master,
+## 1. Scopo dell'Intervento
 
-in base all'analisi dei requisiti e dei principi architetturali del progetto (efficienza, riduzione dei costi, scalabilità), si sottopone alla vostra attenzione il seguente dettaglio lavori per l'implementazione di un nuovo sistema di notifiche.
+Questo documento definisce il piano d'azione definitivo per correggere la logica di calcolo dei report mensili all'interno dell'**App Master**. L'obiettivo è allineare l'applicazione all'architettura dati corretta, visualizzare dati accurati e introdurre la funzionalità di esportazione PDF.
 
-Questo piano mira a creare un flusso robusto, distinguendo chiaramente le responsabilità tra il backend (invio) e il client (conferma di lettura), in linea con le best practice già adottate per i rapportini.
+L'intervento si basa sull'adattamento dei principi di calcolo definiti in `calcoli.md` al contesto dell'App Master, dove l'utente (il Master) analizza i dati di un tecnico specifico (`selectedTecnico`).
 
----
+**Fonte di Verità per le Tariffe:** La tariffa (costo e unità di misura) per ogni tipo di lavoro **deve** essere letta direttamente dal documento corrispondente nella collezione `tipiGiornata`. Qualsiasi altro approccio, come l'uso di campi costo hard-coded nell'oggetto `tecnico`, è errato e verrà rimosso.
 
-### **FASE 1: Invio Notifiche (A Carico dell'App Master)**
+## 2. Stato Attuale e Problema Analizzato
 
-Questa fase riguarda la capacità dell'App Master di inviare notifiche mirate.
+- **Logica Errata:** La logica di calcolo iniziale era inefficiente, illeggibile e basata su presupposti errati.
+- **Fonte Dati Sbagliata:** I costi venivano letti da campi statici nell'oggetto `tecnico`, ignorando le tariffe dinamiche definite in `tipiGiornata`.
+- **Bug di Visualizzazione:** Le ore di tipo "Straordinario" venivano erroneamente visualizzate nella colonna "Ordinarie" nella tabella dei report.
 
-**1.1. Obiettivo:**
-Creare un'infrastruttura backend in grado di inviare notifiche a:
-*   Tutti i tecnici.
-*   Una specifica categoria di tecnici.
-*   Un singolo tecnico.
+## 3. Piano di Implementazione Definitivo
 
-**1.2. Proposta Tecnica:**
-Si propone la creazione di una **singola Cloud Function HTTPS (`onCall`)** denominata `sendNotification`. Questa scelta è la più efficace e sicura per centralizzare la logica di invio.
+### Fase 1: Creazione del Servizio di Calcolo Adattato (`reportService.ts`)
 
-**1.3. Dettagli della Cloud Function `sendNotification`:**
-*   **Input:** La funzione accetterà un oggetto con i seguenti parametri:
-    *   `targetType`: Stringa. Valori possibili: `'all'`, `'category'`, `'user'`.
-    *   `targetId`: Stringa. Opzionale, obbligatorio se `targetType` è `'category'` o `'user'`.
-    *   `title`: Stringa. Il titolo della notifica.
-    *   `message`: Stringa. Il corpo del messaggio.
-*   **Logica Interna:**
-    1.  Esegue controlli di autenticazione e autorizzazione (solo l'App Master può invocarla).
-    2.  In base al `targetType`, recupera l'elenco dei `recipientId` (UID dei tecnici) dalla collezione `tecnici`.
-    3.  Per ogni `recipientId`, crea un nuovo documento nella collezione `notifications`.
-*   **Output:** Un nuovo documento nella collezione `notifications` per ogni destinatario.
+**Obiettivo:** Isolare la logica di calcolo in un servizio dedicato, robusto e corretto.
 
-**1.4. Struttura del Documento `notifications/{notificationId}`:**
-```json
-{
-  "title": "Titolo della notifica",
-  "message": "Corpo del messaggio...",
-  "createdAt": "Timestamp",
-  "recipientId": "UID del tecnico destinatario",
-  "status": "unread",
-  "readAt": null,
-  "readBy": null
-}
-```
+- **Azione:** Creare il file `src/services/reportService.ts`.
+- **Logica Interna:** La funzione `calculateMonthlyReportData` è stata sviluppata per:
+    1. Filtrare e arricchire i rapportini del tecnico e del mese selezionati.
+    2. Raggruppare i rapportini per giorno.
+    3. Suddividere correttamente le ore in "Ordinarie" e "Straordinarie" basandosi sulla **categoria** del `tipoGiornata`.
+    4. Calcolare i costi applicando le tariffe corrette lette da `tipiGiornata`.
 
----
-### **FASE 2: Conferma Lettura Notifiche (A Carico dell'App Tecnici)**
+### Fase 2: Riprogettazione del Componente `ReportMensili.tsx`
 
-Questa fase riguarda la gestione della lettura della notifica da parte del tecnico, ottimizzata per minimizzare costi e latenza.
+**Obiettivo:** Utilizzare il nuovo servizio per visualizzare dati accurati.
 
-**2.1. Obiettivo:**
-Permettere al tecnico di marcare una notifica come "letta", registrando l'informazione nel database con il minimo impatto sui costi delle Cloud Function.
+- **Azione:** Il componente `src/pages/ReportMensili.tsx` è stato modificato per:
+    - Importare e usare `calculateMonthlyReportData`.
+    - Popolare l'interfaccia utente (tabella e riepilogo) con i dati corretti restituiti dal servizio.
 
-**2.2. Proposta Tecnica:**
-L'operazione di conferma lettura verrà gestita **interamente dal client (App Tecnici)**, senza l'invocazione di alcuna Cloud Function. Questo approccio sfrutta il sistema di sincronizzazione nativo di Firestore e la sua gestione della cache offline, esattamente come già avviene per la creazione dei rapportini.
+### Fase 3: Implementazione e Verifica Esportazione PDF
 
-**2.3. Logica di Implementazione (App Tecnici):**
-1.  L'App Tecnici legge in tempo reale i documenti dalla collezione `notifications` dove `recipientId` è uguale all'UID del tecnico loggato e `status` è `'unread'`.
-2.  Quando il tecnico legge la notifica e preme un pulsante "Segna come letto":
-    *   L'app esegue una **scrittura diretta** sul documento `notifications/{notificationId}` corrispondente.
-    *   L'operazione di scrittura aggiorna i seguenti campi:
-        *   `status`: `'read'`
-        *   `readAt`: `Timestamp.now()`
-        *   `readBy`: UID del tecnico
-    *   Firestore SDK gestisce in automatico la scrittura nel database locale (cache) e la successiva sincronizzazione con il server quando la connettività è disponibile.
+**Obiettivo:** Generare un PDF professionale con anteprima e opzione di condivisione.
 
-**2.4. Vantaggi di Questo Approccio:**
-*   **Costi Zero per le Cloud Function:** Nessuna funzione viene eseguita per la conferma di lettura.
-*   **Performance Elevate:** L'operazione è istantanea per l'utente perché avviene prima localmente.
-*   **Coerenza Architetturale:** Si segue il principio "Scrittura Diretta Efficiente" già validato per i rapportini.
-*   **Supporto Offline:** La conferma di lettura funziona anche in assenza di connessione e viene sincronizzata in seguito.
+- **Azione:** È stato creato il servizio `src/services/pdfMonthlyReportService.ts` e il componente `PdfPreviewDialog.tsx`.
+- **Funzionalità Verificate:**
+    - **Anteprima PDF:** Viene generata un'anteprima del report in un modale prima del download.
+    - **Condivisione:** Il modale include un pulsante per condividere il file PDF tramite le funzionalità native del dispositivo (`navigator.share`).
 
----
+## 4. Correzione Bug e Finalizzazione (24/07/2024)
 
-### **Configurazione Sito Web Definitivo:**
-
-*   **Nome Sito:** `riso-master-office-prod`
-*   **URL Sito:** `https://riso-master-office-prod.web.app`
-*   **Target in `firebase.json`:** `master-office-prod`
-*   **Target in `.firebaserc`:** `master-office-prod`
+- **Problema Riscontrato:** Le ore registrate come "Straordinario" venivano erroneamente sommate e visualizzate nella colonna "Ordinarie" della tabella riepilogativa.
+- **Causa:** L'analisi ha rivelato che la logica in `reportService.ts` utilizzava ID fissi (es. `t_straordinaria`) per identificare il tipo di ore, invece di usare il campo `categoria` (`ordinaria`, `straordinaria`, etc.) del `tipoGiornata`. Questo approccio era fragile e causava l'errore.
+- **Soluzione Implementata:** Il file `src/services/reportService.ts` è stato aggiornato. La logica di assegnazione delle ore ora si basa correttamente sul valore del campo `tipoGiornata.categoria`. Questo garantisce che le ore vengano attribuite alla colonna corretta (`oreOrdinarie` o `oreStraordinarie`) indipendentemente dall'ID specifico del `tipoGiornata`.
+- **Stato:** Il bug è stato **risolto**. La funzionalità PDF è stata contestualmente **verificata** e risulta conforme ai requisiti.
