@@ -6,7 +6,7 @@ import Delete from '@mui/icons-material/Delete';
 import Visibility from '@mui/icons-material/Visibility';
 import { Timestamp } from 'firebase/firestore';
 import { useData } from '@/contexts/DataContext';
-import type { Rapportino, Tecnico } from '@/models/definitions';
+import type { Rapportino } from '@/models/definitions';
 import dayjs from 'dayjs';
 import RapportinoView from '@/components/Rapportini/RapportinoView';
 import { useReactToPrint } from 'react-to-print';

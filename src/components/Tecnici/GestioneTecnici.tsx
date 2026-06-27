@@ -94,7 +94,7 @@ const GestioneTecnici = () => {
         setUpdatingId(id);
         try {
             await updateDocument(collectionName, id, { appAccess: newStatus });
-            setSnackbar({ open: true, message: `Accesso all\'app per il tecnico ${newStatus ? 'abilitato' : 'disabilitato'}.`, severity: 'success' });
+            setSnackbar({ open: true, message: `Accesso all'app per il tecnico ${newStatus ? 'abilitato' : 'disabilitato'}.`, severity: 'success' });
         } catch (e) {
             handleError(e, "Errore nell'aggiornamento dell'accesso all'app");
         } finally {

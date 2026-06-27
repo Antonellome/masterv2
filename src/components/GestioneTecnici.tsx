@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import {
     Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Snackbar, Alert, CircularProgress, Tabs, Tab
@@ -9,7 +9,6 @@ import DettaglioItemDialog from '@/components/common/DettaglioItemDialog';
 import TecniciList from '@/components/Tecnici/TecniciList';
 import SincronizzatiApp from '@/components/Tecnici/SincronizzatiApp';
 import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
-import dayjs from 'dayjs';
 
 interface ItemToView {
     titolo: string;

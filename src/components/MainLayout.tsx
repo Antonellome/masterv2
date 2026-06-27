@@ -25,7 +25,6 @@ import PeopleIcon from '@mui/icons-material/People';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import DescriptionIcon from '@mui/icons-material/Description';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import HomeIcon from '@mui/icons-material/Home';

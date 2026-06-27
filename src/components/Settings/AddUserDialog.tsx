@@ -36,7 +36,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ open, onClose, onUserAdde
     const [success, setSuccess] = useState<string | null>(null);
 
     const validateEmail = (email: string) => {
-        return /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(email);
+        return /^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(email);
     };
 
     const handleSubmit = async () => {

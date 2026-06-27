@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import {
-    Box, Typography, Alert, CircularProgress, Switch, Tooltip, IconButton, Button
+    Box, Typography, Alert, CircularProgress, Switch, Tooltip, Button
 } from '@mui/material';
 import {
     DataGrid, GridColDef,

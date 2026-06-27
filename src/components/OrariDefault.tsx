@@ -31,7 +31,11 @@ const OrariDefault = () => {
                 setOrari(newOrari);
             } else {
                 // Se il documento non esiste, lo creiamo con i valori di default
-                setDoc(docRef, orari).catch(e => {
+                setDoc(docRef, {
+                    inizio: '07:30',
+                    fine: '16:30',
+                    pausa: 60,
+                }).catch(e => {
                     console.error("Errore nella creazione degli orari predefiniti: ", e);
                     setError("Impossibile creare le impostazioni predefinite.");
                 });
@@ -44,8 +48,8 @@ const OrariDefault = () => {
         });
     
         return () => unsubscribe();
-    // Aggiungo 'orari' al dependency array per gestire il primo salvataggio
-    }, [docRef, orari]);
+    // Ho rimosso 'orari' dal dependency array per evitare cicli di re-render
+    }, [docRef]);
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
         const { name, value } = event.target;

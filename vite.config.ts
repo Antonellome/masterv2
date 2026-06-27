@@ -56,8 +56,6 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    // ESCLUDO TEMPORANEAMENTE TUTTI I TEST PER SBLOCCARE I COMMIT
-    exclude: ['**/*.test.ts', '**/*.test.tsx'],
   },
   build: {
     rollupOptions: {

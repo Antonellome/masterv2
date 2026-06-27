@@ -1,28 +1,20 @@
-
 import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
-import { defineConfig, globalIgnores } from 'eslint/config';
 import typescriptParser from '@typescript-eslint/parser';
 import tsEslintPlugin from '@typescript-eslint/eslint-plugin';
 
-export default defineConfig([
-  // Ignora le cartelle di build
-  globalIgnores(['dist', 'functions/lib']),
-
-  // Configurazione per i file di configurazione JS alla root del progetto
+export default [
+  // Ignora le cartelle di build e i file di configurazione
   {
-    files: ['*.js', '*.mjs', 'vite.config.ts'],
-    languageOptions: {
-      sourceType: 'module',
-      globals: {
-        ...globals.node,
-      },
-    },
-    rules: {
-      ...js.configs.recommended.rules,
-    },
+    ignores: [
+      'dist',
+      'functions/lib',
+      'eslint.config.js',
+      'vite.config.ts',
+      'postcss.config.js'
+    ]
   },
 
   // Configurazione per il FRONTEND (React)
@@ -51,8 +43,9 @@ export default defineConfig([
       ...tsEslintPlugin.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-undef': 'off', // Spesso da falsi positivi con TS
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', 'varsIgnorePattern': '^_'}],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'no-undef': 'off',
     },
   },
 
@@ -68,7 +61,7 @@ export default defineConfig([
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {
-        ...globals.node, // Globals per l'ambiente Node.js
+        ...globals.node,
       },
     },
     plugins: {
@@ -77,8 +70,9 @@ export default defineConfig([
     rules: {
       ...js.configs.recommended.rules,
       ...tsEslintPlugin.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-       'no-undef': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', 'varsIgnorePattern': '^_'}],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'no-undef': 'off',
     },
   },
-]);
+];

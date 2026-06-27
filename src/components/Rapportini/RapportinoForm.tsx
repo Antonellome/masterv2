@@ -14,8 +14,8 @@ import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import { db } from '@/firebase';
 import { doc, setDoc, collection, Timestamp, writeBatch } from 'firebase/firestore';
-import { useData } from '@/hooks/useData';
-import type { Rapportino, TipoGiornata, Tecnico, Nave, Luogo, Veicolo } from '@/models/definitions';
+import { useData } from '@/hooks/useData.tsx';
+import type { Rapportino, TipoGiornata, Tecnico } from '@/models/definitions';
 
 dayjs.locale('it');
 
@@ -139,7 +139,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
         } else if (!isEditMode && !tecnicoScriventeId) {
             setDettaglioOre([]);
         }
-    }, [tecnicoScriventeId, isEditMode, tecnici]);
+    }, [tecnicoScriventeId, isEditMode, tecnici, dettaglioOre.length]);
 
     const handleTipoGiornataChange = (id: string) => {
         setTipoGiornataId(id);
@@ -157,21 +157,29 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
         });
     }, [tecnicoScriventeId]);
 
-    const handleAltriTecniciChange = (_: any, nuoviTecniciSelezionati: Tecnico[]) => {
+    const handleAltriTecniciChange = useCallback((_: any, nuoviTecniciSelezionati: Tecnico[]) => {
         const scrivente = dettaglioOre.find(d => d.tecnicoId === tecnicoScriventeId);
         if (!scrivente) { setError("Seleziona prima un tecnico responsabile."); return; }
-
+    
         const nuoviDettagli = nuoviTecniciSelezionati.map(t => {
             const existingDetail = dettaglioOre.find(d => d.tecnicoId === t.id);
-            return existingDetail || { tecnicoId: t.id, nome: `${t.cognome} ${t.nome}`.trim(), ...scrivente, tecnicoId: t.id, nome: `${t.cognome} ${t.nome}`.trim() };
+            if (existingDetail) return existingDetail;
+    
+            // Crea un nuovo oggetto senza duplicare le chiavi
+            const newDetail = { 
+                ...scrivente, // Eredita i dettagli dell'orario dallo scrivente
+                tecnicoId: t.id, 
+                nome: `${t.cognome} ${t.nome}`.trim() 
+            };
+            return newDetail;
         });
-
+    
         setDettaglioOre([scrivente, ...nuoviDettagli]);
-    };
+    }, [dettaglioOre, tecnicoScriventeId]);
 
     const removeTecnico = (tecnicoIdToRemove: string) => setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== tecnicoIdToRemove));
     
-    const buildRapportinoDoc = (currentData: Dayjs): Omit<Rapportino, 'id'> => {
+    const buildRapportinoDoc = useCallback((): Omit<Rapportino, 'id'> => {
         const scriventeDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoScriventeId);
         const presenze = dettaglioOre.map(d => d.tecnicoId);
         
@@ -199,7 +207,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
         }
 
         return {
-            data: Timestamp.fromDate(currentData.toDate()),
+            data: Timestamp.fromDate(data!.toDate()),
             tipoGiornataId: tipoGiornataId,
             tecnicoId: tecnicoScriventeId,
             presenze: presenze,
@@ -220,9 +228,9 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             lavoroEseguito: isLavorativo ? (lavoroEseguito || '') : '',
             materialiImpiegati: isLavorativo ? (materialiImpiegati || '') : '',
         };
-    };
+    }, [dettaglioOre, tecnicoScriventeId, isLavorativo, tipoGiornataId, data, initialRapportino, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, tipiGiornata]);
 
-    const handleSubmit = async () => {
+    const handleSubmit = useCallback(async () => {
         if ((isPeriodo ? !dataInizio || !dataFine : !data) || !tipoGiornataId || !tecnicoScriventeId) {
             setError("Compila i campi obbligatori: Data, Tecnico Responsabile e Tipo Giornata.");
             return;
@@ -240,7 +248,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
                  if (dataFine!.isBefore(dataInizio)) { setError('La data di fine non può precedere quella di inizio.'); setIsSaving(false); return; }
                 const batch = writeBatch(db);
                 const days = Array.from({ length: dataFine!.diff(dataInizio, 'day') + 1 }, (_, i) => dataInizio!.add(i, 'day'));
-                const docDataTemplate = buildRapportinoDoc(dataInizio!);
+                const docDataTemplate = buildRapportinoDoc();
                 days.forEach(day => {
                     const newReportRef = doc(collection(db, 'rapportini'));
                     const rapportinoPerGiorno: Omit<Rapportino, 'id'> = {
@@ -251,7 +259,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
                 });
                 await batch.commit();
             } else {
-                const docData = buildRapportinoDoc(data!);
+                const docData = buildRapportinoDoc();
                 const docRef = isEditMode ? doc(db, 'rapportini', initialRapportino!.id) : doc(collection(db, 'rapportini'));
                 await setDoc(docRef, docData, { merge: isEditMode });
             }
@@ -262,7 +270,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
         } finally { 
             setIsSaving(false);
         }
-    };
+    }, [isPeriodo, dataInizio, dataFine, data, tipoGiornataId, tecnicoScriventeId, dettaglioOre.length, buildRapportinoDoc, isEditMode, onClose, initialRapportino]);
     
     const handleOpenModal = (tecnico: DettaglioOreData) => { setEditingTecnico(tecnico); setTempDettaglioOre(tecnico); setIsModalOpen(true); };
     const handleCloseModal = () => { setIsModalOpen(false); setEditingTecnico(null); setTempDettaglioOre(null); };

@@ -303,21 +303,21 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
         }
 
         // 3. Get Recipient UIDs (Logica di filtro aggiornata)
-        let query: admin.firestore.Query;
-        switch (targetType) {
-            case "all":
-                query = db.collection("tecnici").where("appAccess", "==", true);
-                break;
-            case "category":
-                query = db.collection("tecnici").where("appAccess", "==", true).where("categoriaId", "==", targetId);
-                break;
-            case "user":
-                const userDoc = await db.collection("tecnici").doc(targetId).get();
-                query = db.collection("tecnici").where(admin.firestore.FieldPath.documentId(), "==", (userDoc.exists && userDoc.data()?.appAccess === true) ? targetId : "INVALID_UID");
-                break;
+        let uids: string[] = [];
+        if (targetType === 'user') {
+            const userDoc = await db.collection("tecnici").doc(targetId).get();
+            if (userDoc.exists && userDoc.data()?.appAccess === true) {
+                uids = [targetId];
+            }
+        } else if (targetType === 'all') {
+            const snapshot = await db.collection("tecnici").where("appAccess", "==", true).get();
+            uids = snapshot.docs.map(doc => doc.id);
+        } else if (targetType === 'category') {
+            const snapshot = await db.collection("tecnici").where("categoriaId", "==", targetId).get();
+            uids = snapshot.docs
+                .filter(doc => doc.data().appAccess === true)
+                .map(doc => doc.id);
         }
-        const recipientsSnapshot = await query.get();
-        const uids = recipientsSnapshot.docs.map((doc) => doc.id);
 
         if (uids.length === 0) {
             logger.warn("Nessun tecnico trovato per la notifica.", { data: request.data });
@@ -332,10 +332,10 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
             notificationsBatch.set(notificationRef, {
                 batchId,
                 title,
-                message,
+                body: message,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                recipientId: uid,
-                status: "unread",
+                tecnicoId: uid,
+                isRead: false,
                 readAt: null,
                 readBy: null,
                 target: {
@@ -347,23 +347,32 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
         });
         await notificationsBatch.commit();
 
-        // 4. Send FCM Message
-        const tokenPromises = uids.map(uid => db.collection(`tecnici/${uid}/tokens`).get());
-        const tokenSnapshots = await Promise.all(tokenPromises);
-        const allTokens = tokenSnapshots.flatMap(snap => snap.docs.map(doc => doc.id)).filter(Boolean);
+        // 4. Send FCM Message (con gestione dell'errore)
+        let fcmMessageId = "fcm-not-sent";
+        try {
+            const tokenPromises = uids.map(uid => db.collection(`tecnici/${uid}/tokens`).get());
+            const tokenSnapshots = await Promise.all(tokenPromises);
+            const allTokens = tokenSnapshots.flatMap(snap => snap.docs.map(doc => doc.id)).filter(Boolean);
 
-        let fcmMessageId = "no-fcm";
-        if (allTokens.length > 0) {
-            logger.info(`Invio di notifiche FCM a ${allTokens.length} token.`);
-            const multicastMessage: admin.messaging.MulticastMessage = {
-                tokens: allTokens,
-                notification: { title, body: message },
-                webpush: { notification: { icon: "https://risomobile.it/images/logo.png" } },
-            };
-            const response = await messaging.sendEachForMulticast(multicastMessage);
-            fcmMessageId = `success:${response.successCount}/failure:${response.failureCount}`;
-        } else {
-            logger.info("Nessun token FCM trovato per i destinatari.");
+            if (allTokens.length > 0) {
+                logger.info(`Invio di notifiche FCM a ${allTokens.length} token.`);
+                const multicastMessage: admin.messaging.MulticastMessage = {
+                    tokens: allTokens,
+                    notification: { title, body: message },
+                    webpush: { notification: { icon: "https://risomobile.it/images/logo.png" } },
+                };
+                const response = await messaging.sendEachForMulticast(multicastMessage);
+                fcmMessageId = `success:${response.successCount}/failure:${response.failureCount}`;
+            } else {
+                logger.info("Nessun token FCM trovato per i destinatari.");
+                fcmMessageId = "no-fcm-tokens";
+            }
+        } catch (fcmError: any) {
+            logger.error("ERRORE DURANTE L'INVIO FCM - L'operazione continuerà comunque.", {
+                errorMessage: fcmError.message,
+                requestData: request.data,
+            });
+            fcmMessageId = "fcm-failed";
         }
 
         // 5. Create Sent Notification Document
@@ -379,7 +388,7 @@ export const sendNotification = onCall<SendNotificationData>(async (request) => 
         });
         logger.info("Documento 'notificheInviate' creato con successo:", { id: sentNotificationRef.id });
         
-        return { success: true, message: `Operazione completata. Notifiche inviate a ${uids.length} tecnici.`, batchId };
+        return { success: true, message: `Operazione completata. Notifiche salvate per ${uids.length} tecnici.`, batchId };
 
     } catch (error: any) {
         logger.error("Errore imprevisto durante l'invio delle notifiche:", {

@@ -4,7 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { Rapportino, Tecnico, Veicolo, Nave, Luogo, TipoGiornata } from '@/models/definitions';
 import { Box, Typography, Paper, Grid, Divider, CircularProgress, Alert } from '@mui/material';
-import { useData } from '@/hooks/useData';
+import { useData } from '@/hooks/useData.tsx';
 import dayjs from 'dayjs';
 
 interface RapportinoPrintProps {
@@ -58,18 +58,17 @@ const RapportinoPrint = memo(({ rapportinoId, onReady }: RapportinoPrintProps) =
                 }
             });
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, rapportino]); // Dependencies ensure this runs after data is loaded and state is set
+    }, [loading, rapportino, onReady]); // Dependencies ensure this runs after data is loaded and state is set
 
     const getNome = (collection: (Tecnico | Veicolo | Nave | Luogo | TipoGiornata)[], id: string | undefined) => {
         if (!id) return 'N/D';
         const item = collection.find(t => t.id === id);
         if (!item) return 'N/D';
-        // @ts-ignore
+        // @ts-expect-error
         if ('cognome' in item && 'nome' in item) return `${item.cognome} ${item.nome}`.trim();
-        // @ts-ignore
+        // @ts-expect-error
         if ('targa' in item && 'nome' in item) return `${item.targa} - ${item.nome}`.trim();
-        // @ts-ignore
+        // @ts-expect-error
         return item.nome;
     };
 

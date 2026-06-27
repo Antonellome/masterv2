@@ -8,7 +8,7 @@ import React, {
     useMemo,
     ReactNode
 } from 'react';
-import { getFirestore, collection, getDocs, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, addDoc, updateDoc, deleteDoc, FirestoreDataConverter } from 'firebase/firestore';
 import { 
     Tecnico,
     Cliente,
@@ -19,6 +19,16 @@ import {
     TipoGiornata,
     Veicolo
 } from '@/models/definitions';
+import {
+    tecnicoConverter,
+    clienteConverter,
+    dittaConverter,
+    naveConverter,
+    luogoConverter,
+    categoriaConverter,
+    tipoGiornataConverter,
+    veicoloConverter
+} from '@/firebase/converters';
 import { useAuth } from './AuthProvider';
 
 const createMap = <T extends { id: string }>(items: T[] | undefined): { [id: string]: T } => {
@@ -42,6 +52,18 @@ interface AllData {
     veicoli: Veicolo[];
 }
 
+// Map collection names to their converters
+const converters: { [K in CollectionName]: FirestoreDataConverter<AllData[K][number]> } = {
+    tecnici: tecnicoConverter,
+    clienti: clienteConverter,
+    ditte: dittaConverter,
+    navi: naveConverter,
+    luoghi: luogoConverter,
+    categorie: categoriaConverter,
+    tipiGiornata: tipoGiornataConverter,
+    veicoli: veicoloConverter,
+};
+
 interface DataContextType {
     tecnici: Tecnico[];
     clienti: Cliente[];
@@ -59,8 +81,8 @@ interface DataContextType {
     loading: boolean;
     error: string | null;
     refreshData: () => void;
-    addDocument: <T extends object>(collectionName: CollectionName, data: T) => Promise<string>;
-    updateDocument: <T extends object>(collectionName: CollectionName, id: string, data: T) => Promise<void>;
+    addDocument: <T extends { id: string }>(collectionName: CollectionName, data: T) => Promise<string>;
+    updateDocument: <T extends object>(collectionName: CollectionName, id: string, data: Partial<T>) => Promise<void>;
     deleteDocument: (collectionName: CollectionName, id: string) => Promise<void>;
 }
 
@@ -68,10 +90,6 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 const db = getFirestore();
 
 const COLLECTION_NAMES: CollectionName[] = ['tecnici', 'clienti', 'ditte', 'navi', 'luoghi', 'categorie', 'tipiGiornata', 'veicoli'];
-
-const getRealCollectionName = (name: CollectionName): string => {
-    return name;
-};
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
     const { user, userRole } = useAuth();
@@ -97,20 +115,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             setError(null);
             
             try {
-                 const allData: Partial<AllData> = {};
+                const allData: Partial<AllData> = {};
                 const fetchPromises = COLLECTION_NAMES.map(async (name) => {
-                    const realCollectionName = getRealCollectionName(name);
-                    const snapshot = await getDocs(collection(db, realCollectionName));
-                    const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+                    const collectionRef = collection(db, name).withConverter(converters[name]);
+                    const snapshot = await getDocs(collectionRef);
+                    const list = snapshot.docs.map(d => d.data());
                     return { key: name, data: list };
                 });
+
                 const results = await Promise.all(fetchPromises);
-                results.forEach(result => { allData[result.key as CollectionName] = result.data; });
+                results.forEach(result => {
+                    allData[result.key as CollectionName] = result.data as any; // The structure is correct here
+                });
                 setData(allData as AllData);
 
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("DataContext: Errore nel recupero dei dati anagrafici", err);
-                setError(err.message || 'Si è verificato un errore nel caricamento dei dati.');
+                const message = err instanceof Error ? err.message : 'Si è verificato un errore nel caricamento dei dati.';
+                setError(message);
             } finally {
                 setLoading(false);
             }
@@ -119,29 +141,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         initializeAndFetchData();
     }, [user, userRole, refreshTrigger]);
 
-    const addDocument = useCallback(async <T extends object>(collectionName: CollectionName, data: T): Promise<string> => {
-        const realCollectionName = getRealCollectionName(collectionName);
-        try {
-            const docRef = await addDoc(collection(db, realCollectionName), data);
-            refreshData();
-            return docRef.id;
-        } catch (e) { throw e; }
+    const addDocument = useCallback(async <T extends { id: string }>(collectionName: CollectionName, data: T): Promise<string> => {
+        const collectionRef = collection(db, collectionName).withConverter(converters[collectionName]);
+        const docRef = await addDoc(collectionRef, data as any);
+        refreshData();
+        return docRef.id;
     }, [refreshData]);
 
-    const updateDocument = useCallback(async <T extends object>(collectionName: CollectionName, id: string, data: T) => {
-        const realCollectionName = getRealCollectionName(collectionName);
-        try {
-            await updateDoc(doc(db, realCollectionName, id), data);
-            refreshData();
-        } catch (e) { throw e; }
+    const updateDocument = useCallback(async <T extends object>(collectionName: CollectionName, id: string, data: Partial<T>) => {
+        const docRef = doc(db, collectionName, id).withConverter(converters[collectionName]);
+        await updateDoc(docRef, data as any);
+        refreshData();
     }, [refreshData]);
 
     const deleteDocument = useCallback(async (collectionName: CollectionName, id: string) => {
-        const realCollectionName = getRealCollectionName(collectionName);
-        try {
-            await deleteDoc(doc(db, realCollectionName, id));
-            refreshData();
-        } catch (e) { throw e; }
+        const docRef = doc(db, collectionName, id);
+        await deleteDoc(docRef);
+        refreshData();
     }, [refreshData]);
 
     const tecniciMap = useMemo(() => createMap(data.tecnici), [data.tecnici]);
@@ -175,7 +191,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 export const useDataContext = () => {
     const context = useContext(DataContext);
     if (context === undefined) {
-        throw new Error('useDataContext deve essere usato all\'interno di un DataProvider');
+        throw new Error('useDataContext deve essere usato allinterno di un DataProvider');
     }
     return context;
 };

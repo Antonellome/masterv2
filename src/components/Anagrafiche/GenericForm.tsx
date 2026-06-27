@@ -72,7 +72,6 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
     };
 
     const renderField = (field: FormField) => {
-        // Rimosso `key` da baseProps
         const baseProps = {
             name: field.name,
             label: field.label,
@@ -83,12 +82,11 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
         };
 
         switch (field.type) {
-            case 'select':
+            case 'select': {
                 const currentOptions = selectOptions[field.name] || [];
                 return (
                     <FormControl fullWidth required={field.required}>
                         <InputLabel>{field.label}</InputLabel>
-                        {/* Passiamo le props senza la key, che non è necessaria qui */}
                         <Select {...baseProps}>
                             {currentOptions.map(option => (
                                 <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
@@ -96,6 +94,7 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
                         </Select>
                     </FormControl>
                 );
+            }
             case 'boolean':
                 return (
                     <FormControlLabel
@@ -122,7 +121,6 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
             <DialogContent>
                 <Grid container spacing={2} sx={{ pt: 1 }}>
                     {fields.map(field => (
-                        // La key va qui, sull'elemento più esterno del loop
                         <Grid item key={field.name} xs={field.gridProps?.size?.xs || 12} sm={field.gridProps?.size?.sm} md={field.gridProps?.size?.md}>
                             {renderField(field)}
                         </Grid>

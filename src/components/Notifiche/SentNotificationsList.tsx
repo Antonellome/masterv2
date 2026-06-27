@@ -27,8 +27,8 @@ const SentNotificationsList = () => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const notificationsQuery = query(
-        collection(db, 'notificheInviate'), 
-        orderBy('sentAt', 'desc'),
+        collection(db, 'notifications'), 
+        orderBy('createdAt', 'desc'),
         limit(100)
     );
 
@@ -48,7 +48,7 @@ const SentNotificationsList = () => {
                 batch.delete(doc(db, 'notificheInviate', id));
                 await batch.commit();
             } else {
-                await deleteDoc(doc(db, 'notificheInviate', id));
+                await deleteDoc(doc(db, 'notifications', id));
             }
             alert('NOTIFICA ELIMINATA.');
         } catch (err: any) {
@@ -78,7 +78,7 @@ const SentNotificationsList = () => {
             {notificationsSnapshot.docs.map((doc, index) => {
                 const notification = { id: doc.id, ...doc.data() } as NotificaInviata;
                 const isExpanded = expandedId === doc.id;
-                const createdAtDate = notification.sentAt?.toDate ? notification.sentAt.toDate() : null;
+                const createdAtDate = notification.createdAt?.toDate ? notification.createdAt.toDate() : null;
                 const formattedDate = isValid(createdAtDate) ? format(createdAtDate, "PPP 'alle' HH:mm", { locale: it }) : 'Data non disponibile';
 
                 return (
@@ -112,7 +112,7 @@ const SentNotificationsList = () => {
                             <Collapse in={isExpanded} timeout="auto" unmountOnExit sx={{ width: '100%', mt: 1 }}>
                                 <Divider sx={{ my: 1 }} />
                                 <Typography variant="body2" color="text.secondary" sx={{ py: 1, whiteSpace: 'pre-wrap' }}>
-                                    {notification.message}
+                                    {notification.body}
                                 </Typography>
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', pt: 1 }}>
                                     <IconButton size="small" onClick={() => handleDelete(doc.id, notification.batchId)}>

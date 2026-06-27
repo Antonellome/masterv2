@@ -135,7 +135,7 @@ const GestioneAccessi = () => {
     setDialog({
       open: true,
       title: 'Conferma Invio Email',
-      content: `Stai per inviare un\'email di ripristino password all\'indirizzo ${email}. Vuoi procedere?`,
+      content: `Stai per inviare un'email di ripristino password all'indirizzo ${email}. Vuoi procedere?`,
       onConfirm: () => executeResetPassword(email),
     });
   };
@@ -211,7 +211,7 @@ const GestioneAccessi = () => {
     <Box sx={{ mt: 4 }}>
       <Typography variant="h5" gutterBottom>Gestione Accesso App Tecnici</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Da questa sezione puoi abilitare o revocare l'accesso all\'app mobile per ogni tecnico e inviare l'email per il reset della password.
+        Da questa sezione puoi abilitare o revocare l'accesso all'app mobile per ogni tecnico e inviare l'email per il reset della password.
       </Typography>
       <Divider sx={{ mb: 3 }} />
 
