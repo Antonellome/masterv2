@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/firebase';
+import { httpsCallable } from 'firebase/functions';
 import {
     Dialog,
     DialogTitle,
@@ -22,16 +22,15 @@ interface InviaNotificaDialogProps {
     target: NotificationTarget | null;
 }
 
-// RIPRISTINO DEL COMPONENTE ORIGINALE
 const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose, target }) => {
     const [title, setTitle] = useState('');
-    const [message, setMessage] = useState('');
+    const [body, setBody] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     const handleSend = async () => {
-        if (!title.trim() || !message.trim()) {
-            setError('Titolo e messaggio sono obbligatori.');
+        if (!title.trim() || !body.trim()) {
+            setError('Titolo e corpo sono obbligatori.');
             return;
         }
         if (!target) {
@@ -44,17 +43,32 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
         try {
             const sendNotification = httpsCallable(functions, 'sendNotification');
-            await sendNotification({
+
+            const payload = {
+                title: title.trim(),
+                body: body.trim(),
                 targetType: target.type,
                 targetId: target.id,
-                title: title.trim(),
-                message: message.trim(),
-            });
+                targetName: target.name, // Aggiunto per il logging nella funzione
+            };
+
+            await sendNotification(payload);
+            
             handleClose();
-        } catch (err) {
-            console.error("Errore nella creazione del documento di notifica:", err);
-            const genericError = err as any; 
-            setError(genericError.message || 'Si è verificato un errore durante la scrittura nel database.');
+
+        } catch (err: unknown) {
+            const httpsError = err as { code: string; message: string };
+            console.error("Errore durante l'invio della notifica:", httpsError);
+            
+            let errorMessage = 'Si è verificato un errore sconosciuto.';
+            if (httpsError.code === 'unauthenticated') {
+                errorMessage = 'Autenticazione richiesta. Effettua nuovamente il login.';
+            } else if (httpsError.code === 'permission-denied') {
+                errorMessage = 'Non hai i permessi per eseguire questa operazione.';
+            } else if (httpsError.message) {
+                errorMessage = httpsError.message;
+            }
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -62,7 +76,7 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
 
     const handleClose = () => {
         setTitle('');
-        setMessage('');
+        setBody('');
         setError('');
         onClose();
     };
@@ -87,24 +101,24 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
                 />
                 <TextField
                     margin="dense"
-                    id="message"
-                    label="Messaggio"
+                    id="body"
+                    label="Corpo del messaggio"
                     type="text"
                     fullWidth
                     multiline
                     rows={4}
                     variant="outlined"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
                 />
             </DialogContent>
             <DialogActions sx={{ p: 3, pt: 1 }}>
                 <Button onClick={handleClose} color="secondary">Annulla</Button>
                 <Box sx={{ position: 'relative' }}>
-                    <Button 
-                        onClick={handleSend} 
-                        variant="contained" 
-                        disabled={loading || !title.trim() || !message.trim()}
+                    <Button
+                        onClick={handleSend}
+                        variant="contained"
+                        disabled={loading || !title.trim() || !body.trim()}
                     >
                         Invia
                     </Button>

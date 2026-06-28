@@ -166,7 +166,7 @@ const HistoryView = ({ onNewNotification }) => (
 const NotificationsPage = () => {
     const [view, setView] = useState<'history' | 'send'>('history');
 
-    const tecniciQuery = query(collection(db, 'tecnici'), where('abilitato', '==', true));
+    const tecniciQuery = query(collection(db, 'tecnici'), where('appAccess', '==', true));
     const [tecniciSnapshot, loadingTecnici, errorTecnici] = useCollection(tecniciQuery);
 
     const categoriesQuery = query(collection(db, 'categorie'), orderBy('nome'));

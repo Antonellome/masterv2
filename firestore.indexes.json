@@ -1,33 +1,11 @@
 {
   "indexes": [
     {
-      "collectionGroup": "notifications",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "recipientId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "tecnici",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "attivo",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "cognome",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "nome",
+          "fieldPath": "categoria",
           "order": "ASCENDING"
         }
       ]

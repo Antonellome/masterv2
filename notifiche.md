@@ -25,9 +25,9 @@ L'invio di una notifica consiste nel creare un nuovo documento nella collezione 
 
 ---
 
-## 3. Implementazione (Esempi di Codice)
+## 3. Implementazione App Master (Invio Notifiche)
 
-Di seguito sono riportati esempi per un componente React e la funzione di servizio necessaria.
+Di seguito sono riportati esempi per un componente React e la funzione di servizio necessaria per l'app Master.
 
 ### a) Servizio di Invio (`notificationAdminService.ts`)
 

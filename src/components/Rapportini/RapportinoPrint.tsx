@@ -1,128 +1,210 @@
 
-import { useEffect, useState, memo } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { Rapportino, Tecnico, Veicolo, Nave, Luogo, TipoGiornata } from '@/models/definitions';
-import { Box, Typography, Paper, Grid, Divider, CircularProgress, Alert } from '@mui/material';
-import { useData } from '@/hooks/useData.tsx';
-import dayjs from 'dayjs';
+'use client';
+
+import React, { forwardRef } from 'react';
+import { Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/renderer';
+import { Rapportino, Attivita, Cliente, Viaggio, Ddt, Extra } from '@/models/definitions'; // Assicurarsi che i tipi siano corretti
+import { format } from 'date-fns';
+
+// Definisco gli stili
+const styles = StyleSheet.create({
+    page: {
+        padding: 40,
+        fontFamily: 'Helvetica',
+        fontSize: 10,
+        color: '#333',
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 20,
+        borderBottom: '2px solid #4A90E2',
+        paddingBottom: 10,
+    },
+    logo: {
+        width: 80,
+        height: 80,
+    },
+    companyDetails: {
+        textAlign: 'right',
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginBottom: 20,
+        color: '#4A90E2',
+    },
+    section: {
+        marginBottom: 15,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        color: '#4A90E2',
+        borderBottom: '1px solid #EEE',
+        paddingBottom: 4,
+    },
+    row: {
+        flexDirection: 'row',
+        marginBottom: 4,
+    },
+    label: {
+        fontWeight: 'bold',
+        marginRight: 5,
+        width: 120, // Allineamento delle etichette
+    },
+    text: {
+        flex: 1,
+    },
+    table: {
+        // @ts-expect-error - jspdf-autotable non è compatibile con i tipi di react-pdf
+        display: 'table',
+        width: 'auto',
+        borderStyle: 'solid',
+        // @ts-expect-error - jspdf-autotable non è compatibile con i tipi di react-pdf
+        borderWidth: 1,
+        borderColor: '#EEE',
+        borderRightWidth: 0,
+        // @ts-expect-error - jspdf-autotable non è compatibile con i tipi di react-pdf
+        borderBottomWidth: 0,
+    },
+    tableRow: {
+        flexDirection: 'row',
+        backgroundColor: '#f9f9f9',
+    },
+    tableColHeader: {
+        width: '25%',
+        borderStyle: 'solid',
+        borderWidth: 1,
+        borderColor: '#EEE',
+        borderLeftWidth: 0,
+        borderTopWidth: 0,
+        padding: 5,
+        backgroundColor: '#4A90E2',
+        color: 'white',
+        fontWeight: 'bold',
+    },
+    tableCol: {
+        width: '25%',
+        borderStyle: 'solid',
+        borderWidth: 1,
+        borderColor: '#EEE',
+        borderLeftWidth: 0,
+        borderTopWidth: 0,
+        padding: 5,
+    },
+    footer: {
+        position: 'absolute',
+        bottom: 30,
+        left: 40,
+        right: 40,
+        textAlign: 'center',
+        fontSize: 8,
+        color: '#777',
+        borderTop: '1px solid #EEE',
+        paddingTop: 10,
+    },
+});
 
 interface RapportinoPrintProps {
-    rapportinoId: string;
-    onReady?: () => void; // Callback to signal data is ready AND rendered
+    rapportino: Rapportino;
+    cliente: Cliente;
+    attivita: Attivita[];
+    viaggi: Viaggio[];
+    ddts: Ddt[];
+    extras: Extra[];
 }
 
-const RapportinoPrint = memo(({ rapportinoId, onReady }: RapportinoPrintProps) => {
-    const [rapportino, setRapportino] = useState<Rapportino | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const { tecnici, veicoli, navi, luoghi, tipiGiornata } = useData();
+const RapportinoPrint = forwardRef<any, RapportinoPrintProps>(({ rapportino, cliente, attivita, viaggi, ddts, extras }, ref) => (
+    <Document ref={ref}>
+        <Page size="A4" style={styles.page}>
+            {/* Header */}
+            <View style={styles.header}>
+                <Image style={styles.logo} src="/logo.png" />
+                <View style={styles.companyDetails}>
+                    <Text>R.I.S.O. S.r.l.</Text>
+                    <Text>Via Montegrappa, 10</Text>
+                    <Text>30020, Meolo (VE)</Text>
+                    <Text>P.I. 04541880279</Text>
+                </View>
+            </View>
 
-    // Step 1: Fetch data when ID changes
-    useEffect(() => {
-        const fetchRapportino = async () => {
-            if (!rapportinoId) {
-                setRapportino(null);
-                setLoading(false);
-                return;
-            }
-            setLoading(true);
-            try {
-                const docRef = doc(db, 'rapportini', rapportinoId);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setRapportino({ id: docSnap.id, ...docSnap.data() } as Rapportino);
-                } else {
-                    setError('Rapportino non trovato.');
-                    setRapportino(null);
-                }
-            } catch (err) {
-                setError('Errore nel caricamento del rapportino.');
-                setRapportino(null);
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchRapportino();
-    }, [rapportinoId]);
+            {/* Titolo */}
+            <Text style={styles.title}>Rapportino di Lavoro</Text>
 
-    // Step 2: After the component has re-rendered with new data, signal readiness *after paint*
-    useEffect(() => {
-        if (!loading && onReady) {
-            // This is the key: we wait for the browser to paint the new content
-            // before we tell the parent component that we are ready to be captured.
-            requestAnimationFrame(() => {
-                if (onReady) {
-                    onReady();
-                }
-            });
-        }
-    }, [loading, rapportino, onReady]); // Dependencies ensure this runs after data is loaded and state is set
+            {/* Dettagli Principali */}
+            <View style={styles.section}>
+                <View style={styles.row}>
+                    <Text style={styles.label}>Data Intervento:</Text>
+                    <Text style={styles.text}>{rapportino.data ? format(new Date(rapportino.data), 'dd/MM/yyyy') : 'N/D'}</Text>
+                </View>
+                <View style={styles.row}>
+                    <Text style={styles.label}>Cliente:</Text>
+                    <Text style={styles.text}>{cliente?.nome || 'N/D'}</Text>
+                </View>
+                <View style={styles.row}>
+                    <Text style={styles.label}>Tecnico:</Text>
+                    <Text style={styles.text}>{rapportino.tecnico?.nome || 'N/D'}</Text>
+                </View>
+            </View>
 
-    const getNome = (collection: (Tecnico | Veicolo | Nave | Luogo | TipoGiornata)[], id: string | undefined) => {
-        if (!id) return 'N/D';
-        const item = collection.find(t => t.id === id);
-        if (!item) return 'N/D';
-        // @ts-expect-error
-        if ('cognome' in item && 'nome' in item) return `${item.cognome} ${item.nome}`.trim();
-        // @ts-expect-error
-        if ('targa' in item && 'nome' in item) return `${item.targa} - ${item.nome}`.trim();
-        // @ts-expect-error
-        return item.nome;
-    };
+            {/* Attività */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Attività Svolte</Text>
+                {attivita.map((item, index) => (
+                    <View key={index} style={styles.row}>
+                        <Text style={styles.text}>{item.descrizione}</Text>
+                    </View>
+                ))}
+            </View>
 
-    if (loading) return <Box sx={{ p: 4, width: '210mm', height: '297mm', boxSizing: 'border-box', textAlign: 'center' }}><CircularProgress /></Box>;
-    if (error) return <Box sx={{ p: 4, width: '210mm', height: '297mm', boxSizing: 'border-box' }}><Alert severity="error">{error}</Alert></Box>;
-    if (!rapportino) return <Box sx={{ width: '210mm', height: '297mm', boxSizing: 'border-box' }} />; // Render an empty space of the correct size
+            {/* Viaggi */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Viaggi</Text>
+                {viaggi.map((item, index) => (
+                    <View key={index} style={styles.row}>
+                        <Text style={styles.text}>{item.destinazione} - {item.km} km</Text>
+                    </View>
+                ))}
+            </View>
 
-    const dataRapportino = rapportino.data ? dayjs(rapportino.data.toDate()).format('DD/MM/YYYY') : 'N/D';
-    const tipoGiornataNome = getNome(tipiGiornata, rapportino.giornataId);
-    const responsabile = getNome(tecnici, rapportino.tecnicoId);
+            {/* DDT */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>DDT</Text>
+                {ddts.map((item, index) => (
+                    <View key={index} style={styles.row}>
+                        <Text style={styles.text}>{item.numero}</Text>
+                    </View>
+                ))}
+            </View>
 
-    return (
-        <Paper sx={{ p: 4, width: '210mm', minHeight: '297mm', boxSizing: 'border-box', pageBreakAfter: 'always', backgroundColor: 'white' }} elevation={0} square>
-            <Typography variant="h4" gutterBottom align="center">Rapportino di Intervento</Typography>
-            <Divider sx={{ my: 2 }} />
-            <Grid container spacing={2}>
-                <Grid item xs={6}><Typography><strong>Data:</strong> {dataRapportino}</Typography></Grid>
-                <Grid item xs={6}><Typography><strong>Tipo Giornata:</strong> {tipoGiornataNome}</Typography></Grid>
-                <Grid item xs={12}><Typography><strong>Tecnico Responsabile:</strong> {responsabile}</Typography></Grid>
-            </Grid>
+            {/* Extra */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Materiale Extra</Text>
+                {extras.map((item, index) => (
+                    <View key={index} style={styles.row}>
+                        <Text style={styles.text}>{item.descrizione}</Text>
+                    </View>
+                ))}
+            </View>
 
-            <Divider sx={{ my: 2 }} />
+            {/* Note */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Note</Text>
+                <Text style={styles.text}>{rapportino.note}</Text>
+            </View>
 
-            <Typography variant="h6" gutterBottom>Dettagli Intervento</Typography>
-            <Grid container spacing={1} sx={{ mb: 2 }}>
-                <Grid item xs={12}><Typography><strong>Nave:</strong> {getNome(navi, rapportino.naveId)}</Typography></Grid>
-                <Grid item xs={12}><Typography><strong>Luogo:</strong> {getNome(luoghi, rapportino.luogoId)}</Typography></Grid>
-                <Grid item xs={12}><Typography><strong>Veicolo:</strong> {getNome(veicoli, rapportino.veicoloId)}</Typography></Grid>
-                <Grid item xs={12}><Typography><strong>Descrizione Breve:</strong> {rapportino.descrizioneBreve || 'Nessuna'}</Typography></Grid>
-            </Grid>
+            {/* Footer */}
+            <Text style={styles.footer}>
+                Questo è un documento generato automaticamente. Per qualsiasi chiarimento, si prega di contattare R.I.S.O. S.r.l.
+            </Text>
+        </Page>
+    </Document>
+));
 
-            <Typography variant="h6" gutterBottom>Lavoro Eseguito</Typography>
-            <Typography paragraph sx={{ border: '1px solid #eee', p: 1, minHeight: 80, whiteSpace: 'pre-wrap' }}>{rapportino.lavoroEseguito || 'Nessuno'}</Typography>
-
-            <Typography variant="h6" gutterBottom>Materiali Impiegati</Typography>
-            <Typography paragraph sx={{ border: '1px solid #eee', p: 1, minHeight: 80, whiteSpace: 'pre-wrap' }}>{rapportino.materialiImpiegati || 'Nessuno'}</Typography>
-            
-            <Divider sx={{ my: 2 }} />
-
-            <Typography variant="h6" gutterBottom>Dettaglio Ore Lavoro</Typography>
-            <Grid container spacing={1}>
-                 {rapportino.dettaglioOreTecnici?.map(dettaglio => (
-                    <Grid item xs={12} key={dettaglio.tecnicoId}>
-                        <Typography>
-                            <strong>{getNome(tecnici, dettaglio.tecnicoId)}:</strong> {dettaglio.ore || 0} ore
-                        </Typography>
-                    </Grid>
-                 ))}
-                 <Grid item xs={12} sx={{mt: 1}}>
-                    <Typography variant="h6"><strong>Totale Ore Lavoro: {rapportino.oreLavoro || 0}</strong></Typography>
-                 </Grid>
-            </Grid>
-        </Paper>
-    );
-});
+RapportinoPrint.displayName = 'RapportinoPrint';
 
 export default RapportinoPrint;

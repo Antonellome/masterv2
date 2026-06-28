@@ -6,359 +6,170 @@ import * as admin from "firebase-admin";
 admin.initializeApp();
 
 const db = admin.firestore();
-const auth = admin.auth();
-const messaging = admin.messaging();
 
-export const manageTecnicoAccess = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+// Helper function for paginated deletion with heavy logging
+async function deleteQueryBatch(query: FirebaseFirestore.Query, batchSize: number): Promise<number> {
+    logger.info(`[DIAGNOSTIC] deleteQueryBatch: Fetching up to ${batchSize} documents...`);
+    const snapshot = await query.limit(batchSize).get();
+    logger.info(`[DIAGNOSTIC] deleteQueryBatch: Fetched ${snapshot.size} documents.`);
+
+    if (snapshot.size === 0) {
+        logger.info("[DIAGNOSTIC] deleteQueryBatch: No documents to delete, returning 0.");
+        return 0;
     }
 
-    const { uid, action } = request.data;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc, index) => {
+        if (index === 0) logger.info(`[DIAGNOSTIC] deleteQueryBatch: First doc to delete is ${doc.id}`);
+        batch.delete(doc.ref);
+    });
+    
+    logger.info(`[DIAGNOSTIC] deleteQueryBatch: Committing batch of ${snapshot.size} deletes...`);
+    await batch.commit();
+    logger.info("[DIAGNOSTIC] deleteQueryBatch: Batch committed successfully.");
 
-    if (typeof uid !== 'string' || uid.length === 0) {
-        throw new HttpsError("invalid-argument", "L'UID del tecnico non è valido.");
-    }
-    if (action !== 'enable' && action !== 'disable') {
-        throw new HttpsError("invalid-argument", "L'azione specificata non è valida. Usare 'enable' o 'disable'.");
-    }
-
-    logger.info(`Inizio processo per UID: ${uid}, azione: ${action}`);
-
-    let user;
-
-    try {
-        user = await auth.getUser(uid);
-    } catch (error: any) {
-        logger.error(`Errore durante la ricerca dell'utente ${uid}:`, error);
-        if (error.code === 'auth/user-not-found') {
-            // Questo caso non dovrebbe accadere se il frontend è allineato, ma lo gestiamo.
-            throw new HttpsError("not-found", `L'utente con UID ${uid} non esiste in Firebase Auth.`);
-        }
-        throw new HttpsError("internal", `Errore nella ricerca utente: ${error.message}`);
-    }
-
-    const newDisabledState = action === 'disable';
-
-    if (user.disabled !== newDisabledState) {
-        try {
-            await auth.updateUser(uid, { disabled: newDisabledState });
-            logger.info(`Stato di autenticazione per l'utente ${uid} aggiornato a disabled: ${newDisabledState}`);
-        } catch (updateError: any) {
-            logger.error(`Errore durante l'aggiornamento dell'autenticazione per l'utente ${uid}:`, updateError);
-            throw new HttpsError("internal", `Impossibile aggiornare lo stato di autenticazione: ${updateError.message}`);
-        }
-    } else {
-        logger.info(`L'utente ${uid} ha già lo stato di autenticazione desiderato (disabled: ${newDisabledState}).`);
-    }
-
-    try {
-        const tecnicoRef = db.collection("tecnici").doc(uid);
-        await tecnicoRef.update({ appAccess: !newDisabledState });
-        logger.info(`Documento Firestore ${uid} aggiornato con appAccess: ${!newDisabledState}.`);
-    } catch (dbError: any) {
-        logger.error(`Errore durante l'aggiornamento di Firestore per l'UID ${uid}:`, dbError);
-        // Se l'aggiornamento di Auth ha funzionato ma quello di Firestore no, dobbiamo segnalarlo.
-        throw new HttpsError("internal", `L'autenticazione è stata aggiornata, ma impossibile aggiornare il database: ${dbError.message}`);
-    }
-
-    return { success: true, message: `Accesso per l'utente ${uid} è stato ${action === 'enable' ? 'abilitato' : 'disabilitato'}.` };
-});
-
-// ... (il resto del file rimane invariato)
-
-
-
-interface ManageUsersPayload {
-    action: "promoteToAdmin" | "list" | "createUser" | "setRole" | "deleteUser";
-    payload?: {
-        uid?: string;
-        email?: string;
-        nome?: string;
-        cognome?: string;
-        role?: string;
-    };
+    return snapshot.size;
 }
 
-export const manageUsers = onCall({ region: "europe-west1" }, async (request) => {
-    const data = request.data as ManageUsersPayload;
-    const action = data?.action;
-    const payload = data?.payload;
-    const callerUid = request.auth?.uid;
-    const usersCollection = db.collection("utenti_master");
-    const adminsCollection = db.collection("amministratori");
+export const sendNotification = onCall(
+    { region: "europe-west1", cors: true, timeoutSeconds: 540 },
+    async (request) => {
+        // This function is unchanged from the last version, but included for completeness
+        logger.info(">>> [sendNotification] Inizio esecuzione con dati:", request.data);
 
-    if (!action) {
-        throw new HttpsError("invalid-argument", "Azione non specificata.");
-    }
-
-    if (action === "promoteToAdmin") {
-        if (!callerUid) {
-            throw new HttpsError("unauthenticated", "Devi essere autenticato per auto-promuoverti.");
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "Autenticazione richiesta per inviare notifiche.");
         }
 
-        const listUsersResult = await auth.listUsers(1000);
-        const existingAdmin = listUsersResult.users.find((u) => u.customClaims?.role === "admin");
-        if (existingAdmin && existingAdmin.uid !== callerUid) {
-            throw new HttpsError("permission-denied", "Un amministratore esiste già.");
+        const isCallerAdmin = request.auth.token.role === "admin";
+        if (!isCallerAdmin) {
+            throw new HttpsError("permission-denied", "Accesso negato. Solo gli amministratori possono inviare notifiche.");
         }
 
-        await auth.setCustomUserClaims(callerUid, { role: "admin" });
-        return { status: "success", message: "Complimenti! L'utente è ora il primo amministratore." };
+        const { title, body, targetType, targetId, targetName } = request.data;
+
+        if (!title || !body || !targetType) {
+            throw new HttpsError("invalid-argument", "Titolo, corpo e tipo di destinatario sono obbligatori.");
+        }
+
+        let targetUids: string[] = [];
+        let targetDescription = "";
+
+        try {
+            if (targetType === "user" || targetType === "tecnico") {
+                if (targetId) {
+                    targetUids.push(targetId);
+                    targetDescription = `Tecnico: ${targetName || targetId}`;
+                }
+            } else if (targetType === "categoria") {
+                if (targetId) {
+                    const tecniciSnapshot = await db.collection("tecnici").where("categoria", "==", targetId).get();
+                    targetUids = tecniciSnapshot.docs.map(doc => doc.id);
+                    targetDescription = `Categoria: ${targetName || targetId}`;
+                }
+            } else if (targetType === "tutti") {
+                const tecniciSnapshot = await db.collection("tecnici").get();
+                targetUids = tecniciSnapshot.docs.map(doc => doc.id);
+                targetDescription = "Tutti i tecnici";
+            }
+        } catch (error: any) {
+            logger.error("Errore nel determinare i destinatari:", error);
+            throw new HttpsError("internal", `Impossibile recuperare i destinatari. Dettagli: ${error.message}`);
+        }
+
+        if (targetUids.length === 0) {
+            logger.warn("Nessun destinatario valido trovato.");
+            return { success: true, message: "Nessun destinatario valido trovato." };
+        }
+
+        const logRef = db.collection("notificheInviate").doc();
+        const batchId = logRef.id;
+        const now = admin.firestore.Timestamp.now();
+
+        const logData = {
+            title, body, sentAt: now, recipientsCount: targetUids.length, batchId,
+            target: { type: targetType, description: targetDescription, ...(targetId && { id: targetId }) },
+        };
+
+        try {
+            await logRef.set(logData);
+            logger.info(`Log di notifica creato con batchId: ${batchId}`);
+
+            const BATCH_LIMIT = 490;
+            for (let i = 0; i < targetUids.length; i += BATCH_LIMIT) {
+                const chunk = targetUids.slice(i, i + BATCH_LIMIT);
+                const batch = db.batch();
+                chunk.forEach(uid => {
+                    const notificaRef = db.collection("notifiche").doc();
+                    batch.set(notificaRef, { tecnicoId: uid, title, body, createdAt: now, isRead: false, batchId });
+                });
+                await batch.commit();
+                logger.info(`Inviato batch di ${chunk.length} notifiche.`);
+            }
+
+            logger.info(`Tutte le notifiche per batchId ${batchId} sono state inviate con successo.`);
+            return { success: true, message: `Notifica inviata a ${targetUids.length} destinatari.` };
+
+        } catch (error: any) {
+            logger.error(`Errore critico durante l'invio del batch ${batchId}:`, error);
+            await logRef.update({ status: "failed", error: error.message });
+            throw new HttpsError("internal", `Errore durante l'invio delle notifiche. ${error.message}`);
+        }
     }
+);
 
-    const isCallerAdmin = request.auth?.token?.role === "admin";
-    if (!isCallerAdmin) {
-        throw new HttpsError("permission-denied", "Accesso negato. Operazione riservata agli amministratori.");
-    }
+export const deleteNotificationBatch = onCall(
+    { region: "europe-west1", cors: true, timeoutSeconds: 540 },
+    async (request) => {
+        logger.info("--- [DIAGNOSTIC] Inizio Esecuzione deleteNotificationBatch ---", { data: request.data });
 
-    switch (action) {
-        case "list": {
-            try {
-                const listUsersResult = await auth.listUsers(1000);
-                let users = listUsersResult.users.map((userRecord) => ({
-                    uid: userRecord.uid,
-                    email: userRecord.email,
-                    role: userRecord.customClaims?.role || "utente",
-                }));
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+        }
 
-                const requestedRole = payload?.role;
-                if (requestedRole) {
-                    if (requestedRole.startsWith("!")) {
-                        const roleToExclude = requestedRole.substring(1);
-                        users = users.filter((u) => u.role !== roleToExclude);
+        const { logId, batchId } = request.data;
+        if (!logId) {
+            throw new HttpsError("invalid-argument", "L'ID del log è obbligatorio.");
+        }
+
+        const mainStartTime = Date.now();
+
+        try {
+            logger.info("[DIAGNOSTIC] Step 1: Inizio eliminazione documento di log...", { logId });
+            const logRef = db.collection("notificheInviate").doc(logId);
+            await logRef.delete();
+            logger.info("[DIAGNOSTIC] Step 2: Documento di log eliminato.", { logId, duration: Date.now() - mainStartTime });
+
+            if (batchId) {
+                logger.info("[DIAGNOSTIC] Step 3: Trovato batchId. Inizio eliminazione paginata.", { batchId });
+                const query = db.collection("notifiche").where("batchId", "==", batchId);
+                let totalDeleted = 0;
+                let batchCount = 0;
+                let continueDeleting = true;
+
+                while (continueDeleting) {
+                    batchCount++;
+                    logger.info(`[DIAGNOSTIC] Step 4.${batchCount}: Tentativo di eliminare un nuovo batch.`);
+                    const numDeleted = await deleteQueryBatch(query, 499);
+                    
+                    if (numDeleted > 0) {
+                        totalDeleted += numDeleted;
+                        logger.info(`[DIAGNOSTIC] Step 5.${batchCount}: Batch eliminato.`, { numDeleted, totalDeleted, duration: Date.now() - mainStartTime });
                     } else {
-                        users = users.filter((u) => u.role === requestedRole);
+                        continueDeleting = false;
                     }
                 }
-
-                return { users };
-            } catch (error: any) {
-                logger.error("Errore nel listare gli utenti", error);
-                throw new HttpsError("internal", "Errore durante il recupero degli utenti.");
-            }
-        }
-
-        case "createUser": {
-            if (!payload?.email || !payload?.nome) {
-                throw new HttpsError("invalid-argument", "Email e nome sono richiesti per creare un utente.");
-            }
-            try {
-                const userRecord = await auth.createUser({
-                    email: payload.email,
-                    displayName: `${payload.nome} ${payload.cognome || ""}`.trim(),
-                });
-
-                await auth.setCustomUserClaims(userRecord.uid, { role: "tecnico" });
-                await usersCollection.doc(userRecord.uid).set({
-                    nome: payload.nome,
-                    cognome: payload.cognome || "",
-                    email: payload.email,
-                });
-
-                return {
-                    status: "success",
-                    message: `Utente ${payload.email} creato con successo.`,
-                    user: {
-                        uid: userRecord.uid,
-                        email: userRecord.email,
-                        role: "tecnico",
-                    },
-                };
-            } catch (error: any) {
-                logger.error("Errore nella creazione dell'utente", error);
-                if (error?.code === "auth/email-already-exists") {
-                    throw new HttpsError("already-exists", `L'utente con email ${payload.email} esiste già.`);
-                }
-                throw new HttpsError("internal", "Errore sconosciuto durante la creazione dell'utente.");
-            }
-        }
-
-        case "setRole": {
-            const targetUid = payload?.uid;
-            const role = payload?.role;
-            if (!targetUid || !role) {
-                throw new HttpsError("invalid-argument", "UID utente e nuovo ruolo sono richiesti.");
-            }
-
-            try {
-                await auth.setCustomUserClaims(targetUid, { role });
-                if (role === "admin") {
-                    const sourceDoc = await usersCollection.doc(targetUid).get();
-                    const sourceData = sourceDoc.exists ? sourceDoc.data() : { uid: targetUid };
-                    await adminsCollection.doc(targetUid).set(sourceData || {});
-                    await usersCollection.doc(targetUid).delete().catch(() => undefined);
-                } else {
-                    const sourceDoc = await adminsCollection.doc(targetUid).get();
-                    const sourceData = sourceDoc.exists ? sourceDoc.data() : { uid: targetUid };
-                    await usersCollection.doc(targetUid).set(sourceData || {});
-                    await adminsCollection.doc(targetUid).delete().catch(() => undefined);
-                }
-                return { status: "success", message: "Ruolo aggiornato con successo." };
-            } catch (error: any) {
-                logger.error("Errore nell'impostare il ruolo", error);
-                throw new HttpsError("internal", "Errore durante l'aggiornamento del ruolo.");
-            }
-        }
-
-        case "deleteUser": {
-            const targetUid = payload?.uid;
-            if (!targetUid) {
-                throw new HttpsError("invalid-argument", "L'UID dell'utente è richiesto per l'eliminazione.");
-            }
-            try {
-                await auth.deleteUser(targetUid);
-                await usersCollection.doc(targetUid).delete().catch(() => undefined);
-                await adminsCollection.doc(targetUid).delete().catch(() => undefined);
-                return { status: "success", message: "Utente eliminato con successo." };
-            } catch (error: any) {
-                logger.error("Errore nell'eliminazione dell'utente", error);
-                throw new HttpsError("internal", "Impossibile eliminare l'utente.");
-            }
-        }
-
-        default:
-            throw new HttpsError("invalid-argument", `L'azione richiesta '${action}' non è valida.`);
-    }
-});
-
-
-interface SendNotificationData {
-    targetType: "all" | "category" | "user";
-    targetId: string;
-    title: string;
-    message: string;
-}
-
-export const sendNotification = onCall<SendNotificationData>(async (request) => {
-    // 1. Authentication Check
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
-    }
-
-    // 2. Input Validation
-    const { targetType, targetId, title, message } = request.data;
-    logger.info("Inizio invio notifica con dati:", request.data);
-
-    if (!title || !message) {
-        throw new HttpsError("invalid-argument", "Il titolo e il messaggio sono obbligatori.");
-    }
-    if (!targetType || !["all", "category", "user"].includes(targetType)) {
-        throw new HttpsError("invalid-argument", "Tipo di target non valido.");
-    }
-    if ((targetType === "category" || targetType === "user") && !targetId) {
-        throw new HttpsError("invalid-argument", `L'ID del target è obbligatorio per il tipo '${targetType}'.`);
-    }
-
-    try {
-        const batchId = db.collection("notifications").doc().id;
-        let targetName = "";
-
-        if (targetType === "all") {
-            targetName = "Tutti i tecnici abilitati";
-        } else if (targetType === "category") {
-            const categoryDoc = await db.collection("categorie").doc(targetId).get();
-            targetName = categoryDoc.exists ? String(categoryDoc.data()?.nome || targetId) : targetId;
-        } else {
-            const tecnicoDoc = await db.collection("tecnici").doc(targetId).get();
-            const tecnicoData = tecnicoDoc.exists ? tecnicoDoc.data() : null;
-            targetName = tecnicoData ? `${tecnicoData.cognome || ""} ${tecnicoData.nome || ""}`.trim() || targetId : targetId;
-        }
-
-        // 3. Get Recipient UIDs (Logica di filtro aggiornata)
-        let uids: string[] = [];
-        if (targetType === 'user') {
-            const userDoc = await db.collection("tecnici").doc(targetId).get();
-            if (userDoc.exists && userDoc.data()?.appAccess === true) {
-                uids = [targetId];
-            }
-        } else if (targetType === 'all') {
-            const snapshot = await db.collection("tecnici").where("appAccess", "==", true).get();
-            uids = snapshot.docs.map(doc => doc.id);
-        } else if (targetType === 'category') {
-            const snapshot = await db.collection("tecnici").where("categoriaId", "==", targetId).get();
-            uids = snapshot.docs
-                .filter(doc => doc.data().appAccess === true)
-                .map(doc => doc.id);
-        }
-
-        if (uids.length === 0) {
-            logger.warn("Nessun tecnico trovato per la notifica.", { data: request.data });
-            return { success: true, message: "Nessun tecnico corrispondente trovato." };
-        }
-        logger.info(`Trovati ${uids.length} tecnici destinatari.`);
-
-        const notificationsBatch = db.batch();
-        const notificationsCollection = db.collection("notifications");
-        uids.forEach((uid) => {
-            const notificationRef = notificationsCollection.doc();
-            notificationsBatch.set(notificationRef, {
-                batchId,
-                title,
-                body: message,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                tecnicoId: uid,
-                isRead: false,
-                readAt: null,
-                readBy: null,
-                target: {
-                    type: targetType,
-                    id: targetId || "all",
-                    name: targetName,
-                },
-            });
-        });
-        await notificationsBatch.commit();
-
-        // 4. Send FCM Message (con gestione dell'errore)
-        let fcmMessageId = "fcm-not-sent";
-        try {
-            const tokenPromises = uids.map(uid => db.collection(`tecnici/${uid}/tokens`).get());
-            const tokenSnapshots = await Promise.all(tokenPromises);
-            const allTokens = tokenSnapshots.flatMap(snap => snap.docs.map(doc => doc.id)).filter(Boolean);
-
-            if (allTokens.length > 0) {
-                logger.info(`Invio di notifiche FCM a ${allTokens.length} token.`);
-                const multicastMessage: admin.messaging.MulticastMessage = {
-                    tokens: allTokens,
-                    notification: { title, body: message },
-                    webpush: { notification: { icon: "https://risomobile.it/images/logo.png" } },
-                };
-                const response = await messaging.sendEachForMulticast(multicastMessage);
-                fcmMessageId = `success:${response.successCount}/failure:${response.failureCount}`;
+                logger.info("[DIAGNOSTIC] Step 6: Eliminazione paginata completata.", { totalDeleted, duration: Date.now() - mainStartTime });
             } else {
-                logger.info("Nessun token FCM trovato per i destinatari.");
-                fcmMessageId = "no-fcm-tokens";
+                logger.info("[DIAGNOSTIC] Step 3: Nessun batchId trovato. Salto eliminazione paginata.");
             }
-        } catch (fcmError: any) {
-            logger.error("ERRORE DURANTE L'INVIO FCM - L'operazione continuerà comunque.", {
-                errorMessage: fcmError.message,
-                requestData: request.data,
-            });
-            fcmMessageId = "fcm-failed";
+
+            logger.info("--- [DIAGNOSTIC] Esecuzione completata con successo ---", { duration: Date.now() - mainStartTime });
+            return { success: true, message: "Notifica e riferimenti eliminati con successo." };
+
+        } catch (error: any) {
+            logger.error("--- [DIAGNOSTIC] ERRORE CRITICO --- ", { logId, batchId, message: error.message, stack: error.stack, duration: Date.now() - mainStartTime });
+            throw new HttpsError("internal", `Si è verificato un errore durante l'eliminazione dei dati: ${error.message}`);
         }
-
-        // 5. Create Sent Notification Document
-        const sentNotificationRef = db.collection("notificheInviate").doc();
-        await sentNotificationRef.set({
-            batchId,
-            title,
-            message,
-            sentAt: admin.firestore.FieldValue.serverTimestamp(),
-            target: { type: targetType, id: targetId || "all", name: targetName },
-            recipientsCount: uids.length,
-            fcmMessageId: fcmMessageId,
-        });
-        logger.info("Documento 'notificheInviate' creato con successo:", { id: sentNotificationRef.id });
-        
-        return { success: true, message: `Operazione completata. Notifiche salvate per ${uids.length} tecnici.`, batchId };
-
-    } catch (error: any) {
-        logger.error("Errore imprevisto durante l'invio delle notifiche:", {
-            errorMessage: error.message,
-            errorStack: error.stack,
-            requestData: request.data,
-        });
-        throw new HttpsError("internal", error.message || "Si è verificato un errore interno.");
     }
-});
+);

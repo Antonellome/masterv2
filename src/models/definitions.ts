@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export interface BaseEntity {
@@ -70,7 +71,7 @@ export interface Rapportino extends BaseEntity {
   note?: string;
   approvato: boolean;
   firmaVettoriale?: string;
-  orarioIngresso?: string; 
+  orarioIngresso?: string;
   orarioUscita?: string;
 }
 
@@ -78,11 +79,11 @@ export interface EnrichedRapportino extends Rapportino {
   dataFormatted: string;
   tipoGiornata?: TipoGiornata;
   tipoGiornataNome: string;
-  naveNome: string; 
+  naveNome: string;
   luogoNome: string;
   oreGiorno: number;
-  oreOrdinarie: number; 
-  oreStraordinarie: number; 
+  oreOrdinarie: number;
+  oreStraordinarie: number;
   isEditable?: boolean;
 }
 
@@ -134,4 +135,20 @@ export interface RiepilogoMese {
   giorniTotaliLavorati: number;
   giorniTrasferta: number;
   costoTotale: number;
+}
+
+export interface NotificationTarget {
+    type: 'user' | 'category' | 'all';
+    id: string;
+    name: string;
+}
+
+export interface NotificaInviata extends BaseEntity {
+  title: string;
+  body: string;
+  sentAt: Timestamp;
+  target: NotificationTarget;
+  recipientsCount: number;
+  fcmMessageId: string;
+  batchId?: string;
 }

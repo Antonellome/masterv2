@@ -12,39 +12,33 @@ RISO (Reportistica Interventi Software Operativi) è un'applicazione web progett
 *   **Gestione Report (CRUD):** Creazione, visualizzazione, modifica ed eliminazione dei rapportini giornalieri.
 *   **Anagrafiche Centralizzate:** Gestione completa di tutte le entità di business (tecnici, clienti, sedi, veicoli, navi, luoghi, ditte).
 *   **Sincronizzazione Dati:** L'app "Tecnici" satellite sincronizza i dati anagrafici per l'uso offline.
-*   **Notifiche Push:** Invio di notifiche mirate a singoli tecnici, a categorie o a tutti gli utenti.
 *   **Esportazione PDF Singola:** Possibilità di stampare/esportare in PDF un singolo rapportino dalla sua pagina di dettaglio.
 *   **Correzioni Bug:**
     *   Risolto errore di conversione `Timestamp` in `Date` nella pagina di modifica report.
     *   Allineate le definizioni dei tipi (`definitions.ts`) con la struttura dati reale del backend (rimozione di `ruolo`, aggiunta `AppNotification`).
     *   Corretti i nomi delle collezioni usate dal servizio di sincronizzazione (`dataSync.ts`).
 
-## Piano di Sviluppo Attuale: Miglioramenti Pagina Reportistica
+## Piano di Sviluppo Attuale: Implementazione Notifiche (Pull)
 
-**Obiettivo:** Migliorare l'usabilità e le funzionalità della pagina di elenco dei report mensili.
+**Obiettivo:** Creare un'interfaccia per inviare notifiche (messaggi) ai tecnici, basata su un sistema di **pull** da Firestore.
+
+**Fonte di Verità:** L'implementazione deve seguire **esattamente** le specifiche definite nel file `notifiche.md` presente nella root del progetto. Qualsiasi altra logica (es. notifiche push) è da considerarsi deprecata e rimossa.
 
 ### Passi Implementativi
 
-1.  **Installazione Dipendenze per PDF:**
-    *   Verranno aggiunte le librerie `jspdf` e `html2canvas` per la generazione di documenti PDF lato client.
-    *   Comando da eseguire: `npm install jspdf html2canvas`.
+1.  **Pulizia Codice Obsoleto:**
+    *   **File:** `functions/src/index.ts`
+    *   **Azione:** La Cloud Function `sendNotification` è stata **rimossa**. La logica di invio notifiche push è completamente deprecata.
 
-2.  **Implementazione Righe Cliccabili:**
-    *   **File:** `src/pages/ReportisticaPage.tsx` (o il componente che contiene la `DataGrid`).
-    *   **Azione:** Verrà aggiunto un handler `onRowClick` alla `DataGrid` di MUI.
-    *   **Logica:** Al click, l'handler recupererà l'ID del report dalla riga cliccata e utilizzerà il hook `useNavigate` di React Router per reindirizzare l'utente alla pagina di modifica (`/reportistica/edit/:id`).
+2.  **Creazione Servizio Notifiche (Frontend):**
+    *   **Nuovo File:** `src/services/notificationAdminService.ts`
+    *   **Azione:** Creare il file contenente le funzioni `getAllTecnici` e `inviaNotifica`, come specificato in `notifiche.md`. Questo servizio interagirà direttamente con Firestore per scrivere i nuovi documenti di notifica.
 
-3.  **Implementazione Esportazione PDF Multi-Pagina:**
-    *   **File:** `src/pages/ReportisticaPage.tsx`.
-    *   **Azione:** Verrà aggiunto un nuovo pulsante "Esporta Tutti in PDF".
-    *   **Logica:**
-        1.  Al click, verrà attivata una funzione di esportazione che riceverà la lista completa dei report attualmente visualizzati.
-        2.  La funzione creerà una nuova istanza di `jsPDF`.
-        3.  Verrà creato un contenitore `div` nascosto fuori dallo schermo.
-        4.  La funzione ciclerà su ogni report:
-            a. Renderizzerà il componente `RapportinoPrint` (già esistente) per il report corrente all'interno del `div` nascosto.
-            b. Userà `html2canvas` per "catturare" l'output del `div` come immagine.
-            c. Aggiungerà l'immagine catturata a una nuova pagina nel documento `jsPDF`.
-            d. Se non è l'ultimo report, aggiungerà una pagina vuota (`doc.addPage()`).
-        5.  Una volta completato il ciclo, il file PDF finale verrà salvato e proposto al download con il nome `report_mensili.pdf`.
-        6.  Verrà gestito uno stato di "loading" per fornire un feedback visivo all'utente durante la generazione del PDF.
+3.  **Creazione Pagina di Invio Notifiche:**
+    *   **Nuovo File:** `src/pages/InviaNotifichePage.tsx`
+    *   **Azione:** Creare il componente React con il form di invio, utilizzando Material-UI. Il componente deve implementare la logica per caricare l'elenco dei tecnici e gestire l'invio tramite il `notificationAdminService`.
+
+4.  **Integrazione e Routing:**
+    *   **File:** `src/App.tsx` (o il file principale di routing).
+    *   **Azione:** Aggiungere una nuova rotta (es. `/notifiche/invia`) che punti al componente `InviaNotifichePage`.
+    *   Aggiungere un link nel menu di navigazione per accedere a questa nuova pagina.

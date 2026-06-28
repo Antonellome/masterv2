@@ -30,6 +30,7 @@
         # Rimuoviamo i vecchi moduli per sicurezza
         install-dependencies = "rm -rf node_modules && npm install";
       };
+      # Forza il riavvio dell'ambiente
     };
   };
 }
