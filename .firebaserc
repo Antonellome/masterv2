@@ -1,4 +1,3 @@
-
 {
   "projects": {
     "default": "riso-project-app"
@@ -11,5 +10,6 @@
         ]
       }
     }
-  }
+  },
+  "etags": {}
 }

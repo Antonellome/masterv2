@@ -1,29 +1,31 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useData } from '@/hooks/useData';
 import type { Rapportino, Tecnico, Nave, Luogo } from '@/models/definitions';
 import RapportiniList from '@/components/Rapportini/RapportiniList';
 import RapportinoFormController from '@/components/Rapportini/RapportinoFormController';
+import { useAlert } from '@/contexts/AlertContext';
 
 const GestioneRapportini = () => {
-    // 1. Usa l'hook centralizzato useData per i dati "master"
+    const { showAlert } = useAlert();
     const { 
         tecnici, 
         navi, 
         luoghi, 
-        loading: loadingData, // Stato di caricamento per i dati master
+        loading: loadingData,
     } = useData();
 
-    // 2. Stato specifico per i rapportini
     const [rapportini, setRapportini] = useState<Rapportino[]>([]);
     const [loadingRapportini, setLoadingRapportini] = useState(true);
 
-    // 3. Carica i rapportini in modo separato con un useEffect
     useEffect(() => {
-        const unsubscribe = onSnapshot(collection(db, 'rapportini'), 
+        // Modifica la query per escludere i documenti con isDeleted: true
+        const q = query(collection(db, 'rapportini'), where('isDeleted', '!=', true));
+        
+        const unsubscribe = onSnapshot(q, 
             (snapshot) => {
                 const rapportiniData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Rapportino[];
                 setRapportini(rapportiniData);
@@ -31,13 +33,13 @@ const GestioneRapportini = () => {
             },
             (error) => {
                 console.error("Errore nel caricamento dei rapportini: ", error);
+                showAlert(`Errore nel caricamento dei rapportini: ${error.message}`, 'error');
                 setLoadingRapportini(false);
             }
         );
 
-        // Funzione di pulizia per annullare la sottoscrizione
         return () => unsubscribe();
-    }, []); // L'array vuoto assicura che l'effetto venga eseguito solo una volta
+    }, [showAlert]);
 
     const [formOpen, setFormOpen] = useState(false);
     const [selectedRapportino, setSelectedRapportino] = useState<Rapportino | null>(null);
@@ -57,7 +59,29 @@ const GestioneRapportini = () => {
         setSelectedRapportino(null);
     };
 
-    // 4. Mappe per la risoluzione degli ID, come prima
+    // NUOVA FUNZIONE PER LA CANCELLAZIONE LOGICA (SOFT DELETE)
+    const handleDelete = async (reportId: string) => {
+        if (!window.confirm("Sei sicuro di voler eliminare questo rapportino? L'azione è reversibile solo dal database.")) {
+            return;
+        }
+
+        const reportRef = doc(db, "rapportini", reportId);
+        try {
+            await updateDoc(reportRef, {
+                isDeleted: true,
+                updatedAt: serverTimestamp() // Fondamentale per la sincronizzazione
+            });
+            showAlert(`Rapportino marcato come cancellato.`, 'success');
+        } catch (error) {
+            console.error("Errore durante la cancellazione (soft delete) del rapportino:", error);
+            if (error instanceof Error) {
+                showAlert(`Errore durante l'eliminazione: ${error.message}`, 'error');
+            } else {
+                showAlert("Si è verificato un errore sconosciuto durante l'eliminazione.", 'error');
+            }
+        }
+    };
+
     const tecniciMap = useMemo(() => {
         if (!tecnici) return new Map<string, Tecnico>();
         return new Map(tecnici.map(t => [t.id, t]));
@@ -73,7 +97,6 @@ const GestioneRapportini = () => {
         return new Map(luoghi.map(l => [l.id, l.nome]));
     }, [luoghi]);
 
-    // 5. Stato di caricamento combinato
     const isLoading = loadingData || loadingRapportini;
 
     return (
@@ -90,11 +113,10 @@ const GestioneRapportini = () => {
                     loading={isLoading}
                     onAdd={handleAdd}
                     onEdit={handleEdit}
-                    onDelete={(id) => console.log("Elimina", id)}
+                    onDelete={handleDelete} // Passa la nuova funzione
                 />
             </Paper>
 
-            {/* Il controller del form rimane invariato */}
             {formOpen && (
                  <RapportinoFormController
                     open={formOpen}

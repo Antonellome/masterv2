@@ -8,62 +8,52 @@ Questo documento serve come unica fonte di verità per lo sviluppo e la manutenz
 
 L'applicazione è un'interfaccia di amministrazione complessa per la gestione di tecnici, rapportini, clienti e altro. Utilizza una stack moderna basata su React, Vite, TypeScript, Material-UI e Firebase.
 
-### Problema Bloccante Rilevato:
-
-L'ambiente di sviluppo presentava un problema critico che impediva qualsiasi commit. Dopo un'analisi approfondita, è stata identificata la causa:
-
-*   **Causa:** L'esecuzione automatica dell'intera suite di test (`npm test` o `vitest run`) prima di ogni commit.
-*   **Sintomo:** Il processo di commit falliva silenziosamente o con un errore generico `Resource has been exhausted`.
-*   **Soluzione Temporanea Applicata:** È stata aggiunta una regola `exclude` nel file `vite.config.ts` per disabilitare temporaneamente l'esecuzione di tutti i file di test, sbloccando così i commit e permettendo la ripresa dello sviluppo.
-
-### Implementazione Esistente per le Notifiche:
-
-Contrariamente alle prime ipotesi, l'applicazione possiede già una sezione di notifiche robusta e ben strutturata in `src/pages/NotificationsPage.tsx`. Questa pagina gestisce sia la visualizzazione dello storico (`HistoryView` e `SentNotificationsList`) sia un'interfaccia per l'invio (`SendNotificationView` e `InviaNotificaDialog`). La logica di recupero dati da Firestore è gestita in modo efficiente tramite `react-firebase-hooks`.
-
 ---
 
-## 2. Piano di Lavoro Dettagliato
+## 2. Piano di Lavoro Dettagliato e Funzionalità Implementate
 
 Questo piano è diviso in fasi per affrontare i problemi in ordine di priorità, garantendo la stabilità dell'ambiente e la corretta implementazione delle nuove funzionalità.
 
 ### Fase 1: Stabilizzazione e Pulizia (Completata)
 
-*   **Azione 1.1: Verifica e Rimozione File Superflui** - Completato.
-*   **Azione 1.2: Aggiornamento di questo Blueprint** - Completato.
+*   Verifica e rimozione di file superflui.
+*   Aggiornamento iniziale del blueprint.
 
 ### Fase 2: Completamento Funzionalità Notifiche (Completata)
 
-*   **Azione 2.1: Analisi Approfondita di `InviaNotificaDialog.tsx`** - Completato.
-*   **Azione 2.2: Adeguamento del Modello Dati** - Completato.
-*   **Azione 2.3: Test Funzionale Completo** - Completato.
+*   Analisi e adeguamento del modello dati per `InviaNotificaDialog.tsx`.
+*   Test funzionale della feature di notifica.
 
 ### Fase 3: Risoluzione del Debito Tecnico dei Test (Completata)
 
-*   **Azione 3.1: Riattivazione Controllata dei Test** - Completato.
-*   **Azione 3.2: Identificazione e Correzione del Test problematico** - Completato.
-*   **Azione 3.3: Ripristino Completo della Suite di Test** - Completato.
+*   Riattivazione controllata e correzione della suite di test per ripristinare il corretto funzionamento dei pre-commit hooks.
 
-### Fase 4: Correzione Massiva di Linting e Qualità del Codice (In Corso)
+### Fase 4: Correzione Massiva di Linting e Qualità del Codice (Completata)
 
-L'obiettivo di questa fase è risolvere la grande quantità di errori e avvisi emersi dall'analisi di ESLint per migliorare la stabilità, la manutenibilità e la qualità generale del codice.
+*   **Descrizione:** Risolti numerosi errori e avvisi emersi dall'analisi statica di ESLint per migliorare stabilità, manutenibilità e qualità del codice.
 
-*   **Azione 4.1: Risoluzione Errori Critici**
-    *   **Stato:** In Corso
-    *   **Descrizione:** Sono stati identificati e si stanno correggendo gli errori che hanno la maggiore probabilità di indicare bug reali nel codice. Questo include:
-        *   `no-dupe-keys`: Corretto in `RapportinoForm.tsx` per prevenire la duplicazione di chiavi negli oggetti.
-        *   `no-case-declarations`: Corretto in `GenericForm.tsx` per garantire lo scope corretto delle variabili all'interno degli statement `switch`.
-        *   `no-useless-catch`: Corretto in `DataContext.tsx` rimuovendo i blocchi `try...catch` ridondanti.
-        *   `@typescript-eslint/ban-ts-comment`: Corretto in `RapportinoPrint.tsx` sostituendo `@ts-ignore` con `@ts-expect-error`.
-        *   `no-useless-escape`: In corso. Corretto il primo caso in `AddUserDialog.tsx` e si procede con gli altri file.
+### Fase 5: Implementazione Sistema di Aggiornamento Guidato (Completata)
 
-*   **Azione 4.2: Correzione Avvisi di Stabilità (Hooks di React)**
-    *   **Stato:** Da Iniziare
-    *   **Descrizione:** Affrontare tutti gli avvisi `react-hooks/exhaustive-deps`. La mancanza di dipendenze corrette negli array di dipendenza di `useEffect`, `useCallback` e `useMemo` può portare a bug difficili da tracciare, come la mancata riesecuzione di effetti o la creazione di callback obsolete.
+*   **Stato:** Completato
+*   **Obiettivo:** Consentire all'utente di avviare il processo di aggiornamento dell'applicazione direttamente dall'interfaccia in modo sicuro.
+*   **Componenti della Soluzione:** Implementazione di un mini-server Node.js (`update-server.js`) per eseguire uno script di aggiornamento (`update.sh`) e streaming dei log in tempo reale al frontend.
 
-*   **Azione 4.3: Miglioramento della Tipizzazione**
-    *   **Stato:** Da Iniziare
-    *   **Descrizione:** Ridurre l'uso di `any` (`@typescript-eslint/no-explicit-any`) sostituendolo con tipi più specifici. Questo aumenterà la sicurezza del tipo (type safety) dell'applicazione, ridurrà i bug a runtime e migliorerà la leggibilità e la manutenibilità del codice.
+### Fase 6: Correzione Bug e Migrazione Dati Accessi Tecnici (Completata)
 
-*   **Azione 4.4: Pulizia Generale del Codice (In corso)**
-    *   **Stato:** In corso
-    *   **Descrizione:** Rimuovere tutte le variabili, le funzioni e le importazioni non utilizzate (`@typescript-eslint/no-unused-vars`) per alleggerire il codice e migliorare la chiarezza.
+*   **Stato:** Completato
+*   **Problema:** Switch disabilitati nella pagina di gestione accessi tecnici.
+*   **Causa Radice:** Incoerenza dei dati in Firestore (campo `appAccess` non booleano).
+*   **Risoluzione:** Eseguito uno script di migrazione (`migration.js`) con `firebase-admin` per standardizzare il campo `appAccess` a booleano e rimuovere il campo legacy `abilitato`.
+
+### Fase 7: Implementazione Cancellazione Logica (Soft Delete) per Rapportini (Completata)
+
+*   **Stato:** Completato
+*   **Obiettivo:** Modificare il sistema di cancellazione dei rapportini per prevenire la perdita di dati e garantire la coerenza con l'app mobile dei tecnici.
+*   **Problema:** L'eliminazione fisica dei rapportini (`deleteDoc`) causava la loro scomparsa anche dall'app dei tecnici, che invece necessita di mantenere lo storico.
+*   **Soluzione Implementata:**
+    1.  **Sostituzione della Logica:** La funzione di cancellazione nel file `src/pages/GestioneRapportini.tsx` è stata completamente riscritta.
+    2.  **Adozione di `updateDoc`:** Invece di `deleteDoc`, ora viene utilizzata la funzione `updateDoc` di Firestore per modificare il documento del rapportino.
+    3.  **Marcatore `isDeleted`:** Al documento viene aggiunto (o aggiornato) un campo `isDeleted: true`.
+    4.  **Aggiornamento Timestamp:** Viene aggiornato simultaneamente il campo `updatedAt` utilizzando `serverTimestamp()`. Questo è un passaggio **cruciale** perché segnala ai client (come l'app dei tecnici) che il documento è stato modificato e deve essere risincronizzato, permettendo loro di gestire la cancellazione logica lato client.
+    5.  **Filtro sulla Visualizzazione:** La query di lettura in `GestioneRapportini.tsx` è stata aggiornata con una clausola `where('isDeleted', '!=', true)` per nascondere i rapportini "cancellati" dall'interfaccia web, mantenendoli però nel database.
+*   **Risultato:** I rapportini eliminati dall'app master non vengono più cancellati fisicamente, ma solo contrassegnati. Questo risolve il problema di sincronizzazione e garantisce che l'app dei tecnici mantenga uno storico coerente e completo.

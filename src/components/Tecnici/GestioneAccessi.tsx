@@ -30,7 +30,6 @@ interface DialogState {
 }
 
 const functions = getFunctions(undefined, 'europe-west1');
-// Funzione Cloud singola e più potente
 const manageTecnicoAccess = httpsCallable(functions, 'manageTecnicoAccess');
 
 const GestioneAccessi = () => {
@@ -66,7 +65,6 @@ const GestioneAccessi = () => {
         cognome: doc.data().cognome || '',
         email: doc.data().email || '',
         attivo: doc.data().attivo === true,
-        // Assicuriamoci che appAccess sia sempre un booleano
         appAccess: doc.data().appAccess === true,
       } as Tecnico));
       setTecnici(tecniciList);
@@ -82,37 +80,33 @@ const GestioneAccessi = () => {
   }, [fetchData]);
 
   const handleToggleAccess = async (tecnico: Tecnico) => {
-    if (!tecnico.email) {
-      showSnackbar('Impossibile abilitare un utente senza email. Aggiorna l\'anagrafica.', 'error');
+    if (!tecnico.id) { // Controlliamo l'ID invece dell'email
+      showSnackbar('ID del tecnico non disponibile. Impossibile procedere.', 'error');
       return;
     }
-
+  
     setOperating(true);
     const newState = !tecnico.appAccess;
-
+  
     try {
-        // La nuova funzione si aspetta l'email e l'azione desiderata (enable/disable)
-        // Se l'utente non esiste durante un'abilitazione, la funzione cloud lo creerà.
-        await manageTecnicoAccess({ 
-            email: tecnico.email, 
-            action: newState ? 'enable' : 'disable' 
-        });
-
-        // L'aggiornamento di Firestore avviene ora nella Cloud Function per coerenza,
-        // ma lo facciamo anche qui per una risposta immediata dell'UI.
-        const tecnicoRef = doc(db, 'tecnici', tecnico.id);
-        await updateDoc(tecnicoRef, { appAccess: newState });
-
-        showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
-        setTecnici(prevTecnici => prevTecnici.map(t => t.id === tecnico.id ? { ...t, appAccess: newState } : t));
-
+      // Passiamo l'UID (tecnico.id) invece dell'email
+      await manageTecnicoAccess({ 
+        uid: tecnico.id, 
+        action: newState ? 'enable' : 'disable' 
+      });
+  
+      const tecnicoRef = doc(db, 'tecnici', tecnico.id);
+      await updateDoc(tecnicoRef, { appAccess: newState });
+  
+      showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
+      setTecnici(prevTecnici => prevTecnici.map(t => t.id === tecnico.id ? { ...t, appAccess: newState } : t));
+  
     } catch (err) {
-        handleDetailedError(err, "Operazione Fallita");
-        // Se l'operazione fallisce, non aggiorniamo lo stato locale per mantenere la coerenza
+      handleDetailedError(err, "Operazione Fallita");
     } finally {
-        setOperating(false);
+      setOperating(false);
     }
-};
+  };
 
   const executeResetPassword = async (email: string) => {
     setOperating(true);
@@ -152,7 +146,7 @@ const GestioneAccessi = () => {
         params.row.email ? (
           <Typography variant="body2">{params.row.email}</Typography>
         ) : (
-          <Tooltip title="Email mancante! Aggiornare l\'anagrafica.">
+          <Tooltip title="Email mancante! Aggiornare l'anagrafica.">
             <Box sx={{ display: 'flex', alignItems: 'center', color: 'warning.main' }}>
               <ErrorOutlineIcon fontSize="small" sx={{ mr: 1 }} />
               <Typography variant="body2">Mancante</Typography>
@@ -171,7 +165,7 @@ const GestioneAccessi = () => {
             <Switch
               checked={params.row.appAccess}
               onChange={() => handleToggleAccess(params.row)}
-              disabled={operating || !params.row.email}
+              disabled={operating || !params.row.id} // Disabilitato se non c'è l'ID
               color="success"
             />
           </span>

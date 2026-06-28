@@ -11,13 +11,6 @@ import React, {
 import { getFirestore, collection, getDocs, doc, addDoc, updateDoc, deleteDoc, FirestoreDataConverter } from 'firebase/firestore';
 import { 
     Tecnico,
-    Cliente,
-    Ditta,
-    Nave,
-    Luogo,
-    Categoria,
-    TipoGiornata,
-    Veicolo
 } from '@/models/definitions';
 import {
     tecnicoConverter,
@@ -43,13 +36,13 @@ export type CollectionName = keyof AllData;
 
 interface AllData {
     tecnici: Tecnico[];
-    clienti: Cliente[];
-    ditte: Ditta[];
-    navi: Nave[];
-    luoghi: Luogo[];
-    categorie: Categoria[];
-    tipiGiornata: TipoGiornata[];
-    veicoli: Veicolo[];
+    clienti: any[];
+    ditte: any[];
+    navi: any[];
+    luoghi: any[];
+    categorie: any[];
+    tipiGiornata: any[];
+    veicoli: any[];
 }
 
 // Map collection names to their converters
@@ -66,18 +59,18 @@ const converters: { [K in CollectionName]: FirestoreDataConverter<AllData[K][num
 
 interface DataContextType {
     tecnici: Tecnico[];
-    clienti: Cliente[];
-    ditte: Ditta[];
-    navi: Nave[];
-    luoghi: Luogo[];
-    categorie: Categoria[];
-    tipiGiornata: TipoGiornata[];
-    veicoli: Veicolo[];
+    clienti: any[];
+    ditte: any[];
+    navi: any[];
+    luoghi: any[];
+    categorie: any[];
+    tipiGiornata: any[];
+    veicoli: any[];
     tecniciMap: { [id: string]: Tecnico };
-    clientiMap: { [id: string]: Cliente };
-    naviMap: { [id: string]: Nave };
-    luoghiMap: { [id: string]: Luogo };
-    tipiGiornataMap: { [id: string]: TipoGiornata };
+    clientiMap: { [id: string]: any };
+    naviMap: { [id: string]: any };
+    luoghiMap: { [id: string]: any };
+    tipiGiornataMap: { [id: string]: any };
     loading: boolean;
     error: string | null;
     refreshData: () => void;

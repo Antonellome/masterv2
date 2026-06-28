@@ -13,25 +13,29 @@ dayjs.extend(isSameOrAfter);
 const AssenzeWidget = () => {
   const firestore = getFirestore();
 
-  // Fetch all active technicians
-  const [tecniciSnapshot, loadingTecnici, errorTecnici] = useCollection(
-    query(collection(firestore, 'tecnici'), where('attivo', '==', true))
-  );
+  // Query per i tecnici, memorizzata con useMemo per stabilità
+  const tecniciQuery = useMemo(() => 
+    query(collection(firestore, 'tecnici'), where('attivo', '==', true)),
+  [firestore]);
+
+  const [tecniciSnapshot, loadingTecnici, errorTecnici] = useCollection(tecniciQuery);
+  
   const tecniciAttivi = useMemo(() => 
     tecniciSnapshot?.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tecnico)) || [],
   [tecniciSnapshot]);
 
-  // Fetch rapportini from the last 7 days to check for missing ones
-  const lastWeekStart = dayjs().subtract(7, 'days').startOf('day');
-  const yesterdayEnd = dayjs().subtract(1, 'day').endOf('day');
-
-  const [rapportiniSnapshot, loadingRapportini, errorRapportini] = useCollection(
-    query(
+  // Query per i rapportini, memorizzata con useMemo per stabilità
+  const rapportiniQuery = useMemo(() => {
+    const lastWeekStart = dayjs().subtract(7, 'days').startOf('day');
+    const yesterdayEnd = dayjs().subtract(1, 'day').endOf('day');
+    return query(
       collection(firestore, 'rapportini'),
       where('data', '>=', Timestamp.fromDate(lastWeekStart.toDate())),
       where('data', '<=', Timestamp.fromDate(yesterdayEnd.toDate()))
-    )
-  );
+    );
+  }, [firestore]);
+
+  const [rapportiniSnapshot, loadingRapportini, errorRapportini] = useCollection(rapportiniQuery);
 
   const rapportiniMancanti = useMemo(() => {
     if (loadingTecnici || loadingRapportini || !tecniciAttivi.length) {
@@ -41,10 +45,9 @@ const AssenzeWidget = () => {
     let totalMissing = 0;
     const datesToCheck = [];
 
-    // Create a list of the last 7 weekdays (Mon-Fri), excluding today
     for (let i = 1; i <= 7; i++) {
       const date = dayjs().subtract(i, 'day');
-      const dayOfWeek = date.day(); // Sunday = 0, Saturday = 6
+      const dayOfWeek = date.day();
       if (dayOfWeek > 0 && dayOfWeek < 6) {
         datesToCheck.push(date.format('YYYY-MM-DD'));
       }

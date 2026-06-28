@@ -9,67 +9,35 @@ const db = admin.firestore();
 const auth = admin.auth();
 const messaging = admin.messaging();
 
-// Funzione robusta per gestire l'accesso dei tecnici (crea, abilita, disabilita)
 export const manageTecnicoAccess = onCall(async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
     }
 
-    const { email, action } = request.data;
+    const { uid, action } = request.data;
 
-    if (typeof email !== 'string' || email.length === 0) {
-        throw new HttpsError("invalid-argument", "L'email del tecnico non è valida.");
+    if (typeof uid !== 'string' || uid.length === 0) {
+        throw new HttpsError("invalid-argument", "L'UID del tecnico non è valido.");
     }
     if (action !== 'enable' && action !== 'disable') {
         throw new HttpsError("invalid-argument", "L'azione specificata non è valida. Usare 'enable' o 'disable'.");
     }
 
-    logger.info(`Inizio processo per email: ${email}, azione: ${action}`);
+    logger.info(`Inizio processo per UID: ${uid}, azione: ${action}`);
 
     let user;
-    let uid = '';
 
     try {
-        // Cerca l'utente tramite email
-        user = await auth.getUserByEmail(email);
-        uid = user.uid;
-        logger.info(`Utente trovato con UID: ${uid}`);
+        user = await auth.getUser(uid);
     } catch (error: any) {
+        logger.error(`Errore durante la ricerca dell'utente ${uid}:`, error);
         if (error.code === 'auth/user-not-found') {
-            if (action === 'disable') {
-                // Se l'utente non esiste e l'azione è disabilitare, non c'è nulla da fare.
-                logger.warn(`L'utente con email ${email} non esiste, non è necessario disabilitarlo.`);
-                // Potremmo voler comunque assicurarci che il db sia coerente
-                const querySnapshot = await db.collection("tecnici").where("email", "==", email).get();
-                if (!querySnapshot.empty) {
-                    const docId = querySnapshot.docs[0].id;
-                    await db.collection("tecnici").doc(docId).update({ appAccess: false });
-                }
-                return { success: true, message: "L'utente non esisteva, accesso già disabilitato." };
-            }
-            
-            // Se l'utente non esiste e l'azione è abilitare, lo creiamo
-            logger.info(`Utente con email ${email} non trovato. Inizio creazione.`);
-            try {
-                user = await auth.createUser({
-                    email: email,
-                    emailVerified: false, // L'utente dovrà verificare la sua email
-                    disabled: false // Lo creiamo già abilitato
-                });
-                uid = user.uid;
-                logger.info(`Nuovo utente creato con UID: ${uid}`);
-            } catch (creationError: any) {
-                logger.error(`Errore durante la creazione dell'utente ${email}:`, creationError);
-                throw new HttpsError("internal", `Impossibile creare l'utente: ${creationError.message}`);
-            }
-        } else {
-            // Per tutti gli altri errori in fase di lookup
-            logger.error(`Errore durante la ricerca dell'utente ${email}:`, error);
-            throw new HttpsError("internal", `Errore nella ricerca utente: ${error.message}`);
+            // Questo caso non dovrebbe accadere se il frontend è allineato, ma lo gestiamo.
+            throw new HttpsError("not-found", `L'utente con UID ${uid} non esiste in Firebase Auth.`);
         }
+        throw new HttpsError("internal", `Errore nella ricerca utente: ${error.message}`);
     }
 
-    // A questo punto, abbiamo un utente (esistente o appena creato)
     const newDisabledState = action === 'disable';
 
     if (user.disabled !== newDisabledState) {
@@ -84,27 +52,22 @@ export const manageTecnicoAccess = onCall(async (request) => {
         logger.info(`L'utente ${uid} ha già lo stato di autenticazione desiderato (disabled: ${newDisabledState}).`);
     }
 
-    // Infine, assicuriamo la coerenza del database Firestore
     try {
-        const querySnapshot = await db.collection("tecnici").where("email", "==", email).get();
-        if (!querySnapshot.empty) {
-            const docId = querySnapshot.docs[0].id;
-            // Aggiorniamo sia il campo appAccess che l'UID se mancava
-            await db.collection("tecnici").doc(docId).update({ 
-                appAccess: !newDisabledState,
-                uid: uid 
-            });
-            logger.info(`Documento Firestore ${docId} aggiornato con appAccess: ${!newDisabledState} e UID: ${uid}.`);
-        } else {
-            logger.warn(`Nessun documento tecnico trovato in Firestore per l'email ${email}. L'autenticazione è stata aggiornata, ma il DB non è allineato.`);
-        }
+        const tecnicoRef = db.collection("tecnici").doc(uid);
+        await tecnicoRef.update({ appAccess: !newDisabledState });
+        logger.info(`Documento Firestore ${uid} aggiornato con appAccess: ${!newDisabledState}.`);
     } catch (dbError: any) {
-        logger.error(`Errore durante l'aggiornamento di Firestore per l'email ${email}:`, dbError);
-        throw new HttpsError("internal", `Impossibile aggiornare il database: ${dbError.message}`);
+        logger.error(`Errore durante l'aggiornamento di Firestore per l'UID ${uid}:`, dbError);
+        // Se l'aggiornamento di Auth ha funzionato ma quello di Firestore no, dobbiamo segnalarlo.
+        throw new HttpsError("internal", `L'autenticazione è stata aggiornata, ma impossibile aggiornare il database: ${dbError.message}`);
     }
 
-    return { success: true, message: `Accesso per l'utente ${email} è stato ${action === 'enable' ? 'abilitato' : 'disabilitato'}.` };
+    return { success: true, message: `Accesso per l'utente ${uid} è stato ${action === 'enable' ? 'abilitato' : 'disabilitato'}.` };
 });
+
+// ... (il resto del file rimane invariato)
+
+
 
 interface ManageUsersPayload {
     action: "promoteToAdmin" | "list" | "createUser" | "setRole" | "deleteUser";
