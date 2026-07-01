@@ -45,7 +45,6 @@ interface AllData {
     veicoli: any[];
 }
 
-// Map collection names to their converters
 const converters: { [K in CollectionName]: FirestoreDataConverter<AllData[K][number]> } = {
     tecnici: tecnicoConverter,
     clienti: clienteConverter,
@@ -108,23 +107,41 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             setError(null);
             
             try {
-                const allData: Partial<AllData> = {};
-                const fetchPromises = COLLECTION_NAMES.map(async (name) => {
+                const fetchPromises = COLLECTION_NAMES.map(name => {
                     const collectionRef = collection(db, name).withConverter(converters[name]);
-                    const snapshot = await getDocs(collectionRef);
-                    const list = snapshot.docs.map(d => d.data());
-                    return { key: name, data: list };
+                    return getDocs(collectionRef).then(snapshot => ({
+                        key: name,
+                        data: snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
+                    }));
                 });
 
-                const results = await Promise.all(fetchPromises);
-                results.forEach(result => {
-                    allData[result.key as CollectionName] = result.data as any; // The structure is correct here
+                const results = await Promise.allSettled(fetchPromises);
+
+                const newState: AllData = { 
+                    tecnici: [], clienti: [], ditte: [], navi: [], luoghi: [], 
+                    categorie: [], tipiGiornata: [], veicoli: []
+                };
+                let a_err:string[] = [];
+
+                results.forEach((result, index) => {
+                    const collectionName = COLLECTION_NAMES[index];
+                    if (result.status === 'fulfilled') {
+                        newState[collectionName] = result.value.data as any;
+                    } else {
+                        console.error(`Errore caricamento ${collectionName}:`, result.reason);
+                        a_err.push(collectionName);
+                        newState[collectionName] = []; // Ensure it's an empty array on failure
+                    }
                 });
-                setData(allData as AllData);
+                if (a_err.length > 0) {
+                    setError(`Errore nel caricamento delle seguenti collezioni: ${a_err.join(', ')}`)
+                }
+
+                setData(newState);
 
             } catch (err: unknown) {
-                console.error("DataContext: Errore nel recupero dei dati anagrafici", err);
-                const message = err instanceof Error ? err.message : 'Si è verificato un errore nel caricamento dei dati.';
+                console.error("DataContext: Errore grave e imprevisto nel recupero dei dati", err);
+                const message = err instanceof Error ? err.message : 'Si è verificato un errore critico.';
                 setError(message);
             } finally {
                 setLoading(false);
@@ -184,7 +201,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 export const useDataContext = () => {
     const context = useContext(DataContext);
     if (context === undefined) {
-        throw new Error('useDataContext deve essere usato allinterno di un DataProvider');
+        throw new Error('useDataContext deve essere usato all\'interno di un DataProvider');
     }
     return context;
 };

@@ -9,7 +9,7 @@ import {
     ToggleButtonGroup, ToggleButton
 } from '@mui/material';
 import Grid from '@mui/material/Unstable_Grid2';
-import { useFirestoreData } from '@/hooks/useFirestoreData';
+import { useCollectionData } from '@/hooks/useCollectionData';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Rapportino, Tecnico, TipoGiornata, Nave, Luogo, Checkin, Cliente } from '../models/definitions';
@@ -94,9 +94,12 @@ const DashboardContent = () => {
         return () => unsubscribe();
     }, []);
 
-    const { data: tipiGiornata, loading: lTipiGiornata } = useFirestoreData<TipoGiornata>(collection(db, 'tipiGiornata'));
+    const tipiGiornataQuery = useMemo(() => collection(db, 'tipiGiornata'), []);
+    const clientiQuery = useMemo(() => collection(db, 'clienti'), []);
+
+    const { data: tipiGiornata, loading: lTipiGiornata } = useCollectionData<TipoGiornata>(tipiGiornataQuery);
     const { tecnici, navi, luoghi, loading: lAnagrafiche, error: eAnagrafiche } = useAnagrafiche();
-    const { data: clienti, loading: lClienti, error: eClienti } = useFirestoreData<Cliente>(collection(db, 'clienti'));
+    const { data: clienti, loading: lClienti, error: eClienti } = useCollectionData<Cliente>(clientiQuery);
     const { filteredCheckins, loading: lCheckins, error: eCheckins } = useCheckinData(today.format('YYYY-MM-DD'));
 
     const isLoading = lRapportini || lTipiGiornata || lAnagrafiche || lCheckins || lClienti;

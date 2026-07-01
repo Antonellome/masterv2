@@ -5,6 +5,60 @@ export interface BaseEntity {
   id: string;
 }
 
+// --- ANAGRAFICHE PRINCIPALI ---
+
+export interface Tecnico extends BaseEntity {
+  // Dati anagrafici e di contatto
+  nome: string;
+  cognome: string;
+  email: string;
+  codiceFiscale?: string;
+  telefono?: string;
+  indirizzo?: string;
+  cap?: string;
+  citta?: string;
+  provincia?: string;
+
+  // Dati aziendali e contrattuali
+  attivo: boolean;          // Stato di attività del tecnico
+  appAccess?: boolean;         // Permesso di accedere all'app (nuovo campo unificato)
+  accessoApp?: boolean;        // Vecchio campo, mantenuto per retrocompatibilità
+  dittaId?: string;
+  categoriaId?: string;
+  tipoContratto?: string;
+  dataAssunzione?: Timestamp | Date | null;
+  
+  // Documenti e scadenze
+  numeroCartaIdentita?: string;
+  scadenzaCartaIdentita?: Timestamp | Date | null;
+  numeroPatente?: string;
+  categoriaPatente?: string;
+  scadenzaPatente?: Timestamp | Date | null;
+  numeroPassaporto?: string;
+  scadenzaPassaporto?: Timestamp | Date | null;
+  numeroCQC?: string;
+  scadenzaCQC?: Timestamp | Date | null;
+  
+  // Scadenze corsi e visite
+  scadenzaVisita?: Timestamp | Date | null;
+  scadenzaContratto?: Timestamp | Date | null;
+  scadenzaPrimoSoccorso?: Timestamp | Date | null;
+  scadenzaAntincendio?: Timestamp | Date | null;
+  scadenzaCorsoSicurezza?: Timestamp | Date | null;
+  scadenzaUnilav?: Timestamp | Date | null;
+
+  // Dati specifici dell'app
+  uid?: string;              // UID da Firebase Auth, se associato
+  fcmToken?: string;         // Token per le notifiche push
+  tariffe?: Record<string, number>; // Mappa dinamica per le tariffe personalizzate
+  note?: string;
+
+  // Campi legacy o di stato
+  sincronizzazioneAttiva?: boolean;
+  dataSync?: Timestamp | Date | null;
+  updatedAt?: Timestamp | Date | null;
+}
+
 export interface Cliente extends BaseEntity {
   nome: string;
   indirizzo?: string;
@@ -15,15 +69,16 @@ export interface Cliente extends BaseEntity {
   telefono?: string;
 }
 
-export interface Tecnico extends BaseEntity {
+export interface Categoria extends BaseEntity {
   nome: string;
-  cognome: string;
-  email: string;
-  userId: string;
-  costoOrarioOrdinario?: number;
-  costoOrarioStraordinario?: number;
-  costoTrasferta?: number;
 }
+
+export interface Ditta extends BaseEntity {
+  nome: string;
+  // altri campi se necessari
+}
+
+// --- ANAGRAFICHE DI SUPPORTO ---
 
 export interface TipoGiornata extends BaseEntity {
   nome: string;
@@ -46,9 +101,7 @@ export interface Veicolo extends BaseEntity {
   nome: string;
 }
 
-export interface Categoria extends BaseEntity {
-  nome: string;
-}
+// --- DATI OPERATIVI ---
 
 export interface DettaglioOreTecnico {
   tecnicoId: string;
@@ -58,16 +111,16 @@ export interface DettaglioOreTecnico {
 export interface Rapportino extends BaseEntity {
   data: any; // O Timestamp
   userId: string;
-  tecnicoId: string; // Tecnico principale
-  presenze?: string[]; // ID dei tecnici presenti
+  tecnicoId: string;
+  presenze?: string[];
   dettaglioOreTecnici?: DettaglioOreTecnico[];
   naveId: string;
   luogoId: string;
   veicoloId: string;
   oreLavoro?: number;
   tipoGiornataId: string;
-  isTrasferta?: boolean; // Vecchio campo
-  trasfertaId?: string; // Nuovo campo
+  isTrasferta?: boolean;
+  trasfertaId?: string;
   note?: string;
   approvato: boolean;
   firmaVettoriale?: string;
@@ -87,6 +140,7 @@ export interface EnrichedRapportino extends Rapportino {
   isEditable?: boolean;
 }
 
+// --- IMPOSTAZIONI E PROFILI ---
 
 export interface Impostazioni extends BaseEntity {
     tariffe: {
@@ -114,7 +168,10 @@ export interface MasterData {
   luoghi: Luogo[];
   veicoli: Veicolo[];
   categorie: Categoria[];
+  ditte: Ditta[];
 }
+
+// --- REPORTISTICA ---
 
 export interface RiepilogoVoce {
   id: string;
@@ -137,6 +194,8 @@ export interface RiepilogoMese {
   costoTotale: number;
 }
 
+// --- NOTIFICHE ---
+
 export interface NotificationTarget {
     type: 'user' | 'category' | 'all';
     id: string;
@@ -151,4 +210,18 @@ export interface NotificaInviata extends BaseEntity {
   recipientsCount: number;
   fcmMessageId: string;
   batchId?: string;
+}
+
+// --- TIPI GENERICI ---
+// Necessario per GestioneAnagrafica
+export type Anagrafica = Cliente | Tecnico | Categoria | Ditta | Nave | Luogo | Veicolo | TipoGiornata;
+
+// Necessario per FormDialog
+export interface FormField {
+  name: string;
+  label: string;
+  type: 'text' | 'number' | 'email' | 'select' | 'date' | 'boolean' | 'password';
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  defaultValue?: any;
 }

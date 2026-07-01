@@ -1,9 +1,8 @@
-
-// src/hooks/useAnagraficaData.ts
-import { useFirestoreData } from './useFirestoreData';
+import { useMemo } from 'react';
 import { collection, query, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { AnagraficaBase } from '@/models/definitions';
+import { useCollectionData } from './useCollectionData'; // Importa il nuovo hook
 
 /**
  * Hook per caricare i dati di una specifica anagrafica (collezione) da Firestore.
@@ -13,11 +12,10 @@ import type { AnagraficaBase } from '@/models/definitions';
  * @returns Un oggetto con `data`, `loading`, `error`, e `refresh`.
  */
 export const useAnagraficaData = <T extends AnagraficaBase>(collectionName: string) => {
-    const q = query(collection(db, collectionName), orderBy('nome', 'asc'));
+    const q = useMemo(() => query(collection(db, collectionName), orderBy('nome', 'asc')), [collectionName]);
 
-    // Ora `useFirestoreData` restituisce anche la funzione `refresh`.
-    const { data, loading, error, refresh } = useFirestoreData<T>(q, { listen: false });
+    // Usa il nuovo hook con l'opzione per non ascoltare in tempo reale
+    const { data, loading, error, refresh } = useCollectionData<T>(q, { listen: false });
 
-    // Restituiamo `refresh` in modo che i componenti possano usarlo.
     return { data, loading, error, refresh };
 };

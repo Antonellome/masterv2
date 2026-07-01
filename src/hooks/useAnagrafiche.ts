@@ -1,24 +1,26 @@
-
-// src/hooks/useAnagrafiche.ts
-import { useFirestoreData } from './useFirestoreData';
+import { useMemo } from 'react';
 import { collection } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useCollectionData } from './useCollectionData'; // Corretto: usa il nuovo hook
 import type { Tecnico, Nave, Luogo } from '../models/definitions';
-import { useMemo } from 'react';
 
 export const useAnagrafiche = () => {
-    const { data: tecnici, loading: lTecnici, error: eTecnici } = useFirestoreData<Tecnico>(collection(db, 'tecnici'));
-    const { data: navi, loading: lNavi, error: eNavi } = useFirestoreData<Nave>(collection(db, 'navi'));
-    const { data: luoghi, loading: lLuoghi, error: eLuoghi } = useFirestoreData<Luogo>(collection(db, 'luoghi'));
+  const tecniciQuery = useMemo(() => collection(db, 'tecnici'), []);
+  const naviQuery = useMemo(() => collection(db, 'navi'), []);
+  const luoghiQuery = useMemo(() => collection(db, 'luoghi'), []);
 
-    const loading = lTecnici || lNavi || lLuoghi;
-    const error = eTecnici || eNavi || eLuoghi;
+  const { data: tecnici, loading: lTecnici, error: eTecnici } = useCollectionData<Tecnico>(tecniciQuery);
+  const { data: navi, loading: lNavi, error: eNavi } = useCollectionData<Nave>(naviQuery);
+  const { data: luoghi, loading: lLuoghi, error: eLuoghi } = useCollectionData<Luogo>(luoghiQuery);
 
-    const anagrafiche = useMemo(() => ({
-        tecnici,
-        navi,
-        luoghi
-    }), [tecnici, navi, luoghi]);
+  const loading = lTecnici || lNavi || lLuoghi;
+  const error = eTecnici || eNavi || eLuoghi;
 
-    return { ...anagrafiche, loading, error };
+  const anagrafiche = useMemo(() => ({
+    tecnici,
+    navi,
+    luoghi
+  }), [tecnici, navi, luoghi]);
+
+  return { ...anagrafiche, loading, error };
 };

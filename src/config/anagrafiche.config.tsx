@@ -42,6 +42,36 @@ export interface AnagraficaConfig {
 }
 
 export const anagraficheConfig: Record<string, AnagraficaConfig> = {
+    tecnici: {
+        title: 'Gestione Tecnici',
+        collectionName: 'tecnici',
+        anagraficaType: 'tecnico',
+        fields: [
+            { name: 'nome', label: 'Nome', type: 'text', required: true, gridProps: { size: { xs: 12, sm: 6 } } },
+            { name: 'cognome', label: 'Cognome', type: 'text', required: true, gridProps: { size: { xs: 12, sm: 6 } } },
+            { name: 'email', label: 'Email', type: 'email', required: true, gridProps: { size: { xs: 12, sm: 6 } } },
+            { name: 'attivo', label: 'Attivo', type: 'boolean', gridProps: { size: { xs: 12, sm: 6 } } },
+        ],
+        columns: [
+            { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 150, editable: true },
+            { field: 'cognome', headerName: 'Cognome', flex: 1, minWidth: 150, editable: true },
+            { field: 'email', headerName: 'Email', flex: 1, minWidth: 200, editable: true },
+            {
+                field: 'attivo',
+                headerName: 'Stato',
+                width: 100,
+                type: 'boolean',
+                editable: true,
+                renderCell: (params) => (
+                    <Chip
+                        label={params.value ? 'Attivo' : 'Inattivo'}
+                        color={params.value ? 'success' : 'default'}
+                        size="small"
+                    />
+                ),
+            },
+        ]
+    },
     clienti: {
         title: 'Gestione Clienti',
         collectionName: 'clienti',

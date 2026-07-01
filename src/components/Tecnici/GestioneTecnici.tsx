@@ -1,17 +1,24 @@
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
 import type { Tecnico } from '@/models/definitions';
 import { useDataContext, CollectionName } from '@/contexts/DataContext';
 import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
 import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
+import { db } from '@/firebase'; 
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { tecnicoConverter } from '@/firebase/converters';
 
 const GestioneTecnici = () => {
     const { 
-        tecnici, ditte, categorie, loading, error, 
+        ditte, categorie, 
         addDocument, updateDocument, deleteDocument 
     } = useDataContext();
+
+    const [tecnici, setTecnici] = useState<Tecnico[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
@@ -23,11 +30,43 @@ const GestioneTecnici = () => {
 
     const collectionName: CollectionName = 'tecnici';
 
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            // Ripristino la query ottimale con doppio ordinamento, ora che l'indice esiste.
+            const q = query(
+                collection(db, 'tecnici').withConverter(tecnicoConverter),
+                orderBy('cognome'),
+                orderBy('nome')
+            );
+            const snapshot = await getDocs(q);
+            const tecniciList = snapshot.docs.map(doc => doc.data());
+            setTecnici(tecniciList);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Errore sconosciuto nel caricamento tecnici.';
+            setError(message);
+            console.error("Errore caricamento tecnici:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+
     const handleError = (e: unknown, context: string) => {
         console.error(`${context}:`, e);
         const message = e instanceof Error ? e.message : 'Si è verificato un errore sconosciuto.';
         setSnackbar({ open: true, message: `${context}: ${message}`, severity: 'error' });
     };
+    
+    const refreshAndClose = () => {
+        fetchData();
+        setFormOpen(false);
+    }
 
     const handleAdd = () => {
         setSelectedTecnico(null);
@@ -47,10 +86,10 @@ const GestioneTecnici = () => {
                 await updateDocument(collectionName, id, dataToSave);
                 setSnackbar({ open: true, message: 'Dati tecnico aggiornati!', severity: 'success' });
             } else {
-                await addDocument(collectionName, dataToSave);
+                await addDocument(collectionName, dataToSave as Tecnico);
                 setSnackbar({ open: true, message: 'Tecnico creato con successo!', severity: 'success' });
             }
-            setFormOpen(false);
+            refreshAndClose();
         } catch (e) {
             handleError(e, "Errore nel salvataggio del tecnico");
         } finally {
@@ -69,6 +108,7 @@ const GestioneTecnici = () => {
         try {
             await deleteDocument(collectionName, tecnicoToDelete);
             setSnackbar({ open: true, message: 'Tecnico eliminato con successo.', severity: 'success' });
+            fetchData();
         } catch (e) {
             handleError(e, "Errore durante l'eliminazione del tecnico");
         } finally {
@@ -76,32 +116,20 @@ const GestioneTecnici = () => {
             setDeleteDialogOpen(false);
             setIsSaving(false);
         }
-    }, [tecnicoToDelete, deleteDocument]);
+    }, [tecnicoToDelete, deleteDocument, fetchData]);
     
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
         setUpdatingId(id);
         try {
             await updateDocument(collectionName, id, { attivo: newStatus });
-            setSnackbar({ open: true, message: `Stato del tecnico aggiornato a ${newStatus ? 'Attivo' : 'Inattivo'}.`, severity: 'success' });
+            setSnackbar({ open: true, message: `Stato del tecnico aggiornato.`, severity: 'success' });
+            fetchData();
         } catch (e) {
             handleError(e, "Errore nell'aggiornamento dello stato");
         } finally {
             setUpdatingId(null);
         }
-    }, [updateDocument]);
-
-    const handleAppAccessChange = useCallback(async (id: string, newStatus: boolean) => {
-        setUpdatingId(id);
-        try {
-            await updateDocument(collectionName, id, { appAccess: newStatus });
-            setSnackbar({ open: true, message: `Accesso all'app per il tecnico ${newStatus ? 'abilitato' : 'disabilitato'}.`, severity: 'success' });
-        } catch (e) {
-            handleError(e, "Errore nell'aggiornamento dell'accesso all'app");
-        } finally {
-            setUpdatingId(null);
-        }
-    }, [updateDocument]);
-
+    }, [updateDocument, fetchData]);
 
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
@@ -125,7 +153,6 @@ const GestioneTecnici = () => {
                 onEdit={handleEdit}
                 onDelete={(_e, id) => handleDelete(id)}
                 onStatusChange={handleStatusChange} 
-                onSyncChange={handleAppAccessChange} 
                 onViewDetails={() => {}}
                 isSaving={isSaving}
                 updatingId={updatingId}

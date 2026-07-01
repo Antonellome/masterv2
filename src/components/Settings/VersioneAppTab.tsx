@@ -53,7 +53,7 @@ const VersioneAppTab = () => {
                 Versione Applicazione
             </Typography>
             <Typography variant="body1" sx={{ mb: 2 }}>
-                Master Office V 1.5.0
+                Master Office V 1.5.1
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Button 

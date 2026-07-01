@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { collection, Query, where, getDocs, query, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { useFirestoreData } from '@/hooks/useFirestoreData';
+import { useCollectionData } from '@/hooks/useCollectionData';
 import {
     Box, Typography, CircularProgress, Alert, Card, CardContent, Grid,
     FormControl, InputLabel, Select, MenuItem, TextField, SelectChangeEvent
@@ -38,12 +38,12 @@ const AnalisiOre = () => {
     const [userInteracted, setUserInteracted] = useState(false);
 
     // --- Caricamento Dati Anagrafici ---
-    const { data: tecnici, loading: lTecnici } = useFirestoreData<Tecnico>(useMemo(() => collection(db, 'tecnici'), []));
-    const { data: categorie, loading: lCategorie } = useFirestoreData<Categoria>(useMemo(() => collection(db, 'categorie'), []));
-    const { data: tipiGiornata, loading: lTipiGiornata } = useFirestoreData<TipoGiornata>(useMemo(() => collection(db, 'tipiGiornata'), []));
-    const { data: navi, loading: lNavi } = useFirestoreData<Nave>(useMemo(() => collection(db, 'navi'), []));
-    const { data: luoghi, loading: lLuoghi } = useFirestoreData<Luogo>(useMemo(() => collection(db, 'luoghi'), []));
-    const { data: clienti, loading: lClienti } = useFirestoreData<Cliente>(useMemo(() => collection(db, 'clienti'), []));
+    const { data: tecnici, loading: lTecnici } = useCollectionData<Tecnico>(useMemo(() => collection(db, 'tecnici'), []));
+    const { data: categorie, loading: lCategorie } = useCollectionData<Categoria>(useMemo(() => collection(db, 'categorie'), []));
+    const { data: tipiGiornata, loading: lTipiGiornata } = useCollectionData<TipoGiornata>(useMemo(() => collection(db, 'tipiGiornata'), []));
+    const { data: navi, loading: lNavi } = useCollectionData<Nave>(useMemo(() => collection(db, 'navi'), []));
+    const { data: luoghi, loading: lLuoghi } = useCollectionData<Luogo>(useMemo(() => collection(db, 'luoghi'), []));
+    const { data: clienti, loading: lClienti } = useCollectionData<Cliente>(useMemo(() => collection(db, 'clienti'), []));
     
     const dataLoading = lTecnici || lCategorie || lTipiGiornata || lNavi || lLuoghi || lClienti;
 

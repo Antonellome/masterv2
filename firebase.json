@@ -1,12 +1,9 @@
 {
-  "firestore": {
-    "database": "(default)",
-    "location": "nam5",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs20"
   },
   "hosting": {
-    "target": "master-office-prod",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -19,10 +16,5 @@
         "destination": "/index.html"
       }
     ]
-  },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs20",
-    "region": "europe-west1"
   }
 }

@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import {
   onAuthStateChanged,
@@ -21,45 +22,26 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [userRole, setUserRole] = useState<UserRole>(null);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            setLoading(true);
             if (firebaseUser) {
-                try {
-                    const idTokenResult = await firebaseUser.getIdTokenResult(true);
-                    const claims = idTokenResult.claims;
-                    const role = claims.role as string;
-
-                    if (role !== 'admin') {
-                        // Se l'utente non è un admin, forziamo il logout e mostriamo un errore.
-                        await signOut(auth);
-                        setError("Accesso non autorizzato. Solo gli amministratori possono accedere.");
-                        setUser(null);
-                        setUserRole(null);
-                        setLoading(false);
-                        return;
-                    }
-
-                    setUserRole('Amministratore');
-                    setUser(firebaseUser);
-
-                } catch (e) {
-                    console.error("AuthProvider: Errore nell'ottenere il token o i claims.", e);
-                    setError("Impossibile verificare i permessi dell'utente.");
-                    await signOut(auth); // Logout for safety
-                    setUser(null);
-                    setUserRole(null);
-                } finally {
-                    setLoading(false);
-                }
+                // CORREZIONE: Leggiamo i permessi REALI dal token dell'utente.
+                const idTokenResult = await firebaseUser.getIdTokenResult(true); // Forza l'aggiornamento del token
+                const userIsAdmin = !!idTokenResult.claims.role && idTokenResult.claims.role === 'admin';
+                
+                setUser(firebaseUser);
+                setIsAdmin(userIsAdmin); // Imposta lo stato REALE.
+                setError(null);
             } else {
                 setUser(null);
-                setUserRole(null);
-                setLoading(false);
+                setIsAdmin(false);
             }
+            setLoading(false);
         });
         
         return () => unsubscribe();
@@ -70,8 +52,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setLoading(true);
         try {
           await signInWithEmailAndPassword(auth, email, pass);
-          // onAuthStateChanged gestirà il successo o il fallimento del controllo ruolo.
-          // Il loading viene gestito da onAuthStateChanged.
         } catch (err: unknown) {
           const error = err as { code?: string };
           let errorMessage = "Credenziali non valide o errore sconosciuto.";
@@ -99,20 +79,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await signOut(auth);
       } catch (_e: unknown) {
         setError("Errore durante il logout.");
-      } finally {
-        setLoading(false);
       }
+    }, []);
+
+    // Funzione per forzare il refresh del token e dello stato admin
+    const forceRefreshUserToken = useCallback(async () => {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            const idTokenResult = await currentUser.getIdTokenResult(true); // Forza il refresh
+            const userIsAdmin = !!idTokenResult.claims.role && idTokenResult.claims.role === 'admin';
+            setIsAdmin(userIsAdmin);
+        }
     }, []);
 
     const value = useMemo(() => ({
         user,
-        userRole,
+        isAdmin,
         loading,
         error,
         login,
         logout,
-        setError
-    }), [user, userRole, loading, error, login, logout]);
+        setError,
+        forceRefreshUserToken // Esponiamo la funzione di refresh
+    }), [user, isAdmin, loading, error, login, logout, forceRefreshUserToken]);
 
     return (
         <AuthContext.Provider value={value}>

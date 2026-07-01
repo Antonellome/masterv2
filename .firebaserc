@@ -1,15 +1,5 @@
 {
   "projects": {
-    "default": "riso-project-app"
-  },
-  "targets": {
-    "riso-project-app": {
-      "hosting": {
-        "master-office-prod": [
-          "riso-master-office-prod"
-        ]
-      }
-    }
-  },
-  "etags": {}
+    "default": "riso-master-office-prod"
+  }
 }
