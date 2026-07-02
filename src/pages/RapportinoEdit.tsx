@@ -19,8 +19,8 @@ import { doc, getDoc, addDoc, updateDoc, collection, Timestamp, serverTimestamp 
 import type { Rapportino, TipoGiornata, Tecnico } from '@/models/definitions';
 import { useAlert } from '@/contexts/AlertContext';
 dayjs.locale('it');
+
 const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly }) => {
-    
     const oreOptions = useMemo(() => Array.from({ length: 49 }, (_, i) => i * 0.5), []);
     const handleValueChange = (field: keyof DettaglioOreData, value: any) => {
         const newDati = { ...datiOre, [field]: value };
@@ -69,6 +69,7 @@ const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly 
         </Paper>
     );
 };
+
 const NON_LAVORATIVO_KEYWORDS = ['ferie', 'malattia', 'legge 104'];
 const isTrasfertaTipo = (tipo: TipoGiornata | undefined): boolean => {
     if (!tipo) return false;
@@ -80,6 +81,7 @@ const isGiornataLavorativa = (tipo: TipoGiornata | undefined): boolean => {
     if ((tipo as any).categoria === 'ferie' || (tipo as any).categoria === 'malattia') return false;
     return !NON_LAVORATIVO_KEYWORDS.some(k => (tipo.nome || '').toLowerCase().includes(k));
 };
+
 const emptyDettaglioOre: DettaglioOreData = {
     tecnicoId: 'placeholder',
     nome: '',
@@ -89,6 +91,7 @@ const emptyDettaglioOre: DettaglioOreData = {
     pausa: 60,
     ore: 8
 };
+
 const RapportinoEdit: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -96,6 +99,7 @@ const RapportinoEdit: React.FC = () => {
     const { showAlert } = useAlert();
     const isEditMode = Boolean(reportId);
     const { tipiGiornata, tecnici, veicoli, navi, luoghi, loading: collectionsLoading } = useData();
+
     const sortedTipiGiornata = useMemo(() => [...tipiGiornata].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [tipiGiornata]);
     const tipiGiornataLavorativi = useMemo(() => sortedTipiGiornata.filter(t => !isTrasfertaTipo(t)), [sortedTipiGiornata]);
     const tipiGiornataTrasferta = useMemo(() => sortedTipiGiornata.filter(t => isTrasfertaTipo(t)), [sortedTipiGiornata]);
@@ -104,6 +108,7 @@ const RapportinoEdit: React.FC = () => {
     const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [luoghi]);
     const sortedVeicoli = useMemo(() => [...veicoli].sort((a, b) => (a.targa || '').localeCompare(b.targa || '')), [veicoli]);
     const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => (`${a.cognome || ''} ${a.nome || ''}`.trim()).localeCompare((`${b.cognome || ''} ${b.nome || ''}`.trim()))), [tecnici]);
+
     const [tecnicoResponsabileId, setTecnicoResponsabileId] = useState<string | null>(null);
     const [data, setData] = useState<Dayjs | null>(dayjs());
     const [giornataId, setGiornataId] = useState('');
@@ -122,7 +127,8 @@ const RapportinoEdit: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingTecnico, setEditingTecnico] = useState<DettaglioOreData | null>(null);
     const [tempDettaglioOre, setTempDettaglioOre] = useState<DettaglioOreData | null>(null);
-    
+    const [firma, setFirma] = useState<string | null>(null);
+
     const handleTecnicoResponsabileChange = (_: any, tecnico: Tecnico | null) => {
         setTecnicoResponsabileId(tecnico?.id || null);
         if (tecnico) {
@@ -135,7 +141,7 @@ const RapportinoEdit: React.FC = () => {
             setDettaglioOre([]);
         }
     };
-    
+
     useEffect(() => {
         if (collectionsLoading) return;
         if (isEditMode) {
@@ -162,7 +168,7 @@ const RapportinoEdit: React.FC = () => {
                         setData(reportDate);
 
                         setTecnicoResponsabileId(reportData.tecnicoId);
-                        const resolvedGiornataId = reportData.tipoGiornataId || reportData.giornataId || '';
+                        const resolvedGiornataId = reportData.tipoGiornataId || (reportData as any).giornataId || '';
                         if (resolvedGiornataId && !tipiGiornataMap.has(resolvedGiornataId)) {
                             showAlert(`Tipo Giornata non più valido. Selezionane uno nuovo.`, 'warning');
                             setGiornataId('');
@@ -180,6 +186,8 @@ const RapportinoEdit: React.FC = () => {
                         setDescrizioneBreve(reportData.descrizioneBreve || '');
                         setLavoroEseguito(reportData.lavoroEseguito || '');
                         setMaterialiImpiegati(reportData.materialiImpiegati || '');
+                        setFirma(reportData.firmaVettoriale || null);
+
                         const allTecnicoIds = Array.from(new Set(reportData.presenze || [reportData.tecnicoId]));
                         const hasDettaglioOre = !!reportData.dettaglioOreTecnici && reportData.dettaglioOreTecnici.length > 0;
                         const dettagliCaricati: DettaglioOreData[] = allTecnicoIds.map(id => {
@@ -198,10 +206,10 @@ const RapportinoEdit: React.FC = () => {
                             return {
                                 tecnicoId: id,
                                 nome: tecnico ? `${tecnico.cognome} ${tecnico.nome}`.trim() : 'Tecnico non trovato',
-                                isManual: reportData.isTrasferta || false,
-                                oraInizio: reportData.oraInizio || '07:30',
-                                oraFine: reportData.oraFine || '16:30',
-                                pausa: reportData.pausa ?? 60,
+                                isManual: (reportData as any).isTrasferta || false,
+                                oraInizio: reportData.orarioIngresso || '07:30',
+                                oraFine: reportData.orarioUscita || '16:30',
+                                pausa: (reportData as any).pausa ?? 60,
                                 ore: oreAssegnate,
                             };
                         });
@@ -231,13 +239,15 @@ const RapportinoEdit: React.FC = () => {
     const handleOreUpdate = useCallback((updatedData: DettaglioOreData) => {
          setDettaglioOre(prev => prev.map(d => d.tecnicoId === updatedData.tecnicoId ? updatedData : d));
     }, []);
+
     const handleMasterOreUpdate = (updatedData: DettaglioOreData) => {
         setDettaglioOre(prev => prev.map(d => {
             if(d.tecnicoId === updatedData.tecnicoId) return updatedData;
-            if(isEditMode) return d; // In edit mode, don't propagate changes to others
+            if(isEditMode) return d;
             return { ...d, isManual: updatedData.isManual, oraInizio: updatedData.oraInizio, oraFine: updatedData.oraFine, pausa: updatedData.pausa, ore: updatedData.ore };
         }));
     };
+
     const handleAltriTecniciChange = (_: any, nuoviTecnici: Tecnico[]) => {
         const responsabile = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
         if (!responsabile) return;
@@ -251,13 +261,13 @@ const RapportinoEdit: React.FC = () => {
         const uniqueTecnici = Array.from(new Map(allSelectedTecnici.map(item => [item.tecnicoId, item])).values());
         setDettaglioOre(uniqueTecnici);
     };
+
     const removeTecnico = (idToRemove: string) => setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== idToRemove));
     const handleOpenModal = (tecnico: DettaglioOreData) => { setEditingTecnico(tecnico); setTempDettaglioOre(tecnico); setIsModalOpen(true); };
     const handleCloseModal = () => setIsModalOpen(false);
     const handleSaveFromModal = () => { if (tempDettaglioOre) { handleOreUpdate(tempDettaglioOre); } handleCloseModal(); };
     
     const handleSubmit = async () => {
-        // VALIDATION
         if (!tecnicoResponsabileId || !giornataId || !data) {
             showAlert("Compila tutti i campi obbligatori: Tecnico, Data e Tipo Giornata.", "warning");
             return;
@@ -279,7 +289,8 @@ const RapportinoEdit: React.FC = () => {
             const presenze = dettaglioOre.map(d => d.tecnicoId);
             const dettaglioOreTecniciToSave = dettaglioOre.map(d => ({ tecnicoId: d.tecnicoId, ore: d.ore || 0 }));
             const oreLavoroTotali = dettaglioOreTecniciToSave.reduce((sum, item) => sum + item.ore, 0);
-            const baseRapportinoData: Omit<Rapportino, 'id'> = {
+
+            const rapportinoData: any = {
                 data: Timestamp.fromDate(data.toDate()),
                 tipoGiornataId: giornataId,
                 tecnicoId: tecnicoResponsabileId,
@@ -288,8 +299,8 @@ const RapportinoEdit: React.FC = () => {
                 oreLavoro: isLavorativo ? oreLavoroTotali : 0,
                 dettaglioOreTecnici: isLavorativo ? dettaglioOreTecniciToSave : [],
                 isTrasferta: isLavorativo ? responsabileDettaglio?.isManual : false,
-                oraInizio: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraInizio : null,
-                oraFine: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraFine : null,
+                orarioIngresso: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraInizio : null,
+                orarioUscita: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraFine : null,
                 pausa: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.pausa : null,
                 veicoloId: isLavorativo ? veicoloId : null,
                 naveId: isLavorativo ? naveId : null,
@@ -298,18 +309,18 @@ const RapportinoEdit: React.FC = () => {
                 lavoroEseguito: isLavorativo ? lavoroEseguito : '',
                 materialiImpiegati: isLavorativo ? materialiImpiegati : '',
                 updatedAt: serverTimestamp(),
-                createdBy: isEditMode ? undefined : user?.uid,
-                createdAt: isEditMode ? undefined : serverTimestamp(),
-            };
-            const rapportinoData: Omit<Rapportino, 'id'> = {
-                ...baseRapportinoData,
-                ...(includeTrasferta && trasfertaId ? ({ trasfertaId } as any) : {}),
+                ...(includeTrasferta && trasfertaId ? { trasfertaId } : {}),
             };
 
             if (isEditMode && reportId) {
+                if (firma) {
+                    rapportinoData.firmaVettoriale = firma;
+                }
                 await updateDoc(doc(db, 'rapportini', reportId), rapportinoData);
                 showAlert("Rapportino aggiornato!", "success");
             } else {
+                rapportinoData.createdAt = serverTimestamp();
+                rapportinoData.createdBy = user?.uid;
                 await addDoc(collection(db, 'rapportini'), rapportinoData);
                 showAlert("Rapportino creato!", "success");
             }
@@ -325,7 +336,9 @@ const RapportinoEdit: React.FC = () => {
     const responsabileDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId) || emptyDettaglioOre;
     const altriTecniciSelezionati = useMemo(() => sortedTecnici.filter(t => dettaglioOre.some(d => d.tecnicoId === t.id && d.tecnicoId !== tecnicoResponsabileId)), [dettaglioOre, sortedTecnici, tecnicoResponsabileId]);
     const altriTecniciOpzioni = useMemo(() => sortedTecnici.filter(t => t.id !== tecnicoResponsabileId), [sortedTecnici, tecnicoResponsabileId]);
+
     if (pageLoading || collectionsLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>;
+
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Box sx={{ p: { xs: 2, sm: 3 }, mx: 'auto', maxWidth: 900 }}>
@@ -389,6 +402,15 @@ const RapportinoEdit: React.FC = () => {
                                 <TextField label="Breve Descrizione" value={descrizioneBreve} onChange={e => setDescrizioneBreve(e.target.value)} fullWidth />
                                 <TextField label="Materiali Impiegati" value={materialiImpiegati} onChange={e => setMaterialiImpiegati(e.target.value)} fullWidth multiline rows={2} />
                                 <TextField label="Lavoro Eseguito" value={lavoroEseguito} onChange={e => setLavoroEseguito(e.target.value)} fullWidth multiline rows={4} required/>
+
+                                {isEditMode && firma && (
+                                    <>
+                                        <Divider sx={{ my: 2 }}><Typography variant="overline">Firma Cliente</Typography></Divider>
+                                        <Paper variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+                                            <img src={firma} alt="Firma del cliente" style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} />
+                                        </Paper>
+                                    </>
+                                )}
                             </fieldset>
                         )}
                         <Grid container spacing={2} justifyContent="flex-end" sx={{ mt: 2 }}>
@@ -412,6 +434,7 @@ const RapportinoEdit: React.FC = () => {
         </LocalizationProvider>
     );
 };
+
 interface DettaglioOreData {
     tecnicoId: string;
     nome: string;
@@ -421,4 +444,5 @@ interface DettaglioOreData {
     pausa: number | null;
     ore: number | null;
 }
+
 export default RapportinoEdit;

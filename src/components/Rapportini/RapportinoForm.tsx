@@ -56,6 +56,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
     const [dataFine, setDataFine] = useState<Dayjs | null>(dayjs());
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [firma, setFirma] = useState<string | null>(null);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingTecnico, setEditingTecnico] = useState<DettaglioOreData | null>(null);
@@ -68,11 +69,9 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
     const sortedVeicoli = useMemo(() => [...veicoli].sort((a, b) => a.targa.localeCompare(b.targa)), [veicoli]);
 
     useEffect(() => {
-        // Popola il form solo in modalità modifica, quando i dati iniziali sono pronti e il caricamento è terminato.
         if (isEditMode && initialRapportino && !loading) {
-            const { data, tecnicoId, tipoGiornataId, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, dettaglioOreTecnici, altriTecniciIds, isTrasferta, oraInizio, oraFine, pausa, oreLavoro } = initialRapportino;
+            const { data, tecnicoId, tipoGiornataId, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, dettaglioOreTecnici, altriTecniciIds, isTrasferta, oraInizio, oraFine, pausa, oreLavoro, firmaVettoriale } = initialRapportino;
 
-            // Imposta la data in modo sicuro, con un fallback
             if (data && typeof data.toDate === 'function') {
                 setData(dayjs(data.toDate()));
             } else {
@@ -90,10 +89,10 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             setDescrizioneBreve(descrizioneBreve || '');
             setLavoroEseguito(lavoroEseguito || '');
             setMaterialiImpiegati(materialiImpiegati || '');
+            setFirma(firmaVettoriale || null);
 
             const allTecnicoIds = Array.from(new Set([tecnicoId, ...(altriTecniciIds || [])]));
 
-            // Assicurati che l'elenco dei tecnici sia caricato prima di procedere
             if (allTecnicoIds.length > 0 && tecnici.length > 0) {
                 const dettagliCaricati: DettaglioOreData[] = allTecnicoIds.map(id => {
                     const tecnico = tecnici.find(t => t.id === id);
@@ -113,7 +112,6 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
                         oraInizio: isManualMode ? null : (oraInizio || '07:30'),
                         oraFine: isManualMode ? null : (oraFine || '16:30'),
                         pausa: isManualMode ? null : (pausa ?? 60),
-                        // La priorità delle ore è: dettaglio specifico > ore totali del report > fallback a 8
                         ore: oreSpecifiche ?? oreLavoro ?? 8,
                     };
                 });
@@ -165,9 +163,8 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             const existingDetail = dettaglioOre.find(d => d.tecnicoId === t.id);
             if (existingDetail) return existingDetail;
     
-            // Crea un nuovo oggetto senza duplicare le chiavi
             const newDetail = { 
-                ...scrivente, // Eredita i dettagli dell'orario dallo scrivente
+                ...scrivente,
                 tecnicoId: t.id, 
                 nome: `${t.cognome} ${t.nome}`.trim() 
             };
@@ -227,6 +224,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             descrizioneBreve: isLavorativo ? (descrizioneBreve || '') : '',
             lavoroEseguito: isLavorativo ? (lavoroEseguito || '') : '',
             materialiImpiegati: isLavorativo ? (materialiImpiegati || '') : '',
+            firmaVettoriale: initialRapportino?.firmaVettoriale || null, 
         };
     }, [dettaglioOre, tecnicoScriventeId, isLavorativo, tipoGiornataId, data, initialRapportino, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, tipiGiornata]);
 
@@ -261,7 +259,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             } else {
                 const docData = buildRapportinoDoc();
                 const docRef = isEditMode ? doc(db, 'rapportini', initialRapportino!.id) : doc(collection(db, 'rapportini'));
-                await setDoc(docRef, docData, { merge: isEditMode });
+                await setDoc(docRef, docData, { merge: true }); // Utilizza merge per non sovrascrivere campi non gestiti dal form
             }
             onClose();
         } catch (e: any) { 
@@ -280,7 +278,6 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
     const altriTecniciSelezionabili = useMemo(() => sortedTecnici.filter(t => t.id !== tecnicoScriventeId), [sortedTecnici, tecnicoScriventeId]);
     const idTecniciAggiunti = useMemo(() => dettaglioOre.filter(d => d.tecnicoId !== tecnicoScriventeId).map(t => t.tecnicoId), [dettaglioOre, tecnicoScriventeId]);
 
-    // Mostra un caricamento più pulito solo se il form è in modalità modifica e i dati non sono ancora pronti
     if (isEditMode && loading) return <DialogContent><Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box></DialogContent>;
 
     return (
@@ -336,6 +333,15 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
                             <TextField label="Breve Descrizione" value={descrizioneBreve} onChange={e => setDescrizioneBreve(e.target.value)} fullWidth />
                             <TextField label="Materiali Impiegati" value={materialiImpiegati} onChange={e => setMaterialiImpiegati(e.target.value)} fullWidth multiline rows={2} />
                             <TextField label="Lavoro Eseguito" value={lavoroEseguito} onChange={e => setLavoroEseguito(e.target.value)} fullWidth multiline rows={4} />
+                            
+                            {isEditMode && firma && (
+                                <>
+                                    <Divider sx={{ my: 2 }}><Typography variant="overline">Firma Cliente</Typography></Divider>
+                                    <Paper variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+                                        <img src={firma} alt="Firma del cliente" style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} />
+                                    </Paper>
+                                </>
+                            )}
                         </>
                     )}
                 </Box>
