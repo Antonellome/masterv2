@@ -10,10 +10,13 @@
     "build": "tsc",
     "predeploy": "npm run build"
   },
+  "engines": {
+    "node": "20"
+  },
   "main": "lib/index.js",
   "dependencies": {
-    "cors": "^2.8.6",
-    "firebase-admin": "^12.1.0",
+    "cors": "^2.8.5",
+    "firebase-admin": "^12.1.1",
     "firebase-functions": "^5.0.1"
   },
   "devDependencies": {

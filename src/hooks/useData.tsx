@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, onSnapshot } from 'firebase/firestore'; // Importa onSnapshot
+import { collection, getDocs, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Tecnico, Luogo, Nave, Cliente, TipoGiornata, Veicolo } from '@/models/definitions';
+// UPDATED: Imported Ditta and Categoria
+import type { Tecnico, Luogo, Nave, Cliente, TipoGiornata, Veicolo, Ditta, Categoria } from '@/models/definitions';
 
-// Definiamo un tipo per mappare i nomi delle collezioni ai loro tipi di dati
+// UPDATED: Added Ditta and Categoria to the interface
 interface Anagrafiche {
   tecnici: Tecnico[];
   luoghi: Luogo[];
@@ -11,9 +12,12 @@ interface Anagrafiche {
   clienti: Cliente[];
   tipiGiornata: TipoGiornata[];
   veicoli: Veicolo[];
+  ditte: Ditta[];
+  categorie: Categoria[];
 }
 
-const COLLECTION_NAMES: (keyof Anagrafiche)[] = ['tecnici', 'luoghi', 'navi', 'clienti', 'tipiGiornata', 'veicoli'];
+// UPDATED: Added "ditte" and "categorie" to the collection names array
+const COLLECTION_NAMES: (keyof Anagrafiche)[] = ['tecnici', 'luoghi', 'navi', 'clienti', 'tipiGiornata', 'veicoli', 'ditte', 'categorie'];
 const CACHE_KEY = 'anagrafiche_cache';
 const VERSION_KEY = 'anagrafiche_version';
 
@@ -95,6 +99,9 @@ export const useData = () => {
     clienti: data.clienti || [],
     tipiGiornata: data.tipiGiornata || [],
     veicoli: data.veicoli || [],
+    // UPDATED: Returning ditte and categorie
+    ditte: data.ditte || [],
+    categorie: data.categorie || [],
     loading,
     error,
   };

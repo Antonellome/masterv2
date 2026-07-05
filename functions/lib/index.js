@@ -33,32 +33,18 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.executeMigration = exports.forceAdmin = void 0;
+exports.createTecnico = exports.executeMigration = exports.forceAdmin = void 0;
 const admin = __importStar(require("firebase-admin"));
-const https_1 = require("firebase-functions/v2/https");
-const logger = __importStar(require("firebase-functions/logger"));
 // Inizializza l'SDK di Admin UNA SOLA VOLTA
 admin.initializeApp();
 // --- ESPORTAZIONE FUNZIONI PULITE ---
 // 1. Esporta la funzione forceAdmin
-const forceAdmin_1 = require("./forceAdmin");
-exports.forceAdmin = forceAdmin_1.forceAdmin;
-// 2. Esporta una versione di TEST di executeMigration
-exports.executeMigration = (0, https_1.onCall)({ region: "europe-west1", cors: true }, async (request) => {
-    logger.info("========================================");
-    logger.info(">>> FUNZIONE DI PROVA (v2) AVVIATA <<<");
-    logger.info("========================================");
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "La richiesta deve essere autenticata.");
-    }
-    if (request.auth.token.role !== 'admin') {
-        throw new https_1.HttpsError("permission-denied", "Accesso negato. Ruolo 'admin' richiesto.");
-    }
-    logger.info(`[PROVA v2] Controllo permessi OK per admin: ${request.auth.uid}`);
-    return {
-        success: true,
-        message: "DEPLOY PULITO OK! La funzione di test è ora attiva e funzionante.",
-        createdCount: 0
-    };
-});
+var forceAdmin_1 = require("./forceAdmin");
+Object.defineProperty(exports, "forceAdmin", { enumerable: true, get: function () { return forceAdmin_1.forceAdmin; } });
+// 2. Esporta la funzione di migrazione
+var migration_1 = require("./migration");
+Object.defineProperty(exports, "executeMigration", { enumerable: true, get: function () { return migration_1.executeMigration; } });
+// 3. Esporta la funzione per la creazione dei tecnici
+var createTecnico_1 = require("./createTecnico");
+Object.defineProperty(exports, "createTecnico", { enumerable: true, get: function () { return createTecnico_1.createTecnico; } });
 //# sourceMappingURL=index.js.map

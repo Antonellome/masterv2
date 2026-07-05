@@ -1,25 +1,34 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
-import type { Tecnico } from '@/models/definitions';
-import { useDataContext, CollectionName } from '@/contexts/DataContext';
+import { doc, addDoc, updateDoc, deleteDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '@/firebase'; 
+import { tecnicoConverter } from '@/firebase/converters';
+import type { Tecnico, Ditta, Categoria } from '@/models/definitions'; // Import Ditta and Categoria
 import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
 import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
-import { db } from '@/firebase'; 
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { tecnicoConverter } from '@/firebase/converters';
+
+// Helper function to fetch simple anagrafiche
+const fetchAnagrafica = async (collectionName: string) => {
+    const q = query(collection(db, collectionName), orderBy('nome'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+};
 
 const GestioneTecnici = () => {
-    const { 
-        ditte, categorie, 
-        addDocument, updateDocument, deleteDocument 
-    } = useDataContext();
+    // State for anagrafiche needed by this component
+    const [ditte, setDitte] = useState<Ditta[]>([]);
+    const [categorie, setCategorie] = useState<Categoria[]>([]);
+    const [anagraficheLoading, setAnagraficheLoading] = useState(true);
+    const [anagraficheError, setAnagraficheError] = useState<string | null>(null);
 
+    // State for the main data (tecnici)
     const [tecnici, setTecnici] = useState<Tecnico[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // UI State
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -28,21 +37,20 @@ const GestioneTecnici = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-    const collectionName: CollectionName = 'tecnici';
+    const collectionName = 'tecnici';
 
-    const fetchData = useCallback(async () => {
+    // Fetch main data (tecnici)
+    const fetchTecnici = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            // Ripristino la query ottimale con doppio ordinamento, ora che l'indice esiste.
             const q = query(
-                collection(db, 'tecnici').withConverter(tecnicoConverter),
+                collection(db, collectionName).withConverter(tecnicoConverter),
                 orderBy('cognome'),
                 orderBy('nome')
             );
             const snapshot = await getDocs(q);
-            const tecniciList = snapshot.docs.map(doc => doc.data());
-            setTecnici(tecniciList);
+            setTecnici(snapshot.docs.map(doc => doc.data()));
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Errore sconosciuto nel caricamento tecnici.';
             setError(message);
@@ -52,9 +60,30 @@ const GestioneTecnici = () => {
         }
     }, []);
 
+    // Fetch related anagrafiche (ditte, categorie) directly
+    const fetchRelatedAnagrafiche = useCallback(async () => {
+        setAnagraficheLoading(true);
+        setAnagraficheError(null);
+        try {
+            const [ditteData, categorieData] = await Promise.all([
+                fetchAnagrafica('ditte') as Promise<Ditta[]>,
+                fetchAnagrafica('categorie') as Promise<Categoria[]>
+            ]);
+            setDitte(ditteData);
+            setCategorie(categorieData);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Errore sconosciuto nel caricamento anagrafiche.';
+            setAnagraficheError(message);
+            console.error("Errore caricamento anagrafiche per tecnici:", err);
+        } finally {
+            setAnagraficheLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        fetchTecnici();
+        fetchRelatedAnagrafiche();
+    }, [fetchTecnici, fetchRelatedAnagrafiche]);
 
 
     const handleError = (e: unknown, context: string) => {
@@ -64,7 +93,7 @@ const GestioneTecnici = () => {
     };
     
     const refreshAndClose = () => {
-        fetchData();
+        fetchTecnici(); // Only refetch tecnici, anagrafiche are stable
         setFormOpen(false);
     }
 
@@ -83,10 +112,10 @@ const GestioneTecnici = () => {
         try {
             const { id, ...dataToSave } = formData;
             if (id) {
-                await updateDocument(collectionName, id, dataToSave);
+                await updateDoc(doc(db, collectionName, id), dataToSave);
                 setSnackbar({ open: true, message: 'Dati tecnico aggiornati!', severity: 'success' });
             } else {
-                await addDocument(collectionName, dataToSave as Tecnico);
+                await addDoc(collection(db, collectionName), dataToSave as Tecnico);
                 setSnackbar({ open: true, message: 'Tecnico creato con successo!', severity: 'success' });
             }
             refreshAndClose();
@@ -95,7 +124,7 @@ const GestioneTecnici = () => {
         } finally {
             setIsSaving(false);
         }
-    }, [updateDocument, addDocument]);
+    }, []);
 
     const handleDelete = (id: string) => {
         setTecnicoToDelete(id);
@@ -106,9 +135,9 @@ const GestioneTecnici = () => {
         if (!tecnicoToDelete) return;
         setIsSaving(true);
         try {
-            await deleteDocument(collectionName, tecnicoToDelete);
+            await deleteDoc(doc(db, collectionName, tecnicoToDelete));
             setSnackbar({ open: true, message: 'Tecnico eliminato con successo.', severity: 'success' });
-            fetchData();
+            fetchTecnici(); // Refetch
         } catch (e) {
             handleError(e, "Errore durante l'eliminazione del tecnico");
         } finally {
@@ -116,28 +145,28 @@ const GestioneTecnici = () => {
             setDeleteDialogOpen(false);
             setIsSaving(false);
         }
-    }, [tecnicoToDelete, deleteDocument, fetchData]);
+    }, [tecnicoToDelete, fetchTecnici]);
     
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
         setUpdatingId(id);
         try {
-            await updateDocument(collectionName, id, { attivo: newStatus });
+            await updateDoc(doc(db, collectionName, id), { attivo: newStatus });
             setSnackbar({ open: true, message: `Stato del tecnico aggiornato.`, severity: 'success' });
-            fetchData();
+            fetchTecnici(); // Refetch
         } catch (e) {
             handleError(e, "Errore nell'aggiornamento dello stato");
         } finally {
             setUpdatingId(null);
         }
-    }, [updateDocument, fetchData]);
+    }, [fetchTecnici]);
 
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
-    if (loading) {
+    if (loading || anagraficheLoading) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
     }
-    if (error) {
-        return <Typography color="error">{`Errore nel caricamento dati: ${error}`}</Typography>;
+    if (error || anagraficheError) {
+        return <Typography color="error">{`Errore nel caricamento dati: ${error || anagraficheError}`}</Typography>;
     }
 
     const ditteMap = new Map(ditte.map(d => [d.id, d.nome]));

@@ -18,7 +18,7 @@ interface Tecnico {
   nome: string;
   cognome: string;
   email: string;
-  appAccess: boolean; 
+  appAccess: boolean;
   attivo: boolean;
 }
 
@@ -29,8 +29,10 @@ interface DialogState {
   onConfirm: () => void;
 }
 
+// --- NUOVA LOGICA CON FUNZIONE PULITA ---
 const functions = getFunctions(undefined, 'europe-west1');
-const manageTecnicoAccess = httpsCallable(functions, 'manageTecnicoAccess');
+// Puntiamo alla nuova funzione, robusta e gestita
+const gestisciAccessoTecnico = httpsCallable(functions, 'risorseUmane_gestisciAccessoTecnico');
 
 const GestioneAccessi = () => {
   const [tecnici, setTecnici] = useState<Tecnico[]>([]);
@@ -45,6 +47,7 @@ const GestioneAccessi = () => {
 
   const handleDetailedError = (err: any, context: string) => {
     console.error(`ERRORE [${context}]:`, err);
+    // Estrarre il messaggio di errore specifico dalla HttpsError
     const message = err.message || 'Errore sconosciuto.';
     showSnackbar(`[${context}] ${message}`, 'error');
   };
@@ -80,28 +83,29 @@ const GestioneAccessi = () => {
   }, [fetchData]);
 
   const handleToggleAccess = async (tecnico: Tecnico) => {
-    if (!tecnico.id) { // Controlliamo l'ID invece dell'email
+    if (!tecnico.id) {
       showSnackbar('ID del tecnico non disponibile. Impossibile procedere.', 'error');
       return;
     }
-  
+
     setOperating(true);
     const newState = !tecnico.appAccess;
-  
+
     try {
-      // Passiamo l'UID (tecnico.id) invece dell'email
-      await manageTecnicoAccess({ 
+      // Chiamiamo la nuova funzione passando UID e azione
+      await gestisciAccessoTecnico({ 
         uid: tecnico.id, 
         action: newState ? 'enable' : 'disable' 
       });
-  
-      const tecnicoRef = doc(db, 'tecnici', tecnico.id);
-      await updateDoc(tecnicoRef, { appAccess: newState });
-  
-      showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
+      
+      // Aggiorniamo lo stato UI *solo dopo* la conferma dal backend
+      // La nuova funzione si occupa già di aggiornare Firestore, quindi questa parte potrebbe anche essere rimossa
+      // per affidarsi a un listener in tempo reale, ma per ora la lasciamo per un feedback immediato.
       setTecnici(prevTecnici => prevTecnici.map(t => t.id === tecnico.id ? { ...t, appAccess: newState } : t));
-  
-    } catch (err) {
+      showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
+
+    } catch (err: any) {
+      // L'errore viene gestito in modo più granulare grazie alla nuova funzione
       handleDetailedError(err, "Operazione Fallita");
     } finally {
       setOperating(false);
@@ -165,7 +169,7 @@ const GestioneAccessi = () => {
             <Switch
               checked={params.row.appAccess}
               onChange={() => handleToggleAccess(params.row)}
-              disabled={operating || !params.row.id} // Disabilitato se non c'è l'ID
+              disabled={operating || !params.row.id}
               color="success"
             />
           </span>

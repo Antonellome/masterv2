@@ -1,7 +1,5 @@
 
 import * as admin from "firebase-admin";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import * as logger from "firebase-functions/logger";
 
 // Inizializza l'SDK di Admin UNA SOLA VOLTA
 admin.initializeApp();
@@ -9,9 +7,14 @@ admin.initializeApp();
 // --- ESPORTAZIONE FUNZIONI PULITE ---
 
 // 1. Esporta la funzione forceAdmin
-import { forceAdmin as forceAdminFunction } from "./forceAdmin";
-export const forceAdmin = forceAdminFunction;
+export { forceAdmin } from "./forceAdmin";
 
 // 2. Esporta la funzione di migrazione
-import { executeMigration as executeMigrationFunction } from "./migration";
-export const executeMigration = executeMigrationFunction;
+export { executeMigration } from "./migration";
+
+// 3. Esporta la funzione per la creazione dei tecnici
+export { createTecnico } from "./createTecnico";
+
+// --- NUOVE FUNZIONI PER SOSTITUIRE I SERVIZI OBSOLETI ---
+export { risorseUmane_gestisciAccessoTecnico } from "./risorseUmane-gestisciAccessoTecnico";
+export { amministrazione_gestisciUtenti } from "./amministrazione-gestisciUtenti";

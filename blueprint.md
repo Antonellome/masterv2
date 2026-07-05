@@ -1,53 +1,72 @@
+
 # Blueprint di Sviluppo - R.I.S.O. App
 
-Questo documento serve come unica fonte di verità per lo sviluppo e la manutenzione dell'applicazione. Traccia lo stato attuale, i problemi noti e il piano di azione dettagliato per le modifiche future.
+Questo documento definisce le regole di interazione, i principi architetturali e la storia degli interventi per l'applicazione.
 
 ---
 
-## 1. Regole di Interazione
+## 1. Principi Guida per l'Intervento AI
 
-*   **Saluto Iniziale:** Ogni interazione in chat deve iniziare con il saluto "CIAO".
+Queste sono le regole fondamentali che l'AI deve seguire in ogni interazione e modifica.
 
----
+### 1.1. Priorità alla Stabilità (La Regola del "Restauratore")
 
-## 2. Cronologia e Piano di Lavoro
+*   **Presupposto Fondamentale:** L'applicazione era stabile e funzionante. Qualsiasi errore emerso di recente è da considerarsi una regressione.
+*   **Approccio:** L'obiettivo primario non è "costruire" ma "riparare". L'AI deve agire con la mentalità di un restauratore.
+*   **Analisi Prima di Agire:** Prima di scrivere o modificare codice, l'AI deve analizzare i file esistenti per capire la logica originale.
+*   **Ricreazione come Ultima Risorsa:** Un file o una funzione deve essere ricreato solo se si ha la certezza assoluta che sia mancante o irrecuperabile.
+*   **Nessuna Modifica Estetica:** L'interfaccia utente è da considerarsi finalizzata. Non apportare modifiche estetiche se non esplicitamente richiesto.
 
-### Fase 1-12: Analisi Iniziale (Completata)
+### 1.2. Regola del "CIAO"
 
-*   **Stato:** **Completato**
-*   **Sintesi:** Risoluzione problemi di deploy, pulizia Git e identificazione della causa radice del problema dei "tecnici fantasma" (creazione utente in Auth ma non in Firestore).
-
-### Fase 13: Primo Tentativo di Migrazione (Fallito e Abbandonato)
-
-*   **Stato:** **FALLITO**
-*   **Sintesi del Fallimento:** L'approccio iniziale è stato un disastro completo a causa di una serie di errori gravi da parte dell'IA.
-
-### Fase 14: Correzione Definitiva Permessi e Migrazione (In sospeso)
-
-*   **Stato:** **In Sospeso**
-*   **Obiettivo:** Correggere in modo automatico, invisibile e permanente i permessi dell'utente corrente per sbloccare l'esecuzione della migrazione dati.
-*   **Nota:** Questa fase è stata sospesa per affrontare un problema più critico.
-
-### Fase 15: Risoluzione Problema Quota Firestore (Completata)
-
-*   **Stato:** **Completato**
-*   **Problema Rilevato:** L'applicazione stava consumando in modo anomalo la quota di lettura di Firestore, causando potenziali costi imprevisti e instabilità. L'analisi ha rivelato che la causa era un loop di lettura infinito innescato da custom hook React implementati in modo errato (`useCollectionData` e `useFirestoreData`).
-*   **Causa Radice:** Gli hook utilizzavano una funzione instabile (`getQueryPath`) per generare una chiave di dipendenza per `useEffect`. Questa funzione produceva una nuova chiave ad ogni rendering, causando la ri-esecuzione continua della query a Firestore.
-
-*   **Piano d'Azione Eseguito:**
-    1.  **Analisi e Diagnosi:** Ho identificato il comportamento anomalo e isolato la causa nei custom hook che gestiscono i dati di Firestore.
-    2.  **Correzione di `useCollectionData`:** Ho riscritto `useCollectionData.tsx`, eliminando la funzione `getQueryPath` e utilizzando direttamente l'oggetto `query` di Firestore (opportunamente memoizzato nei componenti) come dipendenza stabile per l'hook `useEffect`.
-    3.  **Refactoring di `useCollectionData`:** Ho migliorato l'hook per supportare sia l'ascolto in tempo reale (default) sia fetch una-tantum (`{ listen: false }`), rendendolo più flessibile.
-    4.  **Identificazione e Sostituzione:** Ho cercato tutte le istanze del vecchio e difettoso hook `useFirestoreData.ts`.
-    5.  **Correzione dei Componenti:** Ho modificato i seguenti file per utilizzare il nuovo e corretto `useCollectionData`, assicurandomi di memoizzare le query con `useMemo` per garantire la stabilità:
-        *   `src/hooks/useAnagrafiche.ts`
-        *   `src/components/Reportistica/AnalisiOre.tsx`
-        *   `src/hooks/useAnagraficaData.ts`
-        *   `src/pages/DashboardPage.tsx`
-    6.  **Pulizia del Codice:** Ho eliminato definitivamente il file `src/hooks/useFirestoreData.ts` per prevenire usi futuri.
-
-*   **Risultato:** Il loop di lettura è stato interrotto. L'applicazione ora esegue le query a Firestore in modo efficiente e solo quando necessario, risolvendo il problema del consumo anomalo della quota. La base di codice è più stabile e affidabile.
+*   Ogni messaggio e ogni risposta nella chat **deve** iniziare con la parola "CIAO".
 
 ---
 
-Ora che il problema critico delle letture infinite da Firestore è stato risolto e documentato, posso riprendere il lavoro sulla **Fase 14: Correzione Definitiva Permessi e Migrazione**.
+## 2. Architettura e Logica (Stato Attuale)
+
+*   **Stack Tecnologico:** React (Vite), MUI, Firebase (Firestore, Auth, Functions), `react-router-dom`.
+*   **Architettura Notifiche:** L'invio di notifiche non avviene tramite push diretti (FCM), ma attraverso la scrittura di un documento nella collezione `notifiche` di Firestore. L'app client (tecnico) è in ascolto su questa collezione e reagisce alla creazione di nuovi documenti.
+*   **Logica Campi Tecnici:**
+    *   `uid`: Connessione tra Auth e Firestore.
+    *   `attivo`: Stato operativo del tecnico in azienda.
+    *   `appAccess`: Permesso di uso dell'app mobile.
+*   **Creazione Utente:** Avviene tramite la Cloud Function `createTecnico`.
+
+---
+
+## 3. Registro Interventi e Risoluzione Incidenti
+
+*   **Incidente 2024-07-26: Record Orfani in `tecnici`**
+    *   **Causa Radice:** Creazione del solo documento Firestore senza utente di autenticazione.
+    *   **Soluzione Definitiva:** Centralizzazione della logica nella Cloud Function `createTecnico`.
+    *   **Stato:** Risolto.
+
+*   **Incidente 2024-07-28: Errore `internal` e Blocco Permessi**
+    *   **Causa Radice:** Chiamate dal frontend a "funzioni fantasma" (`managetecnicoaccess`, `manageusers`, `sendnotification`) che esistono come servizi Cloud Run orfani ma non sono più nel codice sorgente delle Cloud Functions. Il tentativo di eliminarle direttamente è bloccato da un errore `PERMISSION_DENIED`.
+    *   **Piano di Risoluzione (In Corso):**
+        *   **Fase 1: Ripristino Funzionalità (Completata).** Sostituzione della logica fallace con implementazioni stabili e architetturalmente corrette.
+        *   **Fase 2: Concessione Permessi (In Attesa).** L'utente (`antonio.scuderi@gmail.com`) deve auto-assegnarsi il ruolo IAM **"Amministratore Cloud Run" (`roles/run.admin`)** nella Google Cloud Console per permettere l'eliminazione.
+        *   **Fase 3: Eliminazione Definitiva (In Attesa).** Una volta ottenuti i permessi, si procederà all'eliminazione permanente dei servizi Cloud Run obsoleti.
+    *   **Stato:** Fase 1 completata. In attesa di intervento utente per Fase 2.
+
+### Dettaglio Interventi Fase 1 (Incidente 2024-07-28)
+
+**1. Riparazione `managetecnicoaccess`:**
+*   **Backend:** Creata nuova Cloud Function `risorseUmane_gestisciAccessoTecnico` in `functions/src/risorseUmane-gestisciAccessoTecnico.ts` per gestire l'abilitazione/disabilitazione dell'accesso all'app per i tecnici.
+*   **Backend:** Aggiornato `functions/src/index.ts` per esportare la nuova funzione.
+*   **Frontend:** Modificato `src/components/Tecnici/TecnicoRow.tsx` per sostituire la chiamata alla funzione fantasma con una chiamata sicura alla nuova `risorseUmane_gestisciAccessoTecnico`.
+*   **Stato:** Completato.
+
+**2. Riparazione `sendnotification`:**
+*   **Analisi:** L'analisi del file `notifiche.md`, richiesta dall'utente, ha rivelato un'incongruenza architetturale nel piano iniziale. L'architettura corretta non prevede una Cloud Function per inviare notifiche, ma una scrittura diretta su Firestore dal client.
+*   **Azione Correttiva:** Il piano è stato immediatamente adeguato. La Cloud Function `messaggistica-inviaNotifica.ts` (erroneamente creata) è stata eliminata.
+*   **Frontend:** Modificato `src/components/Notifiche/InviaNotificaDialog.tsx`. La logica `httpsCallable` è stata rimossa e sostituita con una funzione locale (`inviaNotificaFirestore`) che crea un nuovo documento nella collezione `notifiche` di Firestore, impostando `isRead: false` come da specifica.
+*   **Stato:** Completato e allineato all'architettura.
+
+**3. Riparazione `manageusers`:**
+*   **Backend:** Creata nuova Cloud Function `amministrazione_gestisciUtenti` in `functions/src/amministrazione-gestisciUtenti.ts` per la gestione sicura dei ruoli utente (es. promozione ad admin).
+*   **Backend:** Aggiornato `functions/src/index.ts` per esportare la nuova funzione.
+*   **Frontend (In Corso):** Identificato il componente `src/components/Settings/GestioneAmministratori.tsx` come punto in cui la vecchia logica (`manageUsers` e `forceAdmin`) viene invocata. L'intervento successivo consisterà nella modifica di questo file per utilizzare la nuova funzione `amministrazione_gestisciUtenti`.
+*   **Stato:** Backend completato. Frontend in attesa di modifica.
+

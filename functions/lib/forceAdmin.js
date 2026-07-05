@@ -34,36 +34,35 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.forceAdmin = void 0;
+const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const logger = __importStar(require("firebase-functions/logger"));
-const admin = __importStar(require("firebase-admin"));
 /**
- * Funzione per forzare l'impostazione del custom claim 'role' a 'admin'.
- * Può essere chiamata solo da un utente già autenticato.
- * Questa è una misura di sicurezza per sincronizzare i permessi se il client
- * per qualche motivo non ha ricevuto il token aggiornato.
+ * Funzione onCall per forzare l'assegnazione del ruolo di amministratore a un utente.
+ * Imposta un custom claim `admin` a `true` per l'utente che la invoca.
  */
-exports.forceAdmin = (0, https_1.onCall)({ region: "europe-west1", cors: true }, async (request) => {
-    var _a;
-    logger.info(`[forceAdmin] Invocata da UID: ${(_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid}`);
+exports.forceAdmin = (0, https_1.onCall)({ region: "europe-west1", cors: true }, // Imposta la regione e abilita CORS
+async (request) => {
+    // 1. Controlla che la richiesta sia autenticata
     if (!request.auth) {
-        logger.error("[forceAdmin] Chiamata non autenticata.");
-        throw new https_1.HttpsError("unauthenticated", "La richiesta deve essere autenticata.");
+        logger.error("forceAdmin: Richiesta non autenticata.");
+        throw new https_1.HttpsError("unauthenticated", "La funzione deve essere chiamata da un utente autenticato.");
     }
     const uid = request.auth.uid;
-    const currentClaims = request.auth.token;
-    if (currentClaims.role === "admin") {
-        logger.info(`[forceAdmin] L'utente ${uid} è già admin. Nessuna azione necessaria.`);
-        return { success: true, message: "L'utente è già un amministratore." };
-    }
+    logger.info(`forceAdmin: Inizio processo per UID: ${uid}`);
     try {
-        await admin.auth().setCustomUserClaims(uid, { role: "admin" });
-        logger.info(`[forceAdmin] Custom claim 'role: admin' impostato con successo per l'utente ${uid}.`);
-        return { success: true, message: "Privilegi di amministratore concessi con successo." };
+        // 2. Imposta il custom claim utilizzando l'SDK di Admin
+        await admin.auth().setCustomUserClaims(uid, { admin: true });
+        logger.info(`forceAdmin: Custom claim 'admin: true' impostato con successo per l'UID: ${uid}.`);
+        // 3. Restituisce un risultato di successo
+        return {
+            success: true,
+            message: `L'utente ${uid} è stato promosso ad amministratore.`
+        };
     }
     catch (error) {
-        logger.error(`[forceAdmin] Errore durante l'impostazione dei custom claims per l'utente ${uid}:`, error);
-        throw new https_1.HttpsError("internal", "Errore interno durante l'aggiornamento dei permessi.");
+        logger.error(`forceAdmin: Errore durante l'impostazione del custom claim per l'UID: ${uid}`, error);
+        throw new https_1.HttpsError("internal", "Si è verificato un errore interno durante l'assegnazione dei permessi.");
     }
 });
 //# sourceMappingURL=forceAdmin.js.map

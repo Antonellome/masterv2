@@ -9,7 +9,7 @@ import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { Timestamp } from 'firebase/firestore';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';
-import type { Tecnico, Ditta, Categoria } from '@/models/definitions'; // Rimosso Qualifica
+import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
 import { TIPI_CONTRATTO } from '@/utils/contratti';
 
 dayjs.locale('it');
@@ -32,18 +32,18 @@ interface TecnicoFormProps {
     tecnico: Tecnico | null;
     ditte: Ditta[];
     categorie: Categoria[];
-    // Rimosso qualifiche
     isSaving?: boolean;
 }
 
 const initialFormData: Partial<Tecnico> = {
     nome: '', cognome: '', codiceFiscale: '', indirizzo: '', citta: '', cap: '', provincia: '', email: '', telefono: '',
-    dittaId: '', categoriaId: '', tipoContratto: '', // Rimosso qualificaId
+    dittaId: '', categoriaId: '', tipoContratto: '',
     numeroPatente: '', categoriaPatente: '', numeroCQC: '', 
     numeroCartaIdentita: '', numeroPassaporto: '',
     note: '', 
     attivo: true, 
-    appAccess: false, // <-- AGGIUNTO: Inizializza l'accesso all'app a false
+    appAccess: false,
+    accessoApp: false, // Aggiunto per coerenza
     dataSync: null,
     dataAssunzione: null, scadenzaContratto: null, scadenzaVisita: null, scadenzaUnilav: null,
     scadenzaCartaIdentita: null, scadenzaPassaporto: null, scadenzaPatente: null, scadenzaCQC: null,
@@ -74,7 +74,15 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = event.target;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+        if (name === 'appAccess') {
+            setFormData(prev => ({ 
+                ...prev, 
+                appAccess: checked,
+                accessoApp: checked // Sincronizza entrambi i campi
+            }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+        }
     };
 
     const handleDateChange = (name: keyof Tecnico, date: dayjs.Dayjs | null) => {
@@ -136,6 +144,9 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                             /></Grid>
                         <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                             <FormControlLabel control={<Switch name="attivo" checked={formData.attivo ?? true} onChange={handleChange} />} label="Tecnico Attivo" />
+                        </Grid>
+                        <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                            <FormControlLabel control={<Switch name="appAccess" checked={formData.appAccess ?? false} onChange={handleChange} />} label="Abilita Accesso App" />
                         </Grid>
                     </FormSection>
 
