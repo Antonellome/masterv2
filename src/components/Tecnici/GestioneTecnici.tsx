@@ -1,15 +1,16 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
-import { doc, addDoc, updateDoc, deleteDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase'; 
+import { doc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/firebase'; 
 import { tecnicoConverter } from '@/firebase/converters';
-import type { Tecnico, Ditta, Categoria } from '@/models/definitions'; // Import Ditta and Categoria
+import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
 import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
 import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
 
-// Helper function to fetch simple anagrafiche
+// Funzione helper per caricare anagrafiche semplici
 const fetchAnagrafica = async (collectionName: string) => {
     const q = query(collection(db, collectionName), orderBy('nome'));
     const snapshot = await getDocs(q);
@@ -17,18 +18,18 @@ const fetchAnagrafica = async (collectionName: string) => {
 };
 
 const GestioneTecnici = () => {
-    // State for anagrafiche needed by this component
+    // Stati per le anagrafiche collegate
     const [ditte, setDitte] = useState<Ditta[]>([]);
     const [categorie, setCategorie] = useState<Categoria[]>([]);
     const [anagraficheLoading, setAnagraficheLoading] = useState(true);
     const [anagraficheError, setAnagraficheError] = useState<string | null>(null);
 
-    // State for the main data (tecnici)
+    // Stato per i dati principali (tecnici)
     const [tecnici, setTecnici] = useState<Tecnico[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // UI State
+    // Stati per l'interfaccia utente
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -39,7 +40,7 @@ const GestioneTecnici = () => {
 
     const collectionName = 'tecnici';
 
-    // Fetch main data (tecnici)
+    // Caricamento dati principali (tecnici)
     const fetchTecnici = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -60,7 +61,7 @@ const GestioneTecnici = () => {
         }
     }, []);
 
-    // Fetch related anagrafiche (ditte, categorie) directly
+    // Caricamento anagrafiche collegate (ditte, categorie)
     const fetchRelatedAnagrafiche = useCallback(async () => {
         setAnagraficheLoading(true);
         setAnagraficheError(null);
@@ -85,15 +86,15 @@ const GestioneTecnici = () => {
         fetchRelatedAnagrafiche();
     }, [fetchTecnici, fetchRelatedAnagrafiche]);
 
-
     const handleError = (e: unknown, context: string) => {
         console.error(`${context}:`, e);
-        const message = e instanceof Error ? e.message : 'Si è verificato un errore sconosciuto.';
+        const firebaseError = e as { code?: string; message?: string };
+        const message = firebaseError.message || 'Si è verificato un errore sconosciuto.';
         setSnackbar({ open: true, message: `${context}: ${message}`, severity: 'error' });
     };
     
     const refreshAndClose = () => {
-        fetchTecnici(); // Only refetch tecnici, anagrafiche are stable
+        fetchTecnici();
         setFormOpen(false);
     }
 
@@ -107,16 +108,20 @@ const GestioneTecnici = () => {
         setFormOpen(true);
     };
 
-    const handleSave = useCallback(async (formData: Partial<Tecnico>) => {
+    const handleSave = useCallback(async (formData: Partial<Tecnico> & { password?: string }) => {
         setIsSaving(true);
         try {
             const { id, ...dataToSave } = formData;
             if (id) {
+                // MODIFICA: Aggiorna un tecnico esistente, qui non si toccano le credenziali
                 await updateDoc(doc(db, collectionName, id), dataToSave);
                 setSnackbar({ open: true, message: 'Dati tecnico aggiornati!', severity: 'success' });
             } else {
-                await addDoc(collection(db, collectionName), dataToSave as Tecnico);
-                setSnackbar({ open: true, message: 'Tecnico creato con successo!', severity: 'success' });
+                // CREAZIONE: Chiama la Cloud Function per creare il nuovo tecnico
+                const createTecnicoFn = httpsCallable(functions, 'createTecnico');
+                const result = await createTecnicoFn(dataToSave);
+                console.log('Risultato Cloud Function:', result.data);
+                setSnackbar({ open: true, message: (result.data as any).message || 'Tecnico creato con successo!', severity: 'success' });
             }
             refreshAndClose();
         } catch (e) {
@@ -131,13 +136,17 @@ const GestioneTecnici = () => {
         setDeleteDialogOpen(true);
     };
 
+    // --- FUNZIONE DI ELIMINAZIONE CORRETTA ---
     const confirmDelete = useCallback(async () => {
         if (!tecnicoToDelete) return;
         setIsSaving(true);
         try {
-            await deleteDoc(doc(db, collectionName, tecnicoToDelete));
+            // La chiamata punta ora alla funzione corretta: 'eliminaTecnico'
+            const eliminaTecnicoFn = httpsCallable(functions, 'eliminaTecnico');
+            await eliminaTecnicoFn({ uid: tecnicoToDelete });
+
             setSnackbar({ open: true, message: 'Tecnico eliminato con successo.', severity: 'success' });
-            fetchTecnici(); // Refetch
+            fetchTecnici(); // Ricarica la lista dei tecnici
         } catch (e) {
             handleError(e, "Errore durante l'eliminazione del tecnico");
         } finally {
@@ -152,7 +161,7 @@ const GestioneTecnici = () => {
         try {
             await updateDoc(doc(db, collectionName, id), { attivo: newStatus });
             setSnackbar({ open: true, message: `Stato del tecnico aggiornato.`, severity: 'success' });
-            fetchTecnici(); // Refetch
+            fetchTecnici(); // Ricarica la lista
         } catch (e) {
             handleError(e, "Errore nell'aggiornamento dello stato");
         } finally {
@@ -200,7 +209,7 @@ const GestioneTecnici = () => {
                 onClose={() => setDeleteDialogOpen(false)}
                 onConfirm={confirmDelete}
                 title="Conferma Eliminazione"
-                message="Sei sicuro di voler eliminare questo record? L'azione è irreversibile."
+                message="Sei sicuro di voler eliminare questo record? L'utente verrà rimosso anche dal sistema di autenticazione. L'azione è irreversibile."
             />
             <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                 <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>

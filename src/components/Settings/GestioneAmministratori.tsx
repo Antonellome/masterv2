@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from "firebase/auth";
 import { useAuth } from '@/contexts/AuthProvider';
@@ -7,8 +7,8 @@ import { auth, db, functions } from '@/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import {
   Box, Typography, CircularProgress, Alert, Button, Dialog,
-  DialogActions, DialogContent, DialogTitle,
-  Switch, Tooltip, IconButton, Snackbar, Chip
+  DialogActions, DialogContent, DialogTitle, DialogContentText,
+  Switch, Tooltip, IconButton, Snackbar, Chip, TextField
 } from '@mui/material';
 import {
   DataGrid, GridColDef,
@@ -19,7 +19,6 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 
-// Funzione corretta e stabile per la gestione utenti
 const gestisciUtenti = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 
 interface User {
@@ -29,21 +28,53 @@ interface User {
   ruolo: 'admin' | 'user';
 }
 
-function CustomToolbar({ onAddNew }: { onAddNew: () => void }) {
-  return (
-    <GridToolbarContainer>
-      <Button color="primary" startIcon={<AddIcon />} onClick={onAddNew}>
-        Aggiungi Utente
-      </Button>
-      <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarColumnsButton />
-      <GridToolbarFilterButton />
-      <GridToolbarDensitySelector />
-      <GridToolbarExport />
-      <GridToolbarQuickFilter />
-    </GridToolbarContainer>
-  );
-}
+const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean, onClose: () => void, onSave: (nome: string, email: string) => void, isSaving: boolean }) => {
+    const [nome, setNome] = useState('');
+    const [email, setEmail] = useState('');
+
+    const handleSave = () => {
+        if (nome && email) {
+            onSave(nome, email);
+            setNome('');
+            setEmail('');
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose}>
+            <DialogTitle>Aggiungi Nuovo Utente</DialogTitle>
+            <DialogContent>
+                <DialogContentText sx={{ mb: 2 }}>
+                    Verrà creato un nuovo utente e riceverà un'email per impostare la propria password. Inizialmente, avrà il ruolo di 'Utente'.
+                </DialogContentText>
+                <TextField autoFocus margin="dense" id="name" label="Nome e Cognome" type="text" fullWidth variant="standard" value={nome} onChange={(e) => setNome(e.target.value)} />
+                <TextField margin="dense" id="email" label="Indirizzo Email" type="email" fullWidth variant="standard" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
+                <Button onClick={handleSave} disabled={isSaving || !nome || !email}>
+                    {isSaving ? <CircularProgress size={24} /> : 'Salva'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
+const ConfermaEliminazioneDialog = ({ open, onClose, onConfirm, isSaving, user }: { open: boolean, onClose: () => void, onConfirm: () => void, isSaving: boolean, user: User | null }) => (
+    <Dialog open={open} onClose={onClose}>
+        <DialogTitle>Conferma Eliminazione</DialogTitle>
+        <DialogContent>
+            <DialogContentText dangerouslySetInnerHTML={{ __html: `Sei sicuro di voler eliminare definitivamente l'utente <strong>${user?.nome}</strong> (${user?.email})? L'azione è irreversibile.` }} />
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
+            <Button onClick={onConfirm} color="error" disabled={isSaving}>
+                {isSaving ? <CircularProgress size={24} /> : 'Elimina'}
+            </Button>
+        </DialogActions>
+    </Dialog>
+);
+
 
 const GestioneAmministratori = () => {
   const { user: currentUser } = useAuth();
@@ -53,18 +84,17 @@ const GestioneAmministratori = () => {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
-  const [openNewUserDialog, setOpenNewUserDialog] = useState(false); // Logica per nuovo utente da implementare
+  const [openNewUserDialog, setOpenNewUserDialog] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null); 
 
   useEffect(() => {
     setLoading(true);
-    // Combiniamo le letture per semplicità e coerenza dei dati
     const unsubAdmins = onSnapshot(collection(db, 'amministratori'), (adminSnapshot) => {
       const admins = adminSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), ruolo: 'admin' } as User));
       
       const unsubUsers = onSnapshot(collection(db, 'utenti_master'), (userSnapshot) => {
         const masterUsers = userSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), ruolo: 'user' } as User));
         
-        // Uniamo le liste, dando priorità agli admin in caso di duplicati
         const adminIds = new Set(admins.map(a => a.id));
         const combinedUsers = [
           ...admins,
@@ -90,6 +120,7 @@ const GestioneAmministratori = () => {
   }, []);
 
   const handleSendPasswordReset = async (email: string) => {
+    if(isSaving) return;
     setIsSaving(true);
     try {
       await sendPasswordResetEmail(auth, email);
@@ -108,26 +139,72 @@ const GestioneAmministratori = () => {
       setFeedback({ type: 'error', message: 'Non puoi modificare il tuo stesso ruolo.' });
       return;
     }
+    if (isSaving) return;
     setIsSaving(true);
-    const nomeAzione = nuovoRuolo === 'admin' ? 'Promozione' : 'Revoca';
+
+    // Aggiornamento ottimistico dell'interfaccia UTENTE - L'HO RIMESSO, CAZZO.
+    const originalUtenti = utenti;
+    setUtenti(prev => prev.map(u => u.id === user.id ? { ...u, ruolo: nuovoRuolo } : u));
+
     try {
-      const result: any = await gestisciUtenti({ 
-        action: 'setRole', 
-        uid: user.id,
-        role: nuovoRuolo
-      });
-      setFeedback({ type: 'success', message: result.data.message || `${nomeAzione} completata.` });
+      await gestisciUtenti({ action: 'setRole', uid: user.id, role: nuovoRuolo });
+      const feedbackMessage = `Ruolo di ${user.nome} aggiornato a ${nuovoRuolo === 'admin' ? 'Amministratore' : 'Utente'}.`;
+      setFeedback({ type: 'success', message: feedbackMessage });
     } catch (err: any) {
-       setFeedback({ type: 'error', message: err.message || `${nomeAzione} fallita.` });
+      // Rollback in caso di errore
+      setUtenti(originalUtenti);
+      const nomeAzione = nuovoRuolo === 'admin' ? 'Promozione' : 'Revoca';
+      setFeedback({ type: 'error', message: err.message || `${nomeAzione} fallita.` });
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Funzioni placeholder per azioni non ancora implementate
-  const handleOpenDialog = () => setOpenNewUserDialog(true);
-  const handleCloseDialog = () => setOpenNewUserDialog(false);
-  const openDeleteConfirmation = (user: User) => alert(`Logica di eliminazione per ${user.nome} da implementare.`);
+  const handleCreaNuovoUtente = async (nome: string, email: string) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+        await gestisciUtenti({ action: 'createUser', email, nome });
+        setFeedback({ type: 'success', message: `Utente ${nome} creato. Riceverà un'email per impostare la password.` });
+        setOpenNewUserDialog(false);
+    } catch (err: any) {
+        setFeedback({ type: 'error', message: err.message || 'Creazione utente fallita.' });
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const handleEliminaUtente = async () => {
+    if (!userToDelete || isSaving) return;
+    setIsSaving(true);
+    const userNome = userToDelete.nome;
+    try {
+        await gestisciUtenti({ action: 'deleteUser', uid: userToDelete.id });
+        setFeedback({ type: 'success', message: `Utente ${userNome} eliminato con successo.` });
+        setUserToDelete(null);
+    } catch (err: any) {
+        setFeedback({ type: 'error', message: err.message || 'Eliminazione fallita.' });
+        setUserToDelete(null);
+    } finally {
+        setIsSaving(false);
+    }
+  };
+  
+  function CustomToolbar() {
+      return (
+          <GridToolbarContainer>
+              <Button color="primary" startIcon={<AddIcon />} onClick={() => setOpenNewUserDialog(true)}>
+                  Aggiungi Utente
+              </Button>
+              <Box sx={{ flexGrow: 1 }} />
+              <GridToolbarColumnsButton />
+              <GridToolbarFilterButton />
+              <GridToolbarDensitySelector />
+              <GridToolbarExport />
+              <GridToolbarQuickFilter />
+          </GridToolbarContainer>
+      );
+  }
 
   const columns: GridColDef<User>[] = [
     { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 180 },
@@ -137,7 +214,7 @@ const GestioneAmministratori = () => {
       headerName: 'Ruolo',
       width: 150,
       renderCell: (params) => (
-        <Chip label={params.value === 'admin' ? 'Amministratore' : 'Utente'} color={params.value === 'admin' ? 'primary' : 'default'} />
+        <Chip label={params.value === 'admin' ? 'Amministratore' : 'Utente'} color={params.value === 'admin' ? 'primary' : 'default'} size="small"/>
       )
     },
     {
@@ -182,7 +259,7 @@ const GestioneAmministratori = () => {
             </Tooltip>
             <Tooltip title={isCurrentUser ? 'Non puoi eliminare te stesso' : 'Elimina utente'}>
               <span>
-                <IconButton color="error" onClick={() => openDeleteConfirmation(params.row)} disabled={isSaving || isCurrentUser}>
+                <IconButton color="error" onClick={() => setUserToDelete(params.row)} disabled={isSaving || isCurrentUser}>
                   <DeleteIcon />
                 </IconButton>
               </span>
@@ -193,7 +270,7 @@ const GestioneAmministratori = () => {
     }
   ];
 
-  if (loading) return <CircularProgress />;
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
   if (error) return <Alert severity="error">{error}</Alert>;
 
   return (
@@ -201,26 +278,23 @@ const GestioneAmministratori = () => {
       <Typography variant="h6" gutterBottom>Gestione Utenti</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Aggiungi nuovi utenti e gestisci i privilegi di amministrazione.</Typography>
 
-      <Box sx={{ height: 600, width: '100%' }}>
-        <DataGrid rows={utenti} columns={columns} localeText={itIT.components.MuiDataGrid.defaultProps.localeText} slots={{ toolbar: CustomToolbar }} slotProps={{ toolbar: { onAddNew: handleOpenDialog } }} density="compact" disableRowSelectionOnClick />
+      <Box sx={{ height: 650, width: '100%' }}>
+         <DataGrid 
+            rows={utenti} 
+            columns={columns} 
+            localeText={itIT.components.MuiDataGrid.defaultProps.localeText} 
+            slots={{ toolbar: CustomToolbar }} 
+            density="compact" 
+            disableRowSelectionOnClick 
+        />
       </Box>
 
-      {/* Placeholder per il dialog di creazione utente */}
-      <Dialog open={openNewUserDialog} onClose={handleCloseDialog}>
-        <DialogTitle>Aggiungi Nuovo Utente</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            La logica per la creazione di un nuovo utente e l'invio dell'invito non è ancora stata implementata in questa interfaccia.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Annulla</Button>
-        </DialogActions>
-      </Dialog>
+      <NuovoUtenteDialog open={openNewUserDialog} onClose={() => setOpenNewUserDialog(false)} onSave={handleCreaNuovoUtente} isSaving={isSaving} />
+      <ConfermaEliminazioneDialog open={!!userToDelete} onClose={() => setUserToDelete(null)} onConfirm={handleEliminaUtente} isSaving={isSaving} user={userToDelete} />
 
       {feedback && (
         <Snackbar open autoHideDuration={6000} onClose={() => setFeedback(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-          <Alert onClose={() => setFeedback(null)} severity={feedback.type} sx={{ width: '100%' }}>
+          <Alert onClose={() => setFeedback(null)} severity={feedback.type} sx={{ width: '100%', boxShadow: 6 }}>
             {feedback.message}
           </Alert>
         </Snackbar>

@@ -1,5 +1,7 @@
+
 {
   "hosting": {
+    "site": "riso-master-office-prod",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -12,18 +14,5 @@
         "destination": "/index.html"
       }
     ]
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log"
-      ],
-      "runtime": "nodejs20"
-    }
-  ]
+  }
 }

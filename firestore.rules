@@ -1,22 +1,39 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Regola generale: solo gli utenti autenticati possono leggere/scrivere
+
+    // NUOVA FUNZIONE isAdmin()
+    // Controlla se l'UID dell'utente esiste nella collezione 'admins'.
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Regola generale per i tecnici: gli admin possono fare tutto.
+    match /tecnici/{tecnicoId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Regole per le notifiche
+    match /notifiche/{notificaId} {
+      // Chiunque sia autenticato può leggere (necessario per il listener)
+      allow read: if request.auth != null;
+      // Solo gli admin o il tecnico a cui è destinata possono aggiornare.
+      allow update: if isAdmin() || (request.auth != null && resource.data.tecnicoId == request.auth.uid);
+      // Solo gli admin possono creare o cancellare notifiche.
+      allow create, delete: if isAdmin();
+    }
+    
+    // La collezione 'admins' può essere letta e scritta solo da altri admin.
+    // Questo permette agli admin di gestire altri admin.
+    match /admins/{adminId} {
+        allow read, write: if isAdmin();
+    }
+
+    // Le altre collezioni sono accessibili solo dagli admin
     match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Regole specifiche per le notifiche
-    // Chiunque sia autenticato (inclusi gli admin e le funzioni che agiscono per loro conto)
-    // può creare una notifica.
-    match /notifiche/{notificationId} {
-      allow create: if request.auth != null;
-      allow read, update, delete: if request.auth != null; // Aggiunto per completezza
-    }
-
-    match /notificheInviate/{notificationId} {
-      allow create: if request.auth != null;
-      allow read, update, delete: if request.auth != null; // Aggiunto per completezza
+      allow read, write: if isAdmin();
     }
   }
 }

@@ -6,14 +6,14 @@ admin.initializeApp();
 
 /**
  * Cloud Function Callable potenziata per la gestione completa degli utenti.
- * NUOVE FUNZIONI: createUser, deleteUser e filtro server-side per list.
+ * Esegue azioni basate sul parametro `action`.
  */
 exports.manageUsers = functions.region('europe-west1').https.onCall(async (data, context) => {
   const action = data.action;
   const payload = data.payload;
   const callerUid = context.auth?.uid;
 
-  // 1. Azione di auto-promozione per il primo admin (invariata)
+  // Azione di auto-promozione per il primo admin
   if (action === "promoteToAdmin") {
     if (!callerUid) {
       throw new functions.https.HttpsError("unauthenticated", "Devi essere loggato per auto-promuoverti.");
@@ -29,7 +29,7 @@ exports.manageUsers = functions.region('europe-west1').https.onCall(async (data,
     return { status: "success", message: `Complimenti! L'utente è ora il primo amministratore.` };
   }
 
-  // 2. Protezione per tutte le altre azioni: Richiede il ruolo di ADMIN
+  // Protezione per tutte le altre azioni: Richiede il ruolo di ADMIN
   const isCallerAdmin = context.auth?.token?.role === 'admin';
   if (!isCallerAdmin) {
     throw new functions.https.HttpsError(
@@ -38,9 +38,8 @@ exports.manageUsers = functions.region('europe-west1').https.onCall(async (data,
     );
   }
 
-  // 3. Azioni riservate agli ADMIN
+  // Azioni riservate agli ADMIN
   switch (action) {
-    // --- AZIONE LISTA POTENZIATA ---
     case "list":
       try {
         const listUsersResult = await admin.auth().listUsers(1000);
@@ -50,7 +49,6 @@ exports.manageUsers = functions.region('europe-west1').https.onCall(async (data,
           role: userRecord.customClaims?.role || 'utente',
         }));
 
-        // Filtro server-side, come da blueprint
         if (payload && payload.role) {
             if (payload.role.startsWith('!')) {
                 const roleToExclude = payload.role.substring(1);
@@ -67,40 +65,31 @@ exports.manageUsers = functions.region('europe-west1').https.onCall(async (data,
         throw new functions.https.HttpsError("internal", "Errore durante il recupero degli utenti.");
       }
 
-    // --- NUOVA AZIONE: CREAZIONE UTENTE ---
     case "createUser":
         if (!payload || !payload.email || !payload.nome) {
             throw new functions.https.HttpsError("invalid-argument", "Email e nome sono richiesti per creare un utente.");
         }
         try {
-            // Crea l'utente in Firebase Auth
             const userRecord = await admin.auth().createUser({
                 email: payload.email,
                 displayName: `${payload.nome} ${payload.cognome || ''}`.trim(),
             });
 
-            // Imposta immediatamente il ruolo a 'tecnico'
             await admin.auth().setCustomUserClaims(userRecord.uid, { role: 'tecnico' });
 
             return { 
                 status: "success", 
                 message: `Utente ${payload.email} creato con successo.`,
-                user: {
-                    uid: userRecord.uid,
-                    email: userRecord.email,
-                    role: 'tecnico'
-                }
+                user: { uid: userRecord.uid, email: userRecord.email, role: 'tecnico' }
             };
         } catch (error) {
             console.error("Errore nella creazione dell'utente:", error);
-            // Converte l'errore di Firebase (es. email-already-exists) in un errore Https
             if (error.code === 'auth/email-already-exists') {
                  throw new functions.https.HttpsError("already-exists", `L'utente con email ${payload.email} esiste già.`);
             }
             throw new functions.https.HttpsError("internal", "Errore sconosciuto durante la creazione dell'utente.");
         }
 
-    // --- AZIONE SETROLE (invariata nella logica di base) ---
     case "setRole":
       try {
         const { uid: targetUid, role } = payload;
@@ -114,17 +103,36 @@ exports.manageUsers = functions.region('europe-west1').https.onCall(async (data,
         throw new functions.https.HttpsError("internal", "Errore durante l'aggiornamento del ruolo.");
       }
     
-    // --- NUOVA AZIONE: ELIMINAZIONE UTENTE ---
+    // --- AZIONE DI ELIMINAZIONE CORRETTA E COMPLETA ---
     case "deleteUser":
         if (!payload || !payload.uid) {
             throw new functions.https.HttpsError("invalid-argument", "L'UID dell'utente è richiesto per l'eliminazione.");
         }
         try {
+            // Passo 1: Elimina l'utente da Firebase Authentication
             await admin.auth().deleteUser(payload.uid);
-            return { status: "success", message: "Utente eliminato con successo." };
+            
+            // Passo 2: Elimina il documento corrispondente dalla collezione 'tecnici' in Firestore
+            const db = admin.firestore();
+            await db.collection('tecnici').doc(payload.uid).delete();
+
+            return { status: "success", message: "Utente e dati associati eliminati con successo." };
+
         } catch (error) {
-            console.error("Errore nell'eliminazione dell'utente:", error);
-            throw new functions.https.HttpsError("internal", "Impossibile eliminare l'utente.");
+            console.error("Errore nell'eliminazione completa del tecnico (Auth + DB):", error);
+            
+            // Se l'utente Auth non esiste ma magari il documento sì, proviamo a pulire.
+            if (error.code === 'auth/user-not-found') {
+                 try {
+                    const db = admin.firestore();
+                    await db.collection('tecnici').doc(payload.uid).delete();
+                    return { status: "success", message: "Utente Auth non trovato (forse già rimosso), dati del tecnico eliminati." };
+                 } catch (dbError) {
+                    console.error("Errore nell'eliminazione del solo documento Firestore:", dbError);
+                    throw new functions.https.HttpsError("internal", "Impossibile eliminare i dati del tecnico dopo un errore Auth.");
+                 }
+            }
+            throw new functions.https.HttpsError("internal", "Impossibile eliminare l'utente. Controlla i log della funzione.");
         }
 
     default:

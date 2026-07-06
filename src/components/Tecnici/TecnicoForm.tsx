@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Grid, 
-    FormControlLabel, Switch, MenuItem, Paper, Typography, CircularProgress, Autocomplete
+    FormControlLabel, Switch, MenuItem, Paper, Typography, CircularProgress, Autocomplete, Box, IconButton, InputAdornment
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
@@ -11,6 +11,8 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/it';
 import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
 import { TIPI_CONTRATTO } from '@/utils/contratti';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { passwordGenerator } from '@/utils/passwordGenerator';
 
 dayjs.locale('it');
 
@@ -28,7 +30,7 @@ const FormSection = ({ title, children }: { title: string, children: React.React
 interface TecnicoFormProps {
     open: boolean;
     onClose: () => void;
-    onSave: (formData: Partial<Tecnico>) => void;
+    onSave: (formData: Partial<Tecnico> & { password?: string }) => void;
     tecnico: Tecnico | null;
     ditte: Ditta[];
     categorie: Categoria[];
@@ -43,7 +45,6 @@ const initialFormData: Partial<Tecnico> = {
     note: '', 
     attivo: true, 
     appAccess: false,
-    accessoApp: false, // Aggiunto per coerenza
     dataSync: null,
     dataAssunzione: null, scadenzaContratto: null, scadenzaVisita: null, scadenzaUnilav: null,
     scadenzaCartaIdentita: null, scadenzaPassaporto: null, scadenzaPatente: null, scadenzaCQC: null,
@@ -53,6 +54,10 @@ const initialFormData: Partial<Tecnico> = {
 const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnico, ditte, categorie, isSaving = false }) => {
 
     const [formData, setFormData] = useState<Partial<Tecnico>>(initialFormData);
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+
+    const isNewTecnico = !tecnico;
 
     useEffect(() => {
         if (open) {
@@ -68,21 +73,27 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                 setFormData(processedData);
             } else {
                 setFormData(initialFormData);
+                setPassword('');
             }
         }
     }, [open, tecnico]);
 
+    // Logica per la generazione automatica della password
+    useEffect(() => {
+        if (isNewTecnico && formData.appAccess && !password) {
+            const generatedPassword = passwordGenerator();
+            setPassword(generatedPassword);
+        }
+        // Se l'accesso viene disabilitato, puliamo la password
+        if (isNewTecnico && !formData.appAccess) {
+            setPassword('');
+        }
+    }, [isNewTecnico, formData.appAccess]);
+
+
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = event.target;
-        if (name === 'appAccess') {
-            setFormData(prev => ({ 
-                ...prev, 
-                appAccess: checked,
-                accessoApp: checked // Sincronizza entrambi i campi
-            }));
-        } else {
-            setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-        }
+        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
     const handleDateChange = (name: keyof Tecnico, date: dayjs.Dayjs | null) => {
@@ -94,7 +105,14 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
     };
 
     const handleSave = () => {
-        const dataToSave = { ...formData };
+        const dataToSave: Partial<Tecnico> & { password?: string } = { ...formData };
+        
+        // Includi SEMPRE la password se l'accesso è abilitato per un nuovo tecnico
+        if (isNewTecnico && formData.appAccess) {
+            // Se per qualche motivo la password è vuota, ne genera una nuova come fallback.
+            dataToSave.password = password || passwordGenerator(); 
+        }
+
         Object.keys(dataToSave).forEach(key => {
             const field = key as keyof Tecnico;
             const value = dataToSave[field];
@@ -125,6 +143,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
             </DialogTitle>
             <DialogContent sx={{ pt: '20px !important', pb: '20px !important' }}>
                 <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
+                    
                     <FormSection title="Anagrafica e Ruolo">
                         <Grid item xs={12} sm={6}><TextField name="cognome" label="Cognome" value={formData.cognome || ''} onChange={handleChange} fullWidth required /></Grid>
                         <Grid item xs={12} sm={6}><TextField name="nome" label="Nome" value={formData.nome || ''} onChange={handleChange} fullWidth required /></Grid>
@@ -142,17 +161,52 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                                 onChange={(_, newValue) => handleAutocompleteChange('categoriaId', newValue ? newValue.id : null)}
                                 renderInput={(params) => <TextField {...params} label="Categoria" fullWidth />}
                             /></Grid>
-                        <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                        <Grid item xs={12} sm={12} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                             <FormControlLabel control={<Switch name="attivo" checked={formData.attivo ?? true} onChange={handleChange} />} label="Tecnico Attivo" />
-                        </Grid>
-                        <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                            <FormControlLabel control={<Switch name="appAccess" checked={formData.appAccess ?? false} onChange={handleChange} />} label="Abilita Accesso App" />
                         </Grid>
                     </FormSection>
 
-                    <FormSection title="Recapiti e Indirizzo">
+                    <FormSection title="Accesso App e Recapiti">
                         <Grid item xs={12} sm={6}><TextField name="email" label="Email" value={formData.email || ''} onChange={handleChange} fullWidth required/></Grid>
                         <Grid item xs={12} sm={6}><TextField name="telefono" label="Telefono" value={formData.telefono || ''} onChange={handleChange} fullWidth /></Grid>
+                        
+                        <Grid item xs={12}>
+                             <FormControlLabel control={<Switch name="appAccess" checked={formData.appAccess ?? false} onChange={handleChange} disabled={!isNewTecnico} />} label="Crea utente e abilita accesso all'app" />
+                             { !isNewTecnico && (
+                                <Typography variant="caption" color="text.secondary" display="block" ml={4}>
+                                    La gestione dell'accesso per utenti esistenti va effettuata dalla pagina di dettaglio.
+                                </Typography>
+                             )}
+                        </Grid>
+                        
+                        {isNewTecnico && formData.appAccess && (
+                            <Grid item xs={12}>
+                                <TextField 
+                                    name="password" 
+                                    label="Password di Accesso (generata automaticamente)"
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    fullWidth 
+                                    required
+                                    helperText="La password è generata automaticamente. Modificarla solo se necessario."
+                                    InputProps={{
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <IconButton
+                                                    aria-label="toggle password visibility"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    edge="end"
+                                                >
+                                                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            </Grid>
+                        )}
+                        
                         <Grid item xs={12}><TextField name="indirizzo" label="Indirizzo" value={formData.indirizzo || ''} onChange={handleChange} fullWidth /></Grid>
                         <Grid item xs={12} sm={5}><TextField name="citta" label="Città" value={formData.citta || ''} onChange={handleChange} fullWidth /></Grid>
                         <Grid item xs={12} sm={3}><TextField name="provincia" label="Provincia" value={formData.provincia || ''} onChange={handleChange} fullWidth inputProps={{ maxLength: 2 }} /></Grid>
@@ -204,7 +258,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
             </DialogContent>
             <DialogActions sx={{ p: '16px 24px', borderTop: 1, borderColor: 'divider' }}>
                 <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
-                <Button onClick={handleSave} variant="contained" color="primary" disabled={isSaving} startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : null}>
+                <Button onClick={handleSave} variant="contained" color="primary" disabled={isSaving || (isNewTecnico && formData.appAccess && !password)} startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : null}>
                     {isSaving ? 'Salvataggio...' : 'Salva'}
                 </Button>
             </DialogActions>

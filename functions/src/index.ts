@@ -1,20 +1,15 @@
 
 import * as admin from "firebase-admin";
 
-// Inizializza l'SDK di Admin UNA SOLA VOLTA
 admin.initializeApp();
 
-// --- ESPORTAZIONE FUNZIONI PULITE ---
+// Funzioni di migrazione e test (da rimuovere o disabilitare in produzione)
+// export { executeMigration } from './migration';
+export { createTecnico } from './createTecnico';
+// export { forceAdmin } from './forceAdmin';
 
-// 1. Esporta la funzione forceAdmin
-export { forceAdmin } from "./forceAdmin";
+// Funzioni di produzione per la gestione degli accessi e degli utenti
+export { amministrazione_gestisciUtenti } from './amministrazione-gestisciUtenti';
+export { risorseUmane_gestisciAccessoTecnico } from './risorseUmane-gestisciAccessoTecnico';
+export { eliminaTecnico } from './risorseUmane-eliminaTecnico'; // <-- Funzione aggiunta
 
-// 2. Esporta la funzione di migrazione
-export { executeMigration } from "./migration";
-
-// 3. Esporta la funzione per la creazione dei tecnici
-export { createTecnico } from "./createTecnico";
-
-// --- NUOVE FUNZIONI PER SOSTITUIRE I SERVIZI OBSOLETI ---
-export { risorseUmane_gestisciAccessoTecnico } from "./risorseUmane-gestisciAccessoTecnico";
-export { amministrazione_gestisciUtenti } from "./amministrazione-gestisciUtenti";

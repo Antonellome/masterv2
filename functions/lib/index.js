@@ -33,18 +33,19 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTecnico = exports.executeMigration = exports.forceAdmin = void 0;
+exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = void 0;
 const admin = __importStar(require("firebase-admin"));
-// Inizializza l'SDK di Admin UNA SOLA VOLTA
 admin.initializeApp();
-// --- ESPORTAZIONE FUNZIONI PULITE ---
-// 1. Esporta la funzione forceAdmin
-var forceAdmin_1 = require("./forceAdmin");
-Object.defineProperty(exports, "forceAdmin", { enumerable: true, get: function () { return forceAdmin_1.forceAdmin; } });
-// 2. Esporta la funzione di migrazione
-var migration_1 = require("./migration");
-Object.defineProperty(exports, "executeMigration", { enumerable: true, get: function () { return migration_1.executeMigration; } });
-// 3. Esporta la funzione per la creazione dei tecnici
+// Funzioni di migrazione e test (da rimuovere o disabilitare in produzione)
+// export { executeMigration } from './migration';
 var createTecnico_1 = require("./createTecnico");
 Object.defineProperty(exports, "createTecnico", { enumerable: true, get: function () { return createTecnico_1.createTecnico; } });
+// export { forceAdmin } from './forceAdmin';
+// Funzioni di produzione per la gestione degli accessi e degli utenti
+var amministrazione_gestisciUtenti_1 = require("./amministrazione-gestisciUtenti");
+Object.defineProperty(exports, "amministrazione_gestisciUtenti", { enumerable: true, get: function () { return amministrazione_gestisciUtenti_1.amministrazione_gestisciUtenti; } });
+var risorseUmane_gestisciAccessoTecnico_1 = require("./risorseUmane-gestisciAccessoTecnico");
+Object.defineProperty(exports, "risorseUmane_gestisciAccessoTecnico", { enumerable: true, get: function () { return risorseUmane_gestisciAccessoTecnico_1.risorseUmane_gestisciAccessoTecnico; } });
+var risorseUmane_eliminaTecnico_1 = require("./risorseUmane-eliminaTecnico"); // <-- Funzione aggiunta
+Object.defineProperty(exports, "eliminaTecnico", { enumerable: true, get: function () { return risorseUmane_eliminaTecnico_1.eliminaTecnico; } });
 //# sourceMappingURL=index.js.map

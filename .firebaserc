@@ -5,7 +5,7 @@
   "targets": {
     "riso-project-app": {
       "hosting": {
-        "prod": [
+        "riso-master-office-prod": [
           "riso-master-office-prod"
         ]
       }
