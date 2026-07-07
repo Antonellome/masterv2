@@ -32,6 +32,7 @@ interface FlatRapportino {
     naveNome: string;
     luogoNome: string;
     clienteNome: string;
+    ordineLavoro?: string;
     oreResponsabile: string; // Ore del solo tecnico responsabile
     oreTotali: string;       // Ore cumulative di tutto il report
     data: Date | null;
@@ -50,6 +51,7 @@ interface FilterState {
     cliente: Cliente | null;
     luogo: Luogo | null;
     tipoGiornata: TipoGiornata | null;
+    ordineLavoro: string;
 }
 
 // Comparatore per ordinare le date correttamente
@@ -116,7 +118,7 @@ const RicercaAvanzata: React.FC = () => {
         return () => unsub();
     }, []);
 
-    const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null });
+    const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' });
     const [rowToDelete, setRowToDelete] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
 
@@ -182,6 +184,7 @@ const RicercaAvanzata: React.FC = () => {
                 naveNome,
                 luogoNome,
                 clienteNome,
+                ordineLavoro: rapportino.ordineLavoro,
                 oreResponsabile: formatOreLavoro(oreResponsabile),
                 oreTotali: formatOreLavoro(oreTotaliRapporto),
                 data: rapportino.data,
@@ -203,6 +206,7 @@ const RicercaAvanzata: React.FC = () => {
            if (filters.cliente && r.clienteId !== filters.cliente.id) return false;
            if (filters.tipoGiornata && r.tipoGiornataId !== filters.tipoGiornata.id) return false;
            if (filters.luogo && r.luogoId !== filters.luogo.id) return false;
+           if (filters.ordineLavoro && !(r.ordineLavoro || '').toLowerCase().includes(filters.ordineLavoro.toLowerCase())) return false;
            return true;
        });
    }, [flatRapportini, filters]);
@@ -229,7 +233,7 @@ const RicercaAvanzata: React.FC = () => {
         setFilters(prev => ({ ...prev, [filterName]: value }));
     }, []);
 
-    const resetFilters = useCallback(() => setFilters({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null }), []);
+    const resetFilters = useCallback(() => setFilters({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' }), []);
 
     const columns: GridColDef<FlatRapportino>[] = useMemo(() => [
         { 
@@ -250,6 +254,7 @@ const RicercaAvanzata: React.FC = () => {
             ) 
         },
         { field: 'tipoGiornataNome', headerName: 'Tipo Giornata', flex: 1 },
+        { field: 'ordineLavoro', headerName: 'Ordine Lavoro', flex: 1 },
         { field: 'naveNome', headerName: 'Nave', flex: 1 },
         { field: 'luogoNome', headerName: 'Luogo', flex: 1 },
         { field: 'clienteNome', headerName: 'Cliente', flex: 1 },
@@ -288,6 +293,7 @@ const RicercaAvanzata: React.FC = () => {
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={luoghi} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={clienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={tipiGiornata} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><TextField label="Ordine di Lavoro" value={filters.ordineLavoro} onChange={e => handleFilterChange('ordineLavoro', e.target.value)} fullWidth size="small" /></Grid>
                         <Grid item xs={12} sm={6} md={3}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera</Button></Grid>
                     </Grid>
                 </Paper>

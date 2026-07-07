@@ -75,3 +75,14 @@ Queste sono le regole fondamentali che l'AI deve seguire in ogni interazione e m
             *   `eEyvXrvsiXfoazbnAw3w6fngdaZ2` (Mail Aziendale)
             *   `kZCSQlaFpJO4nr4sHcVy1zuLkQJ3` (Antonio Scuderi)
         2.  **Verifica Finale:** Una volta che tutti gli UID saranno stati aggiunti, la modifica dei tecnici funzionerà per tutti gli amministratori, risolvendo definitivamente il problema.
+
+*   **Intervento 2024-07-31: Aggiunta Campo "Ordine di Lavoro"**
+    *   **Richiesta:** Aggiungere un campo `ordineLavoro` al form dei rapportini e renderlo ricercabile nella sezione di reportistica avanzata.
+    *   **Modifiche apportate:**
+        1.  **Modello Dati:** Aggiornato `src/models/rapportino.models.ts` aggiungendo il campo opzionale `ordineLavoro: string` all'interfaccia `RapportinoHeader`.
+        2.  **Form Rapportino:** Modificato `src/components/Rapportini/RapportinoForm.tsx` per includere un `TextField` "Ordine di Lavoro" nella sezione "Dettagli Intervento". Il campo viene salvato nel documento Firestore.
+        3.  **Ricerca Avanzata:** Modificato `src/components/Reportistica/RicercaAvanzata.tsx` per:
+            *   Aggiungere un filtro di testo per "Ordine di Lavoro".
+            *   Visualizzare il campo "Ordine di Lavoro" nella tabella dei risultati.
+            *   Implementare la logica di filtro case-insensitive per il nuovo campo.
+    *   **Stato:** **Completato.**

@@ -112,6 +112,7 @@ const RapportinoEdit: React.FC = () => {
     const [tecnicoResponsabileId, setTecnicoResponsabileId] = useState<string | null>(null);
     const [data, setData] = useState<Dayjs | null>(dayjs());
     const [giornataId, setGiornataId] = useState('');
+    const [ordineLavoro, setOrdineLavoro] = useState('');
     const [includeTrasferta, setIncludeTrasferta] = useState(false);
     const [trasfertaId, setTrasfertaId] = useState('');
     const [isLavorativo, setIsLavorativo] = useState(true);
@@ -187,6 +188,7 @@ const RapportinoEdit: React.FC = () => {
                         setLavoroEseguito(reportData.lavoroEseguito || '');
                         setMaterialiImpiegati(reportData.materialiImpiegati || '');
                         setFirma(reportData.firmaVettoriale || null);
+                        setOrdineLavoro(reportData.ordineLavoro || '');
 
                         const allTecnicoIds = Array.from(new Set(reportData.presenze || [reportData.tecnicoId]));
                         const hasDettaglioOre = !!reportData.dettaglioOreTecnici && reportData.dettaglioOreTecnici.length > 0;
@@ -308,6 +310,7 @@ const RapportinoEdit: React.FC = () => {
                 descrizioneBreve: isLavorativo ? descrizioneBreve : '',
                 lavoroEseguito: isLavorativo ? lavoroEseguito : '',
                 materialiImpiegati: isLavorativo ? materialiImpiegati : '',
+                ordineLavoro: isLavorativo ? ordineLavoro : '',
                 updatedAt: serverTimestamp(),
                 ...(includeTrasferta && trasfertaId ? { trasfertaId } : {}),
             };
@@ -345,8 +348,30 @@ const RapportinoEdit: React.FC = () => {
                 <Paper elevation={3} sx={{ p: { xs: 2, sm: 3 } }}>
                     <Typography variant="h4" component="h1" gutterBottom>{isEditMode ? 'Dettaglio' : 'Nuovo'} Rapportino</Typography>
                     <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 2 }}>
-                        <Autocomplete options={sortedTecnici} getOptionLabel={(option) => `${option.cognome} ${option.nome}`} value={sortedTecnici.find(t => t.id === tecnicoResponsabileId) || null} onChange={handleTecnicoResponsabileChange} disabled={isEditMode || isSaving} renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />} />
-                        <DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} />
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} md={4}>
+                                <Autocomplete
+                                    options={sortedTecnici}
+                                    getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
+                                    value={sortedTecnici.find(t => t.id === tecnicoResponsabileId) || null}
+                                    onChange={handleTecnicoResponsabileChange}
+                                    disabled={isEditMode || isSaving}
+                                    renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} />
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    label="Ordine di Lavoro"
+                                    value={ordineLavoro}
+                                    onChange={e => setOrdineLavoro(e.target.value)}
+                                    fullWidth
+                                    disabled={isSaving}
+                                />
+                            </Grid>
+                        </Grid>
                         <FormControl fullWidth required>
                             <InputLabel>Tipo Giornata</InputLabel>
                             <Select value={giornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>

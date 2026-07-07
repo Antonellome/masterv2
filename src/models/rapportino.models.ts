@@ -21,6 +21,9 @@ export interface RapportinoHeader {
   clienteNome: string;
   destinazioneNome: string;
   destinazioneIndirizzo: string;
+
+  // Nuovo campo
+  ordineLavoro?: string;
 }
 
 /**

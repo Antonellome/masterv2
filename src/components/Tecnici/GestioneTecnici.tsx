@@ -1,5 +1,5 @@
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
 import { doc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -18,18 +18,14 @@ const fetchAnagrafica = async (collectionName: string) => {
 };
 
 const GestioneTecnici = () => {
-    // Stati per le anagrafiche collegate
+    // Stati dei dati
+    const [tecnici, setTecnici] = useState<Tecnico[]>([]);
     const [ditte, setDitte] = useState<Ditta[]>([]);
     const [categorie, setCategorie] = useState<Categoria[]>([]);
-    const [anagraficheLoading, setAnagraficheLoading] = useState(true);
-    const [anagraficheError, setAnagraficheError] = useState<string | null>(null);
 
-    // Stato per i dati principali (tecnici)
-    const [tecnici, setTecnici] = useState<Tecnico[]>([]);
+    // Stati di controllo UI
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
-    // Stati per l'interfaccia utente
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -40,51 +36,33 @@ const GestioneTecnici = () => {
 
     const collectionName = 'tecnici';
 
-    // Caricamento dati principali (tecnici)
-    const fetchTecnici = useCallback(async () => {
+    // Caricamento unificato di tutti i dati necessari al componente
+    const fetchData = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const q = query(
-                collection(db, collectionName).withConverter(tecnicoConverter),
-                orderBy('cognome'),
-                orderBy('nome')
-            );
-            const snapshot = await getDocs(q);
-            setTecnici(snapshot.docs.map(doc => doc.data()));
+            const [tecniciData, ditteData, categorieData] = await Promise.all([
+                getDocs(query(collection(db, collectionName).withConverter(tecnicoConverter), orderBy('cognome'), orderBy('nome'))),
+                fetchAnagrafica('ditte') as Promise<Ditta[]>,
+                fetchAnagrafica('categorie') as Promise<Categoria[]>
+            ]);
+            
+            setTecnici(tecniciData.docs.map(doc => doc.data()));
+            setDitte(ditteData);
+            setCategorie(categorieData);
+
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Errore sconosciuto nel caricamento tecnici.';
+            const message = err instanceof Error ? err.message : 'Errore sconosciuto nel caricamento dati.';
             setError(message);
-            console.error("Errore caricamento tecnici:", err);
+            console.error("Errore caricamento dati per GestioneTecnici:", err);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Caricamento anagrafiche collegate (ditte, categorie)
-    const fetchRelatedAnagrafiche = useCallback(async () => {
-        setAnagraficheLoading(true);
-        setAnagraficheError(null);
-        try {
-            const [ditteData, categorieData] = await Promise.all([
-                fetchAnagrafica('ditte') as Promise<Ditta[]>,
-                fetchAnagrafica('categorie') as Promise<Categoria[]>
-            ]);
-            setDitte(ditteData);
-            setCategorie(categorieData);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Errore sconosciuto nel caricamento anagrafiche.';
-            setAnagraficheError(message);
-            console.error("Errore caricamento anagrafiche per tecnici:", err);
-        } finally {
-            setAnagraficheLoading(false);
-        }
-    }, []);
-
     useEffect(() => {
-        fetchTecnici();
-        fetchRelatedAnagrafiche();
-    }, [fetchTecnici, fetchRelatedAnagrafiche]);
+        fetchData();
+    }, [fetchData]);
 
     const handleError = (e: unknown, context: string) => {
         console.error(`${context}:`, e);
@@ -92,11 +70,6 @@ const GestioneTecnici = () => {
         const message = firebaseError.message || 'Si è verificato un errore sconosciuto.';
         setSnackbar({ open: true, message: `${context}: ${message}`, severity: 'error' });
     };
-    
-    const refreshAndClose = () => {
-        fetchTecnici();
-        setFormOpen(false);
-    }
 
     const handleAdd = () => {
         setSelectedTecnico(null);
@@ -113,40 +86,36 @@ const GestioneTecnici = () => {
         try {
             const { id, ...dataToSave } = formData;
             if (id) {
-                // MODIFICA: Aggiorna un tecnico esistente, qui non si toccano le credenziali
                 await updateDoc(doc(db, collectionName, id), dataToSave);
                 setSnackbar({ open: true, message: 'Dati tecnico aggiornati!', severity: 'success' });
             } else {
-                // CREAZIONE: Chiama la Cloud Function per creare il nuovo tecnico
                 const createTecnicoFn = httpsCallable(functions, 'createTecnico');
                 const result = await createTecnicoFn(dataToSave);
                 console.log('Risultato Cloud Function:', result.data);
                 setSnackbar({ open: true, message: (result.data as any).message || 'Tecnico creato con successo!', severity: 'success' });
             }
-            refreshAndClose();
+            await fetchData(); // Ricarica tutti i dati
+            setFormOpen(false);
         } catch (e) {
             handleError(e, "Errore nel salvataggio del tecnico");
         } finally {
             setIsSaving(false);
         }
-    }, []);
+    }, [fetchData]);
 
     const handleDelete = (id: string) => {
         setTecnicoToDelete(id);
         setDeleteDialogOpen(true);
     };
 
-    // --- FUNZIONE DI ELIMINAZIONE CORRETTA ---
     const confirmDelete = useCallback(async () => {
         if (!tecnicoToDelete) return;
         setIsSaving(true);
         try {
-            // La chiamata punta ora alla funzione corretta: 'eliminaTecnico'
             const eliminaTecnicoFn = httpsCallable(functions, 'eliminaTecnico');
             await eliminaTecnicoFn({ uid: tecnicoToDelete });
-
             setSnackbar({ open: true, message: 'Tecnico eliminato con successo.', severity: 'success' });
-            fetchTecnici(); // Ricarica la lista dei tecnici
+            await fetchData(); // Ricarica tutti i dati
         } catch (e) {
             handleError(e, "Errore durante l'eliminazione del tecnico");
         } finally {
@@ -154,32 +123,33 @@ const GestioneTecnici = () => {
             setDeleteDialogOpen(false);
             setIsSaving(false);
         }
-    }, [tecnicoToDelete, fetchTecnici]);
+    }, [tecnicoToDelete, fetchData]);
     
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
         setUpdatingId(id);
         try {
             await updateDoc(doc(db, collectionName, id), { attivo: newStatus });
             setSnackbar({ open: true, message: `Stato del tecnico aggiornato.`, severity: 'success' });
-            fetchTecnici(); // Ricarica la lista
+            await fetchData(); // Ricarica tutti i dati
         } catch (e) {
             handleError(e, "Errore nell'aggiornamento dello stato");
         } finally {
             setUpdatingId(null);
         }
-    }, [fetchTecnici]);
+    }, [fetchData]);
 
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
+    
+    const ditteMap = useMemo(() => new Map(ditte.map(d => [d.id, d.nome])), [ditte]);
+    const categorieMap = useMemo(() => new Map(categorie.map(c => [c.id, c.nome])), [categorie]);
 
-    if (loading || anagraficheLoading) {
+    if (loading) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
     }
-    if (error || anagraficheError) {
-        return <Typography color="error">{`Errore nel caricamento dati: ${error || anagraficheError}`}</Typography>;
+    
+    if (error) {
+        return <Typography color="error">{`Errore nel caricamento dati: ${error}`}</Typography>;
     }
-
-    const ditteMap = new Map(ditte.map(d => [d.id, d.nome]));
-    const categorieMap = new Map(categorie.map(c => [c.id, c.nome]));
 
     return (
         <>

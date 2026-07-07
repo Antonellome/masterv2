@@ -43,6 +43,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
     const [tecnicoScriventeId, setTecnicoScriventeId] = useState<string>('');
     const [data, setData] = useState<Dayjs | null>(initialDate || dayjs());
     const [tipoGiornataId, setTipoGiornataId] = useState('');
+    const [ordineLavoro, setOrdineLavoro] = useState('');
     const [isLavorativo, setIsLavorativo] = useState(true);
     const [veicoloId, setVeicoloId] = useState<string | null>(null);
     const [naveId, setNaveId] = useState<string | null>(null);
@@ -70,7 +71,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
 
     useEffect(() => {
         if (isEditMode && initialRapportino && !loading) {
-            const { data, tecnicoId, tipoGiornataId, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, dettaglioOreTecnici, altriTecniciIds, isTrasferta, oraInizio, oraFine, pausa, oreLavoro, firmaVettoriale } = initialRapportino;
+            const { data, tecnicoId, tipoGiornataId, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, dettaglioOreTecnici, altriTecniciIds, isTrasferta, oraInizio, oraFine, pausa, oreLavoro, firmaVettoriale, ordineLavoro } = initialRapportino;
 
             if (data && typeof data.toDate === 'function') {
                 setData(dayjs(data.toDate()));
@@ -81,6 +82,7 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             
             setTecnicoScriventeId(tecnicoId);
             setTipoGiornataId(tipoGiornataId || '');
+            setOrdineLavoro(ordineLavoro || '');
             const tipo = tipiGiornata.find(t => t.id === tipoGiornataId);
             setIsLavorativo(isGiornataLavorativa(tipo));
             setVeicoloId(veicoloId || null);
@@ -221,12 +223,13 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             veicoloId: isLavorativo ? (veicoloId || null) : null,
             naveId: isLavorativo ? (naveId || null) : null,
             luogoId: isLavorativo ? (luogoId || null) : null,
+            ordineLavoro: isLavorativo ? (ordineLavoro || '') : '',
             descrizioneBreve: isLavorativo ? (descrizioneBreve || '') : '',
             lavoroEseguito: isLavorativo ? (lavoroEseguito || '') : '',
             materialiImpiegati: isLavorativo ? (materialiImpiegati || '') : '',
             firmaVettoriale: initialRapportino?.firmaVettoriale || null, 
         };
-    }, [dettaglioOre, tecnicoScriventeId, isLavorativo, tipoGiornataId, data, initialRapportino, veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, tipiGiornata]);
+    }, [dettaglioOre, tecnicoScriventeId, isLavorativo, tipoGiornataId, data, initialRapportino, veicoloId, naveId, luogoId, ordineLavoro, descrizioneBreve, lavoroEseguito, materialiImpiegati, tipiGiornata]);
 
     const handleSubmit = useCallback(async () => {
         if ((isPeriodo ? !dataInizio || !dataFine : !data) || !tipoGiornataId || !tecnicoScriventeId) {
@@ -286,25 +289,81 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
             <DialogContent>
                 <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
                     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-                    {!isEditMode && <Alert severity="info" sx={{ display: 'flex', alignItems: 'center' }}><FormControlLabel control={<Switch checked={isPeriodo} onChange={e => setIsPeriodo(e.target.checked)} disabled={isSaving || isEditMode} />} label="Inserisci per un periodo (es. ferie, malattia)" /></Alert>}
+                    {!isEditMode && <Alert severity="info" sx={{ display: 'flex', alignItems: 'center' }}><FormControlLabel control={<Switch checked={isPeriodo} onChange={e => setIsPeriodo(e.target.checked)} disabled={isSaving || isEditMode} />} label="Inserisci per un periodo (es. ferie, malattia)" />}</Alert>}
                     
                     <Grid container spacing={2}>
-                         {isPeriodo && !isEditMode ? (
+                        {/* Gestione Periodo / Data Singola */}
+                        {isPeriodo && !isEditMode ? (
                             <>
-                                <Grid item xs={12} sm={6}><DatePicker label="Data Inizio" value={dataInizio} onChange={setDataInizio} slotProps={{ textField: { fullWidth: true, required: true } }} /></Grid>
-                                <Grid item xs={12} sm={6}><DatePicker label="Data Fine" value={dataFine} onChange={setDataFine} slotProps={{ textField: { fullWidth: true, required: true } }} /></Grid>
+                                <Grid item xs={12} sm={6}>
+                                    <DatePicker 
+                                        label="Data Inizio" 
+                                        value={dataInizio} 
+                                        onChange={setDataInizio} 
+                                        slotProps={{ textField: { fullWidth: true, required: true } }} 
+                                    />
+                                </Grid>
+                                <Grid item xs={12} sm={6}>
+                                    <DatePicker 
+                                        label="Data Fine" 
+                                        value={dataFine} 
+                                        onChange={setDataFine} 
+                                        slotProps={{ textField: { fullWidth: true, required: true } }} 
+                                    />
+                                </Grid>
                             </>
-                        ) : ( <Grid item xs={12} sm={isEditMode ? 12 : 4}><DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} slotProps={{ textField: { fullWidth: true, required: true } }} /></Grid> )}
-                        
-                        {!isPeriodo && !isEditMode && <Grid item xs={12} sm={8}>
-                            <FormControl fullWidth required>
-                                <InputLabel>Tecnico Responsabile</InputLabel>
-                                <Select value={tecnicoScriventeId} label="Tecnico Responsabile" onChange={e => setTecnicoScriventeId(e.target.value as string)} disabled={isSaving}>
-                                    {sortedTecnici.map(t => <MenuItem key={t.id} value={t.id}>{`${t.cognome} ${t.nome}`}</MenuItem>)}
-                                </Select>
-                            </FormControl>
-                        </Grid>}
-                         {isEditMode && <Grid item xs={12}><TextField label="Tecnico Responsabile" value={dettaglioOre.find(d => d.tecnicoId === initialRapportino?.tecnicoId)?.nome || 'Caricamento...'} fullWidth disabled /></Grid>}
+                        ) : (
+                            <Grid item xs={12} md={4}>
+                                <DatePicker 
+                                    label="Data" 
+                                    value={data} 
+                                    onChange={setData} 
+                                    disabled={isSaving} 
+                                    slotProps={{ textField: { fullWidth: true, required: true } }} 
+                                />
+                            </Grid>
+                        )}
+
+                        {/* Tecnico Responsabile (visibile sempre se non è periodo) */}
+                        {!isPeriodo && (
+                            isEditMode ? (
+                                <Grid item xs={12} md={4}>
+                                    <TextField 
+                                        label="Tecnico Responsabile" 
+                                        value={dettaglioOre.find(d => d.tecnicoId === initialRapportino?.tecnicoId)?.nome || 'Caricamento...'}
+                                        fullWidth 
+                                        disabled 
+                                    />
+                                </Grid>
+                            ) : (
+                                <Grid item xs={12} md={4}>
+                                    <FormControl fullWidth required>
+                                        <InputLabel>Tecnico Responsabile</InputLabel>
+                                        <Select 
+                                            value={tecnicoScriventeId} 
+                                            label="Tecnico Responsabile" 
+                                            onChange={e => setTecnicoScriventeId(e.target.value as string)} 
+                                            disabled={isSaving}
+                                        >
+                                            {sortedTecnici.map(t => <MenuItem key={t.id} value={t.id}>{`${t.cognome} ${t.nome}`}</MenuItem>)}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                            )
+                        )}
+
+                        {/* Ordine di Lavoro (visibile sempre se non è periodo) */}
+                        {!isPeriodo && (
+                            <Grid item xs={12} md={4}>
+                                <TextField 
+                                    label="Ordine di Lavoro" 
+                                    value={ordineLavoro} 
+                                    onChange={e => setOrdineLavoro(e.target.value)} 
+                                    fullWidth 
+                                    disabled={isSaving} 
+                                />
+                            </Grid>
+                        )}
                     </Grid>
                      
                     <FormControl fullWidth required>
@@ -374,4 +433,4 @@ const RapportinoForm: React.FC<{ onClose: () => void; rapportino?: Rapportino | 
     );
 };
 
-export default RapportinoForm;
+export default RapportinoForm.tsx;
