@@ -8,6 +8,7 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "build": "tsc",
+    "lint": "eslint .",
     "predeploy": "npm run build"
   },
   "engines": {

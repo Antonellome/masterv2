@@ -6,16 +6,28 @@ import {
     SnapshotOptions,
     WithFieldValue
 } from 'firebase/firestore';
-import { RapportinoSchema, createRapportinoSchema } from '@/models/rapportino.schema';
+import { rapportinoSchema, RapportinoSchema } from '@/models/rapportino.schema';
 
 export const rapportinoConverter: FirestoreDataConverter<RapportinoSchema> = {
     /**
      * Converte un oggetto RapportinoSchema in un oggetto salvabile su Firestore.
+     * Questa funzione ora valida attivamente i dati contro lo schema prima di inviarli,
+     * garantendo che solo i dati conformi vengano salvati.
      */
     toFirestore(rapportino: WithFieldValue<RapportinoSchema>): DocumentData {
-        // Rimuoviamo l'ID, poiché è l'identificativo del documento e non va salvato nei campi.
+        // Rimuoviamo l'ID dall'oggetto prima della validazione e del salvataggio.
         const { id, ...data } = rapportino;
-        return data;
+        
+        try {
+            // Valida l'oggetto 'data' con lo schema Zod.
+            // Questo rimuove qualsiasi campo extra e assicura la conformità alla specifica.
+            const validatedData = rapportinoSchema.omit({ id: true }).parse(data);
+            return validatedData;
+        } catch (error) {
+            console.error("Errore di validazione Zod in toFirestore:", error);
+            // Se la validazione fallisce, lancia un errore per impedire il salvataggio di dati corrotti.
+            throw new Error("Dati del rapportino non validi. Impossibile salvare.");
+        }
     },
 
     /**
@@ -24,16 +36,10 @@ export const rapportinoConverter: FirestoreDataConverter<RapportinoSchema> = {
     fromFirestore(snapshot: QueryDocumentSnapshot, options: SnapshotOptions): RapportinoSchema {
         const data = snapshot.data(options);
 
-        // Determiniamo se la giornata era lavorativa in base alla struttura dei dati salvati.
-        // Se attivitaSvolte non è null, era una giornata lavorativa.
-        const isLavorativo = data.attivitaSvolte != null;
-
-        // Usiamo la nostra factory per ottenere lo schema di validazione corretto.
-        const schema = createRapportinoSchema(isLavorativo);
-
         try {
-            // Aggiungiamo l'ID del documento ai dati e validiamo.
-            return schema.parse({ ...data, id: snapshot.id });
+            // Aggiungiamo l'ID del documento ai dati e validiamo con lo schema.
+            // Questo assicura che l'app riceva sempre dati conformi.
+            return rapportinoSchema.parse({ ...data, id: snapshot.id });
         } catch (error) {
             console.error("Errore di validazione Zod in fromFirestore:", error);
             // In caso di errore di validazione, lanciamo un errore per evitare di propagare dati corrotti.

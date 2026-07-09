@@ -1,38 +1,29 @@
 
-import { doc, getDoc, setDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { RapportinoSchema } from '@/models/rapportino.schema';
 import { rapportinoConverter } from '@/utils/converters/rapportinoConverter';
 
-const rapportiniCollection = collection(db, 'rapportini').withConverter(rapportinoConverter);
+export const rapportiniCollection = collection(db, 'rapportini').withConverter(rapportinoConverter);
 
 /**
  * Salva un rapportino (crea o aggiorna) in Firestore.
- * @param rapportino L'oggetto rapportino validato secondo RapportinoSchema.
+ * L'operazione SOVRASCRIVE completamente il documento esistente per garantire la pulizia dei dati.
+ * @param rapportino L'oggetto rapportino conforme a RapportinoSchema.
  * @throws Lancia un errore se il salvataggio fallisce.
  */
 export const saveRapportino = async (rapportino: RapportinoSchema): Promise<void> => {
     try {
+        if (!rapportino.id) {
+            throw new Error('ID del rapportino non fornito per il salvataggio.');
+        }
         const docRef = doc(rapportiniCollection, rapportino.id);
 
-        // Distinguiamo tra creazione e aggiornamento per i metadati
-        const isEditMode = (await getDoc(docRef)).exists();
+        // L'operazione di setDoc senza merge SOVRASCRIVE il documento.
+        // Questo elimina qualsiasi campo residuo da salvataggi precedenti e garantisce
+        // che solo i dati conformi allo schema attuale vengano persistiti.
+        await setDoc(docRef, rapportino);
 
-        if (isEditMode) {
-            // Aggiornamento
-            const dataToUpdate: Partial<RapportinoSchema> = {
-                ...rapportino,
-                metadata: {
-                    ...rapportino.metadata,
-                    updatedAt: Timestamp.now(),
-                    // updatedBy: currentUser.uid // Da implementare se necessario
-                },
-            };
-            await setDoc(docRef, dataToUpdate, { merge: true });
-        } else {
-            // Creazione
-            await setDoc(docRef, rapportino); // Lo schema Zod ha già i default
-        }
     } catch (error) {
         console.error("Errore durante il salvataggio del rapportino:", error);
         throw new Error("Impossibile salvare il rapportino.");
