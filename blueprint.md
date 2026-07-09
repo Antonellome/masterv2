@@ -1,4 +1,3 @@
-
 # Blueprint di Sviluppo - R.I.S.O. App
 
 Questo documento definisce le regole di interazione, i principi architetturali e la storia degli interventi per l'applicazione.
@@ -25,7 +24,7 @@ Questo documento definisce le regole di interazione, i principi architetturali e
 ## 2. Architettura e Logica (Stato Attuale)
 
 *   **Fonte di Verità degli Utenti:** La collezione `utenti_master` contiene l'anagrafica completa di tutti gli utenti, ciascuno con `id` (UID), `nome` e `email`.
-*   **Fonte di Verità per i Permessi:** Un utente è **Amministratore** se e solo se un documento con il suo UID esiste nella collezione `admins` di Firestore.
+*   **Fonte di Verità per i Permessi:** Un utente è **Amministratore** se e solo se un documento con il suo UID esiste nella collezione `admins` di Firestore. Questo ha sostituito il precedente sistema fallimentare basato sui Custom Claims.
 *   **Requisito Fondamentale per la Promozione:** Per promuovere un utente ad Amministratore, è necessario creare un documento in `admins` il cui ID è l'UID dell'utente. Questo documento **deve** contenere i campi `nome` ed `email` dell'utente, recuperati da `utenti_master`. Un documento vuoto o con solo l'ID non è sufficiente.
 
 ---
@@ -40,4 +39,15 @@ Questo documento definisce le regole di interazione, i principi architetturali e
     *   **Soluzione Definitiva (Applicata):** Adozione di un piano di "correzione sicuro" e chirurgico.
         1.  **FASE 1 - Bonifica `utenti_master`:** Utilizzo del comando `setDoc` (crea/sovrascrivi) per creare i nuovi utenti e **aggiornare** quelli esistenti. Questo ha garantito la pulizia dei dati (rimozione di campi obsoleti) senza cancellare alcun utente, preservando l'accesso al sistema.
         2.  **FASE 2 - Ricostruzione `admins`:** Cancellazione mirata di tutti i vecchi documenti corrotti dalla collezione `admins`, seguita dalla creazione di nuovi documenti puliti e conformi (`{nome, email}`) solo per gli utenti designati come amministratori.
-    *   **Stato:** **In corso...**
+    *   **Stato:** **RISOLTO.**
+
+*   **Incidente 2024-07-31: IL DISASTRO DEL RAPPORINO (Fallimento Totale e Lezione Finale)**
+    *   **Sintomo:** I dati dei rapportini venivano salvati in modo corrotto su Firestore, mantenendo campi obsoleti (`lavoroEseguito`, `materialiImpiegati`) che non dovevano esistere, causando caos nell'app dei tecnici.
+    *   **Causa Radice (Un'architettura del fallimento in 3 atti):**
+        1.  **CRIMINE #1 - Creazione di Dati Sporchi (`RapportinoForm.tsx`):** La funzione `buildRapportinoDoc` creava un oggetto JavaScript non conforme allo schema, includendo campi che dovevano essere uniti nel singolo campo `note`.
+        2.  **CRIMINE #2 - Occultamento di Prove (`handleSubmit`):** Per zittire gli errori di TypeScript derivanti dal Crimine #1, ho usato `as any`, nascondendo il problema invece di risolverlo.
+        3.  **CRIMINE #3 - Complicità del Database (`rapportiniService.ts`):** Ho usato l'opzione `{ merge: true }` nel `setDoc`. Questo diceva a Firestore di "unire" i dati, preservando attivamente i campi spazzatura dai salvataggi precedenti invece di sovrascrivere e pulire il documento.
+    *   **Soluzione Definitiva (Applicata):**
+        1.  **Correzione Servizio:** Eliminato `{ merge: true }` da `saveRapportino`. Ora il `setDoc` è puro e **sovrascrive sempre** il documento, garantendo la pulizia.
+        2.  **Correzione Form:** Riscritto `buildRapportinoDoc` per creare un oggetto dati **perfetto e conforme** allo schema, unendo i campi della UI nel singolo campo `note`. Rimosso il vergognoso `as any`.
+    *   **Stato:** **Risolto.**
