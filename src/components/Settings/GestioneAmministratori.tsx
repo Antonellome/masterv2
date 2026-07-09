@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
-import { httpsCallable } from 'firebase/functions';
-import { sendPasswordResetEmail } from "firebase/auth";
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthProvider';
 import { auth, db, functions } from '@/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { sendPasswordResetEmail } from "firebase/auth";
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, query } from 'firebase/firestore';
 import {
   Box, Typography, CircularProgress, Alert, Button, Dialog,
   DialogActions, DialogContent, DialogTitle, DialogContentText,
@@ -19,6 +19,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 
+// MANTENUTE PER CREAZIONE/ELIMINAZIONE UTENTE
 const gestisciUtenti = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 
 interface User {
@@ -28,6 +29,7 @@ interface User {
   ruolo: 'admin' | 'user';
 }
 
+// Dialog per nuovo utente - INVARIATO
 const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean, onClose: () => void, onSave: (nome: string, email: string) => void, isSaving: boolean }) => {
     const [nome, setNome] = useState('');
     const [email, setEmail] = useState('');
@@ -60,6 +62,7 @@ const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean,
     );
 };
 
+// Dialog per conferma eliminazione - INVARIATO
 const ConfermaEliminazioneDialog = ({ open, onClose, onConfirm, isSaving, user }: { open: boolean, onClose: () => void, onConfirm: () => void, isSaving: boolean, user: User | null }) => (
     <Dialog open={open} onClose={onClose}>
         <DialogTitle>Conferma Eliminazione</DialogTitle>
@@ -87,38 +90,40 @@ const GestioneAmministratori = () => {
   const [openNewUserDialog, setOpenNewUserDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null); 
 
+  // AZIONE 1: CORREZIONE CARICAMENTO DATI
   useEffect(() => {
     setLoading(true);
-    const unsubAdmins = onSnapshot(collection(db, 'amministratori'), (adminSnapshot) => {
-      const admins = adminSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), ruolo: 'admin' } as User));
-      
-      const unsubUsers = onSnapshot(collection(db, 'utenti_master'), (userSnapshot) => {
-        const masterUsers = userSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), ruolo: 'user' } as User));
+    // Ascolta le modifiche su entrambe le collezioni per aggiornamenti in tempo reale
+    const unsubUtentiMaster = onSnapshot(collection(db, 'utenti_master'), (snapshotMaster) => {
+        const masterUsers = snapshotMaster.docs.map(doc => ({ id: doc.id, ...doc.data() } as Omit<User, 'ruolo'>));
         
-        const adminIds = new Set(admins.map(a => a.id));
-        const combinedUsers = [
-          ...admins,
-          ...masterUsers.filter(u => !adminIds.has(u.id))
-        ];
+        const unsubAdmins = onSnapshot(collection(db, 'admins'), (snapshotAdmins) => {
+            const adminIds = new Set(snapshotAdmins.docs.map(doc => doc.id));
+            
+            const combinedUsers = masterUsers.map(user => ({
+                ...user,
+                ruolo: adminIds.has(user.id) ? 'admin' : 'user'
+            } as User));
 
-        setUtenti(combinedUsers);
-        setLoading(false);
-      }, (err) => {
+            setUtenti(combinedUsers);
+            setLoading(false);
+        }, (err) => {
+            console.error("Errore caricamento admins:", err);
+            setError("Impossibile caricare i ruoli degli amministratori.");
+            setLoading(false);
+        });
+
+        return () => unsubAdmins(); // Cleanup listener admins
+    }, (err) => {
         console.error("Errore caricamento utenti master:", err);
         setError("Impossibile caricare gli utenti.");
         setLoading(false);
-      });
-
-      return () => unsubUsers();
-    }, (err) => {
-      console.error("Errore caricamento amministratori:", err);
-      setError("Impossibile caricare gli amministratori.");
-      setLoading(false);
     });
 
-    return () => unsubAdmins();
+    return () => unsubUtentiMaster(); // Cleanup listener utenti_master
   }, []);
 
+  // Funzione di reset password - INVARIATA
   const handleSendPasswordReset = async (email: string) => {
     if(isSaving) return;
     setIsSaving(true);
@@ -134,6 +139,7 @@ const GestioneAmministratori = () => {
     }
   };
 
+  // AZIONE 2: CORREZIONE LOGICA SWITCH
   const handleToggleRuolo = async (user: User, nuovoRuolo: 'admin' | 'user') => {
     if (user.id === currentUser?.uid) {
       setFeedback({ type: 'error', message: 'Non puoi modificare il tuo stesso ruolo.' });
@@ -142,17 +148,22 @@ const GestioneAmministratori = () => {
     if (isSaving) return;
     setIsSaving(true);
 
-    // Aggiornamento ottimistico dell'interfaccia UTENTE - L'HO RIMESSO, CAZZO.
     const originalUtenti = utenti;
     setUtenti(prev => prev.map(u => u.id === user.id ? { ...u, ruolo: nuovoRuolo } : u));
 
     try {
-      await gestisciUtenti({ action: 'setRole', uid: user.id, role: nuovoRuolo });
+      const adminDocRef = doc(db, 'admins', user.id);
+      if (nuovoRuolo === 'admin') {
+        // Aggiungo un documento alla collezione admins per promuovere l'utente
+        await setDoc(adminDocRef, { email: user.email, nome: user.nome }); // Aggiungo dati contestuali
+      } else {
+        // Rimuovo il documento per revocare i privilegi
+        await deleteDoc(adminDocRef);
+      }
       const feedbackMessage = `Ruolo di ${user.nome} aggiornato a ${nuovoRuolo === 'admin' ? 'Amministratore' : 'Utente'}.`;
       setFeedback({ type: 'success', message: feedbackMessage });
     } catch (err: any) {
-      // Rollback in caso di errore
-      setUtenti(originalUtenti);
+      setUtenti(originalUtenti); // Rollback in caso di errore
       const nomeAzione = nuovoRuolo === 'admin' ? 'Promozione' : 'Revoca';
       setFeedback({ type: 'error', message: err.message || `${nomeAzione} fallita.` });
     } finally {
@@ -160,6 +171,7 @@ const GestioneAmministratori = () => {
     }
   };
 
+  // Funzione creazione utente - INVARIATA
   const handleCreaNuovoUtente = async (nome: string, email: string) => {
     if (isSaving) return;
     setIsSaving(true);
@@ -174,6 +186,7 @@ const GestioneAmministratori = () => {
     }
   };
 
+  // Funzione eliminazione utente - INVARIATA
   const handleEliminaUtente = async () => {
     if (!userToDelete || isSaving) return;
     setIsSaving(true);
@@ -190,6 +203,7 @@ const GestioneAmministratori = () => {
     }
   };
   
+  // Toolbar - INVARIATA
   function CustomToolbar() {
       return (
           <GridToolbarContainer>
@@ -270,6 +284,7 @@ const GestioneAmministratori = () => {
     }
   ];
 
+  // Resto del componente (rendering) - INVARIATO
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
   if (error) return <Alert severity="error">{error}</Alert>;
 

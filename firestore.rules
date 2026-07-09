@@ -4,36 +4,45 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // NUOVA FUNZIONE isAdmin()
-    // Controlla se l'UID dell'utente esiste nella collezione 'admins'.
+    // Funzione helper per verificare se un utente è un amministratore
+    // Controlla se l'UID dell'utente esiste nella collezione 'amministratori'.
     function isAdmin() {
-      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return exists(/databases/$(database)/documents/amministratori/$(request.auth.uid));
     }
 
-    // Regola generale per i tecnici: gli admin possono fare tutto.
+    // Regola per la collezione 'utenti_master'
+    // Solo gli amministratori possono leggere e scrivere.
+    match /utenti_master/{userId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Regola per la collezione 'amministratori'
+    // Solo gli amministratori possono leggere e scrivere in questa collezione.
+    match /amministratori/{adminId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Regole più specifiche per altre collezioni (se necessario)
+    // Esempio per una collezione 'tecnici'
     match /tecnici/{tecnicoId} {
       allow read, write: if isAdmin();
     }
-    
+
     // Regole per le notifiche
     match /notifiche/{notificaId} {
-      // Chiunque sia autenticato può leggere (necessario per il listener)
       allow read: if request.auth != null;
-      // Solo gli admin o il tecnico a cui è destinata possono aggiornare.
       allow update: if isAdmin() || (request.auth != null && resource.data.tecnicoId == request.auth.uid);
-      // Solo gli admin possono creare o cancellare notifiche.
       allow create, delete: if isAdmin();
     }
-    
-    // La collezione 'admins' può essere letta e scritta solo da altri admin.
-    // Questo permette agli admin di gestire altri admin.
-    match /admins/{adminId} {
-        allow read, write: if isAdmin();
-    }
 
-    // Le altre collezioni sono accessibili solo dagli admin
+    // Fallback: per tutte le altre collezioni non specificate, nega l'accesso
+    // Questo è un principio di sicurezza importante (fail-safe).
+    // Se una collezione non ha una regola esplicita, nessuno può accedervi.
+    // Nota: commentata per ora per evitare di bloccare collezioni esistenti non dichiarate.
+    /*
     match /{document=**} {
-      allow read, write: if isAdmin();
+      allow read, write: if false;
     }
+    */
   }
 }
