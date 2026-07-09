@@ -1,48 +1,15 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Funzione helper per verificare se un utente è un amministratore
-    // Controlla se l'UID dell'utente esiste nella collezione 'amministratori'.
     function isAdmin() {
-      return exists(/databases/$(database)/documents/amministratori/$(request.auth.uid));
+      // A user is an admin if a document with their UID exists in the /admins collection.
+      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Regola per la collezione 'utenti_master'
-    // Solo gli amministratori possono leggere e scrivere.
-    match /utenti_master/{userId} {
-      allow read, write: if isAdmin();
-    }
-    
-    // Regola per la collezione 'amministratori'
-    // Solo gli amministratori possono leggere e scrivere in questa collezione.
-    match /amministratori/{adminId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Regole più specifiche per altre collezioni (se necessario)
-    // Esempio per una collezione 'tecnici'
-    match /tecnici/{tecnicoId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Regole per le notifiche
-    match /notifiche/{notificaId} {
-      allow read: if request.auth != null;
-      allow update: if isAdmin() || (request.auth != null && resource.data.tecnicoId == request.auth.uid);
-      allow create, delete: if isAdmin();
-    }
-
-    // Fallback: per tutte le altre collezioni non specificate, nega l'accesso
-    // Questo è un principio di sicurezza importante (fail-safe).
-    // Se una collezione non ha una regola esplicita, nessuno può accedervi.
-    // Nota: commentata per ora per evitare di bloccare collezioni esistenti non dichiarate.
-    /*
+    // Admins can read and write all documents.
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
-    */
   }
 }
