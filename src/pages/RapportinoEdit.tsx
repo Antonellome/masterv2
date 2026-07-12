@@ -130,14 +130,26 @@ const RapportinoEdit: React.FC = () => {
     const [tempDettaglioOre, setTempDettaglioOre] = useState<DettaglioOreData | null>(null);
     const [firma, setFirma] = useState<string | null>(null);
 
-    const handleTecnicoResponsabileChange = (_: any, tecnico: Tecnico | null) => {
-        setTecnicoResponsabileId(tecnico?.id || null);
-        if (tecnico) {
-            setDettaglioOre([{
-                ...emptyDettaglioOre,
-                tecnicoId: tecnico.id,
-                nome: `${tecnico.cognome} ${tecnico.nome}`.trim(),
-            }]);
+    const handleTecnicoResponsabileChange = (_: any, nuovoTecnico: Tecnico | null) => {
+        const nuovoId = nuovoTecnico?.id || null;
+        setTecnicoResponsabileId(nuovoId);
+
+        if (nuovoTecnico) {
+            setDettaglioOre(prevDettagli => {
+                const esisteGia = prevDettagli.some(d => d.tecnicoId === nuovoId);
+                if (!esisteGia) {
+                    const dettaglioDefault = prevDettagli.find(d => d.tecnicoId === tecnicoResponsabileId) || emptyDettaglioOre;
+                    return [
+                        ...prevDettagli,
+                        {
+                            ...dettaglioDefault,
+                            tecnicoId: nuovoTecnico.id,
+                            nome: `${nuovoTecnico.cognome} ${nuovoTecnico.nome}`.trim(),
+                        }
+                    ];
+                }
+                return prevDettagli;
+            });
         } else {
             setDettaglioOre([]);
         }
@@ -190,32 +202,21 @@ const RapportinoEdit: React.FC = () => {
                         setFirma(reportData.firmaVettoriale || null);
                         setOrdineLavoro(reportData.ordineLavoro || '');
 
-                        const allTecnicoIds = Array.from(new Set(reportData.presenze || [reportData.tecnicoId]));
-                        const hasDettaglioOre = !!reportData.dettaglioOreTecnici && reportData.dettaglioOreTecnici.length > 0;
-                        const dettagliCaricati: DettaglioOreData[] = allTecnicoIds.map(id => {
-                            const tecnico = tecnici.find(t => t.id === id);
-                            let oreAssegnate = 0;
-                            if (hasDettaglioOre) {
-                                const dettaglioSalvato = reportData.dettaglioOreTecnici!.find(d => d.tecnicoId === id);
-                                oreAssegnate = dettaglioSalvato?.ore ?? 0;
-                            } else {
-                                if (id === reportData.tecnicoId) {
-                                    oreAssegnate = typeof reportData.oreLavoro === 'string' ? parseFloat(reportData.oreLavoro) : reportData.oreLavoro ?? 0;
-                                } else {
-                                    oreAssegnate = 0;
-                                }
-                            }
+                        const dettagliDaDb = reportData.dettaglioOreTecnici || (reportData as any).dettaglioOre || [];
+
+                        const dettagliCaricati: DettaglioOreData[] = dettagliDaDb.map((dettaglioSalvato: any) => {
                             return {
-                                tecnicoId: id,
-                                nome: tecnico ? `${tecnico.cognome} ${tecnico.nome}`.trim() : 'Tecnico non trovato',
-                                isManual: (reportData as any).isTrasferta || false,
-                                oraInizio: reportData.orarioIngresso || '07:30',
-                                oraFine: reportData.orarioUscita || '16:30',
-                                pausa: (reportData as any).pausa ?? 60,
-                                ore: oreAssegnate,
+                                tecnicoId: dettaglioSalvato.tecnicoId,
+                                nome: dettaglioSalvato.nome || 'Nome non disponibile',
+                                isManual: dettaglioSalvato.isManual ?? false,
+                                oraInizio: dettaglioSalvato.oraInizio || '07:30',
+                                oraFine: dettaglioSalvato.oraFine || '16:30',
+                                pausa: dettaglioSalvato.pausa ?? 60,
+                                ore: dettaglioSalvato.ore ?? 0,
                             };
                         });
                         setDettaglioOre(dettagliCaricati);
+                        
                     } else {
                         showAlert("Rapportino non trovato.", "error");
                         navigate('/reportistica');
@@ -234,8 +235,34 @@ const RapportinoEdit: React.FC = () => {
             setTrasfertaId('');
             setPageLoading(false);
         }
-    }, [isEditMode, reportId, navigate, collectionsLoading, tecnici, tipiGiornataMap, showAlert]);
+    }, [isEditMode, reportId, navigate, collectionsLoading, tipiGiornataMap, showAlert]);
     
+    // CORREZIONE FINALE: Garantisce che il tecnico responsabile sia sempre presente nelle opzioni e selezionato.
+    const tecnicoResponsabileSelezionato = useMemo(() => {
+        if (!tecnicoResponsabileId) return null;
+        const tecnicoDaLista = sortedTecnici.find(t => t.id === tecnicoResponsabileId);
+        if (tecnicoDaLista) return tecnicoDaLista;
+
+        const dettaglioResponsabile = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
+        if (dettaglioResponsabile) {
+            const [cognome, ...nomeParts] = (dettaglioResponsabile.nome || '').split(' ');
+            return {
+                id: tecnicoResponsabileId,
+                nome: nomeParts.join(' '),
+                cognome,
+            } as Tecnico;
+        }
+        return null;
+    }, [tecnicoResponsabileId, sortedTecnici, dettaglioOre]);
+
+    const opzioniTecnici = useMemo(() => {
+        if (tecnicoResponsabileSelezionato && !sortedTecnici.some(t => t.id === tecnicoResponsabileSelezionato.id)) {
+            return [tecnicoResponsabileSelezionato, ...sortedTecnici];
+        }
+        return sortedTecnici;
+    }, [sortedTecnici, tecnicoResponsabileSelezionato]);
+
+
     const handleTipoGiornataChange = (id: string) => { setGiornataId(id); const tipo = tipiGiornataMap.get(id); setIsLavorativo(isGiornataLavorativa(tipo)); };
     const handleCancel = () => navigate('/reportistica');
     const handleOreUpdate = useCallback((updatedData: DettaglioOreData) => {
@@ -264,7 +291,13 @@ const RapportinoEdit: React.FC = () => {
         setDettaglioOre(uniqueTecnici);
     };
 
-    const removeTecnico = (idToRemove: string) => setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== idToRemove));
+    const removeTecnico = (idToRemove: string) => {
+        if (idToRemove === tecnicoResponsabileId) {
+            showAlert("Non puoi rimuovere il tecnico responsabile.", "warning");
+            return;
+        }
+        setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== idToRemove));
+    }
     const handleOpenModal = (tecnico: DettaglioOreData) => { setEditingTecnico(tecnico); setTempDettaglioOre(tecnico); setIsModalOpen(true); };
     const handleCloseModal = () => setIsModalOpen(false);
     const handleSaveFromModal = () => { if (tempDettaglioOre) { handleOreUpdate(tempDettaglioOre); } handleCloseModal(); };
@@ -281,7 +314,6 @@ const RapportinoEdit: React.FC = () => {
 
         setIsSaving(true);
         try {
-            const responsabileDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
             if (isLavorativo && dettaglioOre.some(d => (d.ore ?? 0) <= 0)) {
                 showAlert("Le ore di lavoro per ogni tecnico non possono essere zero.", "warning");
                 setIsSaving(false);
@@ -289,21 +321,24 @@ const RapportinoEdit: React.FC = () => {
             }
             
             const presenze = dettaglioOre.map(d => d.tecnicoId);
-            const dettaglioOreTecniciToSave = dettaglioOre.map(d => ({ tecnicoId: d.tecnicoId, ore: d.ore || 0 }));
-            const oreLavoroTotali = dettaglioOreTecniciToSave.reduce((sum, item) => sum + item.ore, 0);
+            const dettaglioOreTecniciToSave = dettaglioOre.map(d => ({
+                 tecnicoId: d.tecnicoId,
+                 nome: d.nome,
+                 isManual: d.isManual,
+                 oraInizio: d.oraInizio,
+                 oraFine: d.oraFine,
+                 pausa: d.pausa,
+                 ore: d.ore || 0
+            }));
+            const oreLavoroTotali = dettaglioOre.reduce((sum, item) => sum + (item.ore || 0), 0);
 
             const rapportinoData: any = {
                 data: Timestamp.fromDate(data.toDate()),
                 tipoGiornataId: giornataId,
                 tecnicoId: tecnicoResponsabileId,
                 presenze,
-                nome: isLavorativo ? 'Rapportino giornaliero' : 'Rapportino non lavorativo',
-                oreLavoro: isLavorativo ? oreLavoroTotali : 0,
-                dettaglioOreTecnici: isLavorativo ? dettaglioOreTecniciToSave : [],
-                isTrasferta: isLavorativo ? responsabileDettaglio?.isManual : false,
-                orarioIngresso: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraInizio : null,
-                orarioUscita: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.oraFine : null,
-                pausa: isLavorativo && !responsabileDettaglio?.isManual ? responsabileDettaglio?.pausa : null,
+                dettaglioOreTecnici: dettaglioOreTecniciToSave,
+                oreLavoro: oreLavoroTotali,
                 veicoloId: isLavorativo ? veicoloId : null,
                 naveId: isLavorativo ? naveId : null,
                 luogoId: isLavorativo ? luogoId : null,
@@ -314,6 +349,11 @@ const RapportinoEdit: React.FC = () => {
                 updatedAt: serverTimestamp(),
                 ...(includeTrasferta && trasfertaId ? { trasfertaId } : {}),
             };
+            
+delete rapportinoData.isTrasferta;
+            delete rapportinoData.orarioIngresso;
+            delete rapportinoData.orarioUscita;
+            delete rapportinoData.pausa;
 
             if (isEditMode && reportId) {
                 if (firma) {
@@ -351,11 +391,12 @@ const RapportinoEdit: React.FC = () => {
                         <Grid container spacing={2}>
                             <Grid item xs={12} md={4}>
                                 <Autocomplete
-                                    options={sortedTecnici}
-                                    getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
-                                    value={sortedTecnici.find(t => t.id === tecnicoResponsabileId) || null}
+                                    options={opzioniTecnici}
+                                    getOptionLabel={(option) => `${option.cognome || ''} ${option.nome || ''}`.trim()}
+                                    value={tecnicoResponsabileSelezionato}
                                     onChange={handleTecnicoResponsabileChange}
-                                    disabled={isEditMode || isSaving}
+                                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                                    disabled={isSaving}
                                     renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />}
                                 />
                             </Grid>

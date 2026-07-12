@@ -22,8 +22,10 @@ const GestioneRapportini = () => {
     const [loadingRapportini, setLoadingRapportini] = useState(true);
 
     useEffect(() => {
-        // Modifica la query per escludere i documenti con isDeleted: true
-        const q = query(collection(db, 'rapportini'), where('isDeleted', '!=', true));
+        // --- CORREZIONE QUERY --- 
+        // Filtra i documenti dove il campo `deletedAt` non esiste o è null.
+        // Questo è il metodo corretto e robusto per il soft-delete.
+        const q = query(collection(db, 'rapportini'), where('deletedAt', '==', null));
         
         const unsubscribe = onSnapshot(q, 
             (snapshot) => {
@@ -59,19 +61,20 @@ const GestioneRapportini = () => {
         setSelectedRapportino(null);
     };
 
-    // NUOVA FUNZIONE PER LA CANCELLAZIONE LOGICA (SOFT DELETE)
+    // --- CORREZIONE LOGICA DI CANCELLAZIONE ---
     const handleDelete = async (reportId: string) => {
-        if (!window.confirm("Sei sicuro di voler eliminare questo rapportino? L'azione è reversibile solo dal database.")) {
+        if (!window.confirm("Sei sicuro di voler spostare questo rapportino nel cestino?")) {
             return;
         }
 
         const reportRef = doc(db, "rapportini", reportId);
         try {
+            // Utilizza un campo `deletedAt` per marcare il documento come cancellato.
             await updateDoc(reportRef, {
-                isDeleted: true,
-                updatedAt: serverTimestamp() // Fondamentale per la sincronizzazione
+                deletedAt: serverTimestamp(), // Metodo robusto per il soft-delete
+                updatedAt: serverTimestamp()
             });
-            showAlert(`Rapportino marcato come cancellato.`, 'success');
+            showAlert(`Rapportino spostato nel cestino.`, 'success');
         } catch (error) {
             console.error("Errore durante la cancellazione (soft delete) del rapportino:", error);
             if (error instanceof Error) {
@@ -113,7 +116,7 @@ const GestioneRapportini = () => {
                     loading={isLoading}
                     onAdd={handleAdd}
                     onEdit={handleEdit}
-                    onDelete={handleDelete} // Passa la nuova funzione
+                    onDelete={handleDelete}
                 />
             </Paper>
 

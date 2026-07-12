@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase'; // Assicurati che il percorso di importazione sia corretto
+import React, { useState, useEffect } from 'react';
+// Importazioni aggiornate per supportare scritture batch e query complesse
+import { collection, doc, writeBatch, Timestamp, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/firebase';
 import {
     Dialog,
     DialogTitle,
@@ -23,84 +24,133 @@ interface InviaNotificaDialogProps {
 }
 
 /**
- * Invia una notifica a un tecnico specifico scrivendo un documento su Firestore.
- * @param tecnicoId L'UID del tecnico.
+ * Invia una o più notifiche in modo efficiente usando un batch di Firestore.
+ * Gestisce l'invio a un singolo utente, a una categoria o a tutti i tecnici abilitati.
+ * @param target Il destinatario (singolo, categoria, o tutti).
  * @param title Il titolo della notifica.
  * @param body Il corpo del messaggio.
- * @returns L'ID della notifica creata.
+ * @returns Il numero di notifiche inviate.
  */
-const inviaNotificaFirestore = async (tecnicoId: string, title: string, body: string): Promise<string> => {
-    if (!tecnicoId || !title || !body) {
-        throw new Error('Tutti i campi (tecnicoId, titolo, corpo) sono obbligatori.');
+const sendBulkNotifications = async (target: NotificationTarget, title: string, body: string): Promise<number> => {
+    if (!target || !title || !body) {
+        throw new Error('Destinatario, titolo e corpo sono obbligatori.');
     }
 
-    try {
-        const notificheCollection = collection(db, 'notifiche');
-        const nuovoDoc = await addDoc(notificheCollection, {
+    const batch = writeBatch(db);
+    const notificheCollectionRef = collection(db, 'notifiche');
+    const targetTecniciIds: string[] = [];
+
+    if (target.type === 'user') {
+        targetTecniciIds.push(target.id);
+    } else {
+        // Logica per 'category' o 'all'
+        const tecniciCollectionRef = collection(db, 'tecnici');
+        let q;
+
+        if (target.type === 'category') {
+            // Invia a tutti i tecnici abilitati appartenenti a una categoria.
+            // Assumo che il campo nel documento del tecnico si chiami 'categoria'.
+            q = query(tecniciCollectionRef, where('appAccess', '==', true), where('categoria', '==', target.id));
+        } else { // target.type === 'all'
+            // Invia a tutti i tecnici con accesso abilitato.
+            q = query(tecniciCollectionRef, where('appAccess', '==', true));
+        }
+        
+        const tecniciSnapshot = await getDocs(q);
+        if (tecniciSnapshot.empty) {
+            throw new Error('Nessun tecnico corrispondente trovato. Impossibile inviare.');
+        }
+        tecniciSnapshot.forEach(doc => targetTecniciIds.push(doc.id));
+    }
+
+    if (targetTecniciIds.length === 0) {
+        throw new Error('Nessun tecnico destinatario valido trovato.');
+    }
+
+    // Aggiunge un'operazione di scrittura al batch per ogni ID tecnico.
+    targetTecniciIds.forEach(tecnicoId => {
+        const newNotificaRef = doc(notificheCollectionRef); // Genera un ID univoco per ogni notifica
+        batch.set(newNotificaRef, {
             tecnicoId: tecnicoId,
             title: title,
             body: body,
             createdAt: Timestamp.now(),
             isRead: false,
         });
-        console.log(`Documento notifica creato con successo con ID: ${nuovoDoc.id}`);
-        return nuovoDoc.id;
-    } catch (error) {
-        console.error("Errore durante la scrittura della notifica su Firestore:", error);
-        throw new Error("Impossibile salvare la notifica su Firestore.");
-    }
+    });
+
+    // Esegue l'operazione batch.
+    await batch.commit();
+    return targetTecniciIds.length;
 };
+
 
 const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose, target }) => {
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+
+    // Effetto per pulire lo stato del form quando il dialogo viene chiuso.
+    useEffect(() => {
+        if (!open) {
+            // Il timeout permette all'animazione di chiusura di completarsi.
+            setTimeout(() => {
+                setTitle('');
+                setBody('');
+                setError('');
+                setSuccess('');
+                setLoading(false);
+            }, 300);
+        }
+    }, [open]);
 
     const handleSend = async () => {
         if (!title.trim() || !body.trim()) {
             setError('Titolo e corpo sono obbligatori.');
             return;
         }
-        // Il target deve essere un tecnico singolo, quindi il type deve essere 'tecnico'
-        if (!target || target.type !== 'tecnico' || !target.id) {
-            setError('Destinatario non valido. Selezionare un tecnico specifico.');
+        if (!target) {
+            setError('Destinatario non specificato.');
             return;
         }
 
         setLoading(true);
         setError('');
+        setSuccess('');
 
         try {
-            // Chiamata alla nuova funzione che scrive direttamente su Firestore
-            await inviaNotificaFirestore(target.id, title.trim(), body.trim());
-            handleClose(true); // Passa true per indicare successo
+            const count = await sendBulkNotifications(target, title.trim(), body.trim());
+            setSuccess(`Notifica inviata con successo a ${count} ${count > 1 ? 'tecnici' : 'tecnico'}.`);
+            
+            // Mostra il messaggio di successo, poi chiude il dialogo.
+            setTimeout(() => {
+                onClose();
+            }, 2000);
 
         } catch (err: any) {
             console.error("Errore durante l'invio della notifica:", err);
             setError(err.message || 'Si è verificato un errore sconosciuto.');
-        } finally {
-            setLoading(false);
+            setLoading(false); // Sblocca il form in caso di errore
         }
     };
 
-    const handleClose = (isSuccess = false) => {
-        if (!isSuccess) {
-            onClose(); // Chiama l'onClose del genitore per la notifica di successo
+    const handleCancel = () => {
+        if (!loading) {
+            onClose();
         }
-        setTitle('');
-        setBody('');
-        setError('');
-        onClose();
     };
 
     return (
-        <Dialog open={open} onClose={() => handleClose(false)} fullWidth maxWidth="sm">
+        <Dialog open={open} onClose={handleCancel} fullWidth maxWidth="sm">
             <DialogTitle>
-                Invia Notifica a <Typography component="span" color="primary.main" fontWeight="bold">{target?.name || 'sconosciuto'}</Typography>
+                Invia Notifica a <Typography component="span" color="primary.main" fontWeight="bold">{target?.name || 'destinatario'}</Typography>
             </DialogTitle>
             <DialogContent>
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+
                 <TextField
                     autoFocus
                     margin="dense"
@@ -111,6 +161,7 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
                     variant="outlined"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
+                    disabled={loading || !!success}
                 />
                 <TextField
                     margin="dense"
@@ -123,17 +174,18 @@ const InviaNotificaDialog: React.FC<InviaNotificaDialogProps> = ({ open, onClose
                     variant="outlined"
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
+                    disabled={loading || !!success}
                 />
             </DialogContent>
             <DialogActions sx={{ p: 3, pt: 1 }}>
-                <Button onClick={() => handleClose(false)} color="secondary">Annulla</Button>
+                <Button onClick={handleCancel} color="secondary" disabled={loading}>Annulla</Button>
                 <Box sx={{ position: 'relative' }}>
                     <Button
                         onClick={handleSend}
                         variant="contained"
-                        disabled={loading || !title.trim() || !body.trim()}
+                        disabled={loading || !title.trim() || !body.trim() || !!success}
                     >
-                        Invia
+                        {loading ? 'Invio in corso...' : 'Invia'}
                     </Button>
                     {loading && (
                         <CircularProgress

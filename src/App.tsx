@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react';
+
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthProvider';
@@ -6,10 +7,11 @@ import { DataProvider } from '@/contexts/DataContext';
 import { NotificationProvider } from '@/contexts/NotificationProvider';
 import { RefreshProvider } from '@/contexts/RefreshContext';
 import { AlertProvider } from '@/contexts/AlertContext';
-import { GlobalStyles, Box, CircularProgress } from '@mui/material';
+import { GlobalStyles, Box, CircularProgress, Typography } from '@mui/material';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
+import { syncStandard } from '@/services/SyncService'; // CORREZIONE
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const SignupPage = lazy(() => import('@/pages/SignupPage'));
@@ -29,12 +31,29 @@ const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 
 const AppContent = () => {
-  const { loading, user } = useAuth();
+  const { loading: authLoading, user } = useAuth();
+  const [syncing, setSyncing] = useState(true);
 
-  if (loading) {
+  useEffect(() => {
+    const runSync = async () => {
+      if (user) {
+        setSyncing(true);
+        console.log("Utente autenticato, avvio sincronizzazione standard.");
+        await syncStandard(); // CORREZIONE
+        console.log("Sincronizzazione standard completata.");
+        setSyncing(false);
+      }
+    };
+    runSync();
+  }, [user]);
+
+  if (authLoading || (user && syncing)) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
+        <Typography sx={{ mt: 2 }}>
+          {authLoading ? 'Verifica autenticazione...' : 'Sincronizzazione dati in corso...'}
+        </Typography>
       </Box>
     );
   }

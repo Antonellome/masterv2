@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { DataGrid, GridColDef, GridValueGetterParams } from '@mui/x-data-grid';
 import { Box, Paper, IconButton, Tooltip } from '@mui/material';
@@ -6,7 +7,8 @@ import Delete from '@mui/icons-material/Delete';
 import type { Rapportino, Tecnico } from '@/models/definitions';
 import { format } from 'date-fns';
 import it from 'date-fns/locale/it';
-import CustomToolbar from '@/components/CustomToolbar'; // Assicurati che questo componente sia corretto
+import CustomToolbar from '@/components/CustomToolbar';
+import { calculateTotalHours } from '@/utils/hoursCalculator'; // <-- 1. IMPORT DEL CALCOLATORE SACRO
 
 interface RapportiniListProps {
     rapportini: Rapportino[];
@@ -23,9 +25,14 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
 
     const columns: GridColDef[] = [
         {
-            field: 'data',
+            field: 'dataInizio', // <-- 2. CORREZIONE CAMPO DATA
             headerName: 'Data',
             width: 110,
+            // Value getter per retrocompatibilità
+            valueGetter: (params: GridValueGetterParams) => {
+                const row = params.row as Partial<Rapportino>;
+                return row.dataInizio || row.data;
+            },
             valueFormatter: (params) => {
                 if (!params.value) return '';
                 const date = params.value.toDate ? params.value.toDate() : new Date(params.value);
@@ -68,12 +75,19 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
             },
         },
         {
-            field: 'oreLavorate',
+            field: 'oreTotali', // <-- 3. NUOVA COLONNA ORE CON CALCOLATORE
             headerName: 'Ore',
             type: 'number',
-            width: 70,
+            width: 80,
             align: 'right',
             headerAlign: 'right',
+            valueGetter: (params: GridValueGetterParams) => {
+                return calculateTotalHours(params.row as Rapportino);
+            },
+            valueFormatter: (params) => {
+                const hours = params.value as number;
+                return hours.toFixed(2);
+            }
         },
         {
             field: 'actions',
@@ -102,7 +116,7 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
                 slots={{ toolbar: CustomToolbar }}
                 slotProps={{
                     toolbar: {
-                      onAdd: onAdd, // Passa la funzione onAdd alla toolbar
+                      onAdd: onAdd,
                       showQuickFilter: true,
                       quickFilterProps: { debounceMs: 500 },
                     },
@@ -110,7 +124,7 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
                 initialState={{
                     pagination: { paginationModel: { pageSize: 50 } },
                     sorting: {
-                        sortModel: [{ field: 'data', sort: 'desc' }],
+                        sortModel: [{ field: 'dataInizio', sort: 'desc' }], // <-- CORREZIONE ORDINAMENTO
                     },
                 }}
                 pageSizeOptions={[25, 50, 100]}

@@ -38,8 +38,8 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/firebase';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useScadenze } from '@/hooks/useScadenze';
-import { useRefresh } from '@/contexts/RefreshContext';
-import { useNotifications } from '@/contexts/NotificationProvider'; // 1. IMPORTIAMO L'HOOK
+import { useNotifications } from '@/contexts/NotificationProvider';
+import { syncStandard } from '@/services/SyncService'; // 1. IMPORT CORRETTO
 import Logo from '@/components/Logo';
 import NavMenuItem from './NavMenuItem';
 
@@ -85,8 +85,7 @@ const MainLayout = () => {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const { user, loading } = useAuth();
     const { activeScadenzeCount, overallStatus } = useScadenze();
-    const { triggerRefresh } = useRefresh();
-    const { unreadCount } = useNotifications(); // 2. USIAMO L'HOOK
+    const { unreadCount } = useNotifications();
     const navigate = useNavigate();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -188,7 +187,8 @@ const MainLayout = () => {
 
                     <Box sx={{ flexGrow: 1 }} />
                     
-                    <Tooltip title="Aggiorna Dati"><IconButton color="inherit" onClick={triggerRefresh}><RefreshIcon /></IconButton></Tooltip>
+                    {/* 2. CHIAMATA CORRETTA */}
+                    <Tooltip title="Aggiorna Dati"><IconButton color="inherit" onClick={syncStandard}><RefreshIcon /></IconButton></Tooltip>
                     
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Tooltip title="Scadenze">
@@ -204,7 +204,6 @@ const MainLayout = () => {
 
                         <Tooltip title="Notifiche">
                              <IconButton color="inherit" component={NavLink} to="/notifications">
-                                 {/* 3. COLLEGIAMO IL CONTEGGIO AL BADGE */}
                                  <Badge badgeContent={unreadCount} color="error">
                                      <NotificationsIcon />
                                  </Badge>
@@ -258,7 +257,7 @@ const MainLayout = () => {
                                 sx={{
                                     fontFamily: 'Dancing Script, cursive',
                                     fontStyle: 'italic',
-                                    color: '#007FFF', // Blu Elettrico
+                                    color: '#007FFF',
                                     fontSize: '1rem',
                                 }}
                             >

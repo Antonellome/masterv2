@@ -8,7 +8,6 @@ export interface BaseEntity {
 // --- ANAGRAFICHE PRINCIPALI ---
 
 export interface Tecnico extends BaseEntity {
-  // Dati anagrafici e di contatto
   nome: string;
   cognome: string;
   email: string;
@@ -18,17 +17,13 @@ export interface Tecnico extends BaseEntity {
   cap?: string;
   citta?: string;
   provincia?: string;
-
-  // Dati aziendali e contrattuali
-  attivo: boolean;          // Stato di attività del tecnico
-  appAccess?: boolean;         // Permesso di accedere all'app (nuovo campo unificato)
-  accessoApp?: boolean;        // Vecchio campo, mantenuto per retrocompatibilità
+  attivo: boolean;
+  appAccess?: boolean;
+  accessoApp?: boolean;
   dittaId?: string;
   categoriaId?: string;
   tipoContratto?: string;
   dataAssunzione?: Timestamp | Date | null;
-  
-  // Documenti e scadenze
   numeroCartaIdentita?: string;
   scadenzaCartaIdentita?: Timestamp | Date | null;
   numeroPatente?: string;
@@ -38,22 +33,16 @@ export interface Tecnico extends BaseEntity {
   scadenzaPassaporto?: Timestamp | Date | null;
   numeroCQC?: string;
   scadenzaCQC?: Timestamp | Date | null;
-  
-  // Scadenze corsi e visite
   scadenzaVisita?: Timestamp | Date | null;
   scadenzaContratto?: Timestamp | Date | null;
   scadenzaPrimoSoccorso?: Timestamp | Date | null;
   scadenzaAntincendio?: Timestamp | Date | null;
   scadenzaCorsoSicurezza?: Timestamp | Date | null;
   scadenzaUnilav?: Timestamp | Date | null;
-
-  // Dati specifici dell'app
-  uid?: string;              // UID da Firebase Auth, se associato
-  fcmToken?: string;         // Token per le notifiche push
-  tariffe?: Record<string, number>; // Mappa dinamica per le tariffe personalizzate
+  uid?: string;
+  fcmToken?: string;
+  tariffe?: Record<string, number>;
   note?: string;
-
-  // Campi legacy o di stato
   sincronizzazioneAttiva?: boolean;
   dataSync?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;
@@ -75,7 +64,6 @@ export interface Categoria extends BaseEntity {
 
 export interface Ditta extends BaseEntity {
   nome: string;
-  // altri campi se necessari
 }
 
 // --- ANAGRAFICHE DI SUPPORTO ---
@@ -95,49 +83,66 @@ export interface Nave extends BaseEntity {
 
 export interface Luogo extends BaseEntity {
   nome: string;
+  clienteId?: string; // CORREZIONE STRUTTURALE: Aggiunto clienteId opzionale
 }
 
 export interface Veicolo extends BaseEntity {
   nome: string;
 }
 
-// --- DATI OPERATIVI ---
+// --- DATI OPERATIVI (STRUTTURA UNIFICATA POST-COMPATIBILITÀ) ---
 
-export interface DettaglioOreTecnico {
+export interface DettaglioOre {
   tecnicoId: string;
-  ore: number;
+  oraInizio?: string | null;
+  oraFine?: string | null;
+  ore?: number;
+  isManual?: boolean;
 }
 
 export interface Rapportino extends BaseEntity {
-  data: any; // O Timestamp
-  userId: string;
+  // --- CAMPI FONDAMENTALI ---
+  dataInizio: Timestamp | Date;
+  dataFine?: Timestamp | Date | null;
   tecnicoId: string;
-  presenze?: string[];
-  dettaglioOreTecnici?: DettaglioOreTecnico[];
-  naveId: string;
-  luogoId: string;
-  veicoloId: string;
-  oreLavoro?: number;
+  presenze: string[];
   tipoGiornataId: string;
-  isTrasferta?: boolean;
-  trasfertaId?: string;
-  note?: string;
-  approvato: boolean;
-  firmaVettoriale?: string;
-  orarioIngresso?: string;
-  orarioUscita?: string;
-}
+  includeTrasferta: boolean;
+  trasfertaId?: string | null;
 
-export interface EnrichedRapportino extends Rapportino {
-  dataFormatted: string;
-  tipoGiornata?: TipoGiornata;
-  tipoGiornataNome: string;
-  naveNome: string;
-  luogoNome: string;
-  oreGiorno: number;
-  oreOrdinarie: number;
-  oreStraordinarie: number;
-  isEditable?: boolean;
+  // --- DETTAGLI INTERVENTO ---
+  naveId?: string | null;
+  luogoId?: string | null;
+  veicoloId?: string | null;
+  ordineLavoro?: string | null;
+  descrizioneBreve?: string | null;
+  lavoroEseguito: string;
+  materialiImpiegati?: string | null;
+
+  // --- DETTAGLIO ORE ---
+  dettaglioOre: DettaglioOre[];
+
+  // --- FIRMA ---
+  firmaFirmatarioNome?: string | null;
+  firmaFirmatarioSocieta?: string | null;
+  firmaVettoriale?: string | null;
+
+  // --- METADATI DI SISTEMA ---
+  createdAt: Timestamp | Date;
+  createdBy: string;
+  updatedAt: Timestamp | Date;
+  updatedBy: string;
+  isLocked: boolean;
+  version: number;
+  
+  // --- CAMPO PER SINCRONIZZAZIONE LOCALE ---
+  isDirty?: 1 | 0;
+
+  // --- CAMPI LEGACY (da rimuovere in futuro) ---
+  approvato?: boolean;
+  note?: string;
+  oreLavoro?: number;
+  data?: any; // Mantenuto temporaneamente per la migrazione
 }
 
 // --- IMPOSTAZIONI E PROFILI ---
@@ -213,10 +218,8 @@ export interface NotificaInviata extends BaseEntity {
 }
 
 // --- TIPI GENERICI ---
-// Necessario per GestioneAnagrafica
 export type Anagrafica = Cliente | Tecnico | Categoria | Ditta | Nave | Luogo | Veicolo | TipoGiornata;
 
-// Necessario per FormDialog
 export interface FormField {
   name: string;
   label: string;

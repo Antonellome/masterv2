@@ -14,10 +14,11 @@ import {
     Luogo,
     Categoria,
     TipoGiornata,
-    Veicolo
+    Veicolo,
+    Rapportino
 } from '@/models/definitions';
 
-// Generic converter factory - REMAINS UNCHANGED AND SAFE
+// Generic converter factory
 const createConverter = <T extends { id: string }>(): FirestoreDataConverter<T> => ({
     toFirestore: (data: WithFieldValue<T>): DocumentData => {
         const { id, ...rest } = data;
@@ -28,21 +29,19 @@ const createConverter = <T extends { id: string }>(): FirestoreDataConverter<T> 
     }
 });
 
-// Specific and robust converter ONLY for Tecnico to handle malformed data
+// Specific converter for Tecnico
 export const tecnicoConverter: FirestoreDataConverter<Tecnico> = {
     toFirestore: (tecnico: WithFieldValue<Tecnico>): DocumentData => {
         const { id, ...data } = tecnico;
         return data;
     },
     fromFirestore: (snapshot: QueryDocumentSnapshot<DocumentData>): Tecnico => {
-        const data = snapshot.data() || {}; // Ensure data is an object
-
-        // Safely provide default values for every field of the Tecnico interface
+        const data = snapshot.data() || {};
         return {
             id: snapshot.id,
             nome: data.nome || '',
             cognome: data.cognome || '',
-            attivo: typeof data.attivo === 'boolean' ? data.attivo : true, // Default to active
+            attivo: typeof data.attivo === 'boolean' ? data.attivo : true,
             dittaId: data.dittaId || null,
             categoriaId: data.categoriaId || null,
             userId: data.userId || null,
@@ -58,7 +57,29 @@ export const tecnicoConverter: FirestoreDataConverter<Tecnico> = {
     }
 };
 
-// All other converters use the safe, generic factory
+// --- NUOVO CONVERTER PER RAPPORTINO ---
+export const rapportinoConverter: FirestoreDataConverter<Rapportino> = {
+    toFirestore: (rapportino: WithFieldValue<Rapportino>): DocumentData => {
+        const { id, ...data } = rapportino;
+        // Assicura che la data sia un Timestamp di Firestore
+        if (data.data && !(data.data instanceof Timestamp)) {
+            data.data = Timestamp.fromDate(new Date(data.data));
+        }
+        return data;
+    },
+    fromFirestore: (snapshot: QueryDocumentSnapshot<DocumentData>): Rapportino => {
+        const data = snapshot.data();
+        return {
+            id: snapshot.id,
+            ...data,
+            // Converte il Timestamp in un oggetto Date per l'uso nell'app
+            data: data.data instanceof Timestamp ? data.data.toDate() : new Date(),
+        } as Rapportino;
+    }
+};
+
+
+// Other converters
 export const clienteConverter = createConverter<Cliente>();
 export const dittaConverter = createConverter<Ditta>();
 export const naveConverter = createConverter<Nave>();

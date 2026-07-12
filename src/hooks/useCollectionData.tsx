@@ -1,76 +1,29 @@
-import { useState, useEffect, useCallback } from 'react';
-import { onSnapshot, getDocs, Query, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 
-interface UseCollectionDataOptions {
-  listen?: boolean;
-}
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, AnagraficaTable } from '@/db/db';
 
-export function useCollectionData<T extends DocumentData>(
-  query: Query<DocumentData> | null,
-  options: UseCollectionDataOptions = { listen: true }
-) {
-  const [data, setData] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchData = useCallback(async () => {
-    if (!query) {
-      setData([]);
-      setLoading(false);
-      return;
+/**
+ * Hook reattivo e robusto per recuperare dati da una tabella anagrafica di Dexie.
+ * Accetta il NOME della tabella come stringa per evitare errori di tipo.
+ *
+ * @param tableName Il nome della tabella da cui recuperare i dati (es. 'clienti').
+ * @returns Un oggetto con `data`, `loading`, `error`.
+ */
+export function useCollectionData<T>(tableName: AnagraficaTable) {
+  
+  const data = useLiveQuery(() => {
+    // Seleziona la tabella dinamicamente dal nome
+    const table = db[tableName];
+    if (table) {
+      return table.toArray();
     }
+    return []; // Ritorna un array vuoto se il nome tabella non è valido
+  }, [tableName]); // La query si riesegue se il nome della tabella cambia
 
-    setLoading(true);
+  const loading = data === undefined;
+  
+  // Semplifichiamo la gestione dell'errore. useLiveQuery è già robusto.
+  const error = data === undefined && !loading ? new Error(`Tabella non trovata: ${tableName}`) : null;
 
-    try {
-      const snapshot = await getDocs(query);
-      const result = snapshot.docs.map((doc: QueryDocumentSnapshot) => {
-        const docData = doc.data() as T;
-        return { ...docData, id: doc.id };
-      });
-      setData(result);
-      setError(null);
-    } catch (err) {
-      console.error("[useCollectionData] Error fetching collection once: ", err);
-      setError(err as Error);
-    }
-
-    setLoading(false);
-  }, [query]);
-
-  useEffect(() => {
-    if (!query) {
-        setData([]);
-        setLoading(false);
-        return;
-    }
-
-    if (options.listen) {
-      setLoading(true);
-      const unsubscribe = onSnapshot(
-        query,
-        (snapshot) => {
-          const result = snapshot.docs.map((doc: QueryDocumentSnapshot) => {
-            const docData = doc.data() as T;
-            return { ...docData, id: doc.id };
-          });
-          setData(result);
-          setLoading(false);
-          setError(null);
-        },
-        (err) => {
-          console.error("[useCollectionData] Error listening to collection: ", err);
-          setError(err);
-          setLoading(false);
-        }
-      );
-      return () => unsubscribe();
-    } else {
-      fetchData();
-    }
-  }, [query, options.listen, fetchData]);
-
-  const refresh = options.listen ? undefined : fetchData;
-
-  return { data, loading, error, refresh };
+  return { data: data || [], loading, error };
 }

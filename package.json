@@ -26,6 +26,8 @@
         "cors": "^2.8.5",
         "date-fns": "^4.1.0",
         "dayjs": "^1.11.12",
+        "dexie": "^4.4.4",
+        "dexie-react-hooks": "^4.4.0",
         "express": "^4.19.2",
         "firebase": "^12.12.1",
         "html2canvas": "^1.4.1",

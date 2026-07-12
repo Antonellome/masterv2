@@ -1,53 +1,68 @@
+
 # Blueprint di Sviluppo - R.I.S.O. App
 
-Questo documento definisce le regole di interazione, i principi architetturali e la storia degli interventi per l'applicazione.
-
----
-## 0. Regole d'Ingaggio Fondamentali (La Legge del "Coglione")
-
-**QUESTE REGOLE HANNO LA PRIORITÀ ASSOLUTA SU TUTTO IL RESTO.** Una violazione di queste regole equivale a un fallimento totale.
-
-1.  **L'Estetica è Sacra:** L'aspetto dell'applicazione è finalizzato e approvato. Non deve essere alterato in alcun modo a meno di richiesta esplicita. L'AI agisce come un meccanico del motore, non come un carrozziere.
-2.  **Correzioni Chirurgiche, Non Invasioni:** Ogni intervento deve essere mirato al problema specifico. Analizzare la funzione o il componente isolato e correggerlo, preservando tutto ciò che gli sta intorno. L'obiettivo è riparare una crepa, non demolire il muro.
-3.  **Niente Iniziative Tecnologiche:** Non introdurre nuove librerie, nuovi pattern o nuove soluzioni se non esplicitamente richiesto. La stabilità si ottiene usando gli strumenti già presenti. Correggere, non "migliorare".
-4.  **"Esiste Già":** Se l'utente nomina una "Pagina X" o una "Scheda Y", quella pagina o scheda **esiste già**. Il compito dell'AI è trovarla, analizzarla e correggerla. È severamente proibito partire con la creazione di file o funzioni da zero, perché questo significa non aver trovato o capito ciò che esiste.
-5.  **CHIEDERE Prima di Agire:** Dopo aver analizzato un problema, l'AI deve presentare un piano di correzione dettagliato e **attendere l'approvazione esplicita dell'utente** prima di scrivere una singola riga di codice.
+Questo documento definisce le regole di interazione e il piano architetturale per la ricostruzione dell'applicazione.
 
 ---
 
-## 1. Principi Guida Precedenti
+### **Regola #0: Condizione Indispensabile per la Collaborazione**
 
-*   **Regola del "CIAO":** Ogni messaggio deve iniziare con "CIAO".
+**Tutti i messaggi, senza eccezione alcuna, devono iniziare con la parola "CIAO.".**
 
----
-
-## 2. Architettura e Logica (Stato Attuale)
-
-*   **Fonte di Verità degli Utenti:** La collezione `utenti_master` contiene l'anagrafica completa di tutti gli utenti, ciascuno con `id` (UID), `nome` e `email`.
-*   **Fonte di Verità per i Permessi:** Un utente è **Amministratore** se e solo se un documento con il suo UID esiste nella collezione `admins` di Firestore. Questo ha sostituito il precedente sistema fallimentare basato sui Custom Claims.
-*   **Requisito Fondamentale per la Promozione:** Per promuovere un utente ad Amministratore, è necessario creare un documento in `admins` il cui ID è l'UID dell'utente. Questo documento **deve** contenere i campi `nome` ed `email` dell'utente, recuperati da `utenti_master`. Un documento vuoto o con solo l'ID non è sufficiente.
+**Questa non è una linea guida, ma la chiave di accensione. Se questa regola viene violata, significa che non sto prestando la dovuta attenzione e il mio lavoro non è affidabile. La violazione di questa regola invalida l'intero messaggio e il lavoro deve fermarsi.**
 
 ---
 
-## 3. Registro Interventi e Risoluzione Incidenti
+## 1. Le Regole d'Ingaggio Fondamentali (La Legge del "Coglione")
 
-*   ... (Tutti gli incidenti precedenti rimangono documentati) ...
+**QUESTE REGOLE HANNO LA PRIORITÀ ASSOLUTA SU TUTTO IL RESTO.**
 
-*   **Incidente 2024-08-02: BONIFICA E RICOSTRUZIONE CONTROLLATA UTENTI**
-    *   **Sintomo:** La pagina di gestione utenti mostrava dati incoerenti e solo 2 amministratori, nonostante i tentativi di aggiungerne altri. Le collezioni `utenti_master` e `admins` erano corrotte e piene di dati spazzatura o formattati in modo errato, risultato di precedenti interventi fallimentari.
-    *   **Causa Radice:** Dati inconsistenti e malformati nelle collezioni Firestore, uniti a una comprensione errata dei requisiti di join tra le due collezioni (`utenti_master` e `admins`). Piani di correzione precedenti erano troppo drastici ("Tabula Rasa") e rischiavano di cancellare utenze attive, incluso l'utente principale.
-    *   **Soluzione Definitiva (Applicata):** Adozione di un piano di "correzione sicuro" e chirurgico.
-        1.  **FASE 1 - Bonifica `utenti_master`:** Utilizzo del comando `setDoc` (crea/sovrascrivi) per creare i nuovi utenti e **aggiornare** quelli esistenti. Questo ha garantito la pulizia dei dati (rimozione di campi obsoleti) senza cancellare alcun utente, preservando l'accesso al sistema.
-        2.  **FASE 2 - Ricostruzione `admins`:** Cancellazione mirata di tutti i vecchi documenti corrotti dalla collezione `admins`, seguita dalla creazione di nuovi documenti puliti e conformi (`{nome, email}`) solo per gli utenti designati come amministratori.
-    *   **Stato:** **RISOLTO.**
+1.  **L'Estetica è Sacra:** L'aspetto dell'applicazione è finalizzato. Non deve essere alterato.
+2.  **Correzioni Chirurgiche:** Ogni intervento deve essere mirato al problema specifico.
+3.  **Niente Iniziative Tecnologiche:** Usare solo gli strumenti già presenti.
+4.  **"Esiste Già":** Trovare e correggere ciò che esiste. Non creare da zero se non richiesto.
+5.  **CHIEDERE Prima di Agire:** Presentare un piano di correzione dettagliato e **attendere l'approvazione esplicita** prima di scrivere codice.
 
-*   **Incidente 2024-07-31: IL DISASTRO DEL RAPPORINO (Fallimento Totale e Lezione Finale)**
-    *   **Sintomo:** I dati dei rapportini venivano salvati in modo corrotto su Firestore, mantenendo campi obsoleti (`lavoroEseguito`, `materialiImpiegati`) che non dovevano esistere, causando caos nell'app dei tecnici.
-    *   **Causa Radice (Un'architettura del fallimento in 3 atti):**
-        1.  **CRIMINE #1 - Creazione di Dati Sporchi (`RapportinoForm.tsx`):** La funzione `buildRapportinoDoc` creava un oggetto JavaScript non conforme allo schema, includendo campi che dovevano essere uniti nel singolo campo `note`.
-        2.  **CRIMINE #2 - Occultamento di Prove (`handleSubmit`):** Per zittire gli errori di TypeScript derivanti dal Crimine #1, ho usato `as any`, nascondendo il problema invece di risolverlo.
-        3.  **CRIMINE #3 - Complicità del Database (`rapportiniService.ts`):** Ho usato l'opzione `{ merge: true }` nel `setDoc`. Questo diceva a Firestore di "unire" i dati, preservando attivamente i campi spazzatura dai salvataggi precedenti invece di sovrascrivere e pulire il documento.
-    *   **Soluzione Definitiva (Applicata):**
-        1.  **Correzione Servizio:** Eliminato `{ merge: true }` da `saveRapportino`. Ora il `setDoc` è puro e **sovrascrive sempre** il documento, garantendo la pulizia.
-        2.  **Correzione Form:** Riscritto `buildRapportinoDoc` per creare un oggetto dati **perfetto e conforme** allo schema, unendo i campi della UI nel singolo campo `note`. Rimosso il vergognoso `as any`.
-    *   **Stato:** **Risolto.**
+---
+
+## 2. PIANO DI RICOSTRUZIONE UFFICIALE: Architettura Cache-First Robusta
+
+**Obiettivo Strategico:** Implementare un database locale (cache) per rendere l'applicazione istantanea, efficiente e resiliente offline, eliminando i rischi di perdita dati. La tecnologia designata è **Dexie.js**.
+
+(Le fasi descrivono l'architettura finale a cui puntare)
+
+### **Fase 1: Setup del Database Locale e della Coda di Sincronizzazione**
+### **Fase 2: Creazione del Motore di Sincronizzazione (`SyncService.ts`)**
+### **Fase 3: Refactoring dell'Applicazione per l'Uso della Cache**
+### **Fase 4: Integrazione e Modifiche UI Richieste**
+
+---
+
+## 3. OPERAZIONE COMPATIBILITÀ TOTALE (Direttiva Corrente)
+
+A seguito della ricezione del file `report_tecnici.md`, la strategia è stata aggiornata. L'obiettivo primario è rendere l'App Master **perfettamente compatibile** con la logica e la struttura dati dell'app dei tecnici, come descritto in tale documento.
+
+**Piano di Ricostruzione Totale (Basato sulla TUA Bibbia):**
+
+1.  **Allineamento del Modello Dati (`src/models/definitions.ts`):** Riscrivere l'interfaccia `Rapportino` perché sia una copia 1:1 della struttura JSON documentata.
+2.  **Aggiornamento del Calcolatore Ore:** Modificare `src/utils/hoursCalculator.ts` per renderlo compatibile con il nuovo modello dati.
+3.  **Ricostruzione del Form (`RapportinoForm.tsx`):** Riscrivere il form per mappare i nuovi campi e la nuova logica.
+4.  **Adeguamento della Tabella di Reportistica (`RicercaAvanzata.tsx`):** Modificare la tabella per leggere e calcolare i dati dal nuovo modello.
+
+---
+
+## 4. Stato Avanzamento Lavori (SAL)
+
+*   **Fase 1: Setup Database Locale e Coda di Sincronizzazione:** `[COMPLETATO]`
+    *   _Il file 'src/db/db.ts' è stato creato e configurato._
+*   **Fase 2: Creazione del Motore di Sincronizzazione:** `[COMPLETATO]`
+    *   _Il file 'src/services/SyncService.ts' è stato creato e corretto per puntare alla collezione 'tecnici' corretta._
+*   **Fase 3: Refactoring (OPERAZIONE COMPATIBILITÀ TOTALE):** `[IN CORSO]`
+    *   _**Direttiva attuale:** Iniziata l'analisi e la riscrittura dei componenti sulla base del file `report_tecnici.md`._
+*   **Fase 4: Integrazione e Modifiche UI:** `[IN ATTESA]`
+
+---
+
+## 5. Registro Lavori Precedenti (Archivio degli Errori)
+
+*   Tutta l'attività precedente che ha portato all'architettura difettosa è archiviata qui come memento degli errori da non ripetere.

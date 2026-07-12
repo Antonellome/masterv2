@@ -1,104 +1,122 @@
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { collection, query, where, orderBy, limit, startAfter, getDocs, Query, DocumentData, Timestamp, QueryConstraint, QueryDocumentSnapshot } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { Rapportino } from '@/models/definitions';
-import { isEqual } from 'lodash';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/db';
+import { EnrichedRapportino, Rapportino } from '@/models/definitions';
+import { useMemo } from 'react';
 
 export interface RapportiniFilters {
     dataDa?: string | null;
     dataA?: string | null;
     tecnicoId?: string | null;
-    clienteId?: string | null;
     naveId?: string | null;
     luogoId?: string | null;
     tipoGiornataId?: string | null;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
-    pageSize?: number;
     enabled?: boolean;
 }
 
-// Hook riscritto per essere robusto e prevedibile.
-const useRapportini = (filters: RapportiniFilters) => {
-    const [rapportini, setRapportini] = useState<Rapportino[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
-    const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+/**
+ * Hook completamente refattorizzato per funzionare con Dexie e useLiveQuery.
+ * Legge i rapportini e le anagrafiche correlate dal database locale,
+ * arricchisce i dati e applica filtri e paginazione lato client.
+ */
+const useRapportini = (filters: RapportiniFilters, page: number = 1, pageSize: number = 15) => {
+    const { 
+        enabled = true, 
+        dataDa, 
+        dataA, 
+        tecnicoId, 
+        naveId, 
+        luogoId, 
+        tipoGiornataId, 
+        sortBy = 'data', 
+        sortOrder = 'desc' 
+    } = filters;
 
-    const prevFiltersRef = useRef<RapportiniFilters>();
+    // 1. Carica tutte le anagrafiche necessarie da Dexie in modo reattivo
+    const anagrafiche = useLiveQuery(() => {
+        if (!enabled) return undefined;
+        return Promise.all([
+            db.navi.toArray(),
+            db.luoghi.toArray(),
+            db.tipiGiornata.toArray(),
+            db.tecnici.toArray(),
+        ]).then(([navi, luoghi, tipiGiornata, tecnici]) => ({
+            navi, luoghi, tipiGiornata, tecnici
+        }));
+    }, [enabled]);
 
-    const { enabled = true } = filters;
+    // 2. Trasforma le anagrafiche in mappe per un accesso efficiente (memoizzato)
+    const anagraficheMaps = useMemo(() => {
+        if (!anagrafiche) return null;
+        return {
+            navi: new Map(anagrafiche.navi.map(item => [item.id, item])),
+            luoghi: new Map(anagrafiche.luoghi.map(item => [item.id, item])),
+            tipiGiornata: new Map(anagrafiche.tipiGiornata.map(item => [item.id, item])),
+            tecnici: new Map(anagrafiche.tecnici.map(item => [item.id, item])),
+        };
+    }, [anagrafiche]);
 
-    const performFetch = useCallback(async (currentFilters: RapportiniFilters, isContinuation: boolean) => {
-        setLoading(true);
-        try {
-            const rapportiniCollection = collection(db, 'rapportini');
-            const constraints: QueryConstraint[] = [];
+    // 3. Carica, filtra e ordina i rapportini usando useLiveQuery
+    const rapportini = useLiveQuery(async () => {
+        if (!enabled) return [];
 
-            if (currentFilters.dataDa) constraints.push(where('data', '>=', Timestamp.fromDate(new Date(currentFilters.dataDa))));
-            if (currentFilters.dataA) constraints.push(where('data', '<=', Timestamp.fromDate(new Date(currentFilters.dataA))));
-            if (currentFilters.tecnicoId) constraints.push(where('presenze', 'array-contains', currentFilters.tecnicoId));
-            if (currentFilters.clienteId) constraints.push(where('clienteId', '==', currentFilters.clienteId));
-            if (currentFilters.naveId) constraints.push(where('naveId', '==', currentFilters.naveId));
-            if (currentFilters.luogoId) constraints.push(where('luogoId', '==', currentFilters.luogoId));
-            if (currentFilters.tipoGiornataId) constraints.push(where('tipoGiornataId', '==', currentFilters.tipoGiornataId));
-
-            const orderByField = currentFilters.sortBy || 'data';
-            const sortDirection = currentFilters.sortOrder || 'desc';
-            constraints.push(orderBy(orderByField, sortDirection));
-
-            const pageSize = currentFilters.pageSize || 15;
-            constraints.push(limit(pageSize));
-
-            if (isContinuation && lastDoc) {
-                constraints.push(startAfter(lastDoc));
-            }
-
-            const q = query(rapportiniCollection, ...constraints);
-            const documentSnapshots = await getDocs(q);
-            const newRapportini = documentSnapshots.docs.map(doc => ({ id: doc.id, ...doc.data() } as Rapportino));
-            const newLastDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
-
-            setRapportini(prev => isContinuation ? [...prev, ...newRapportini] : newRapportini);
-            setLastDoc(newLastDoc || null);
-            setHasMore(documentSnapshots.docs.length === pageSize);
-
-        } catch (error) {
-            console.error("Errore nel recupero dei rapportini: ", error);
-            // In caso di errore, resetta lo stato per evitare inconsistenze
-            setRapportini([]);
-            setHasMore(false);
-        } finally {
-            setLoading(false);
-        }
-    }, [lastDoc]); // Dipende solo da `lastDoc` per la paginazione
-
-    useEffect(() => {
-        // Se l'hook viene disabilitato, puliamo tutto.
-        if (!enabled) {
-            setRapportini([]);
-            setLastDoc(null);
-            setHasMore(true);
-            setLoading(false); // Assicuriamoci che non rimanga in caricamento
-            prevFiltersRef.current = undefined; // Resettiamo i filtri precedenti
-            return;
+        let query = db.rapportini.orderBy(sortBy);
+        if (sortOrder === 'desc') {
+            query = query.reverse();
         }
 
-        // Se i filtri cambiano, significa che è una nuova ricerca.
-        if (!isEqual(prevFiltersRef.current, filters)) {
-            prevFiltersRef.current = filters;
-            performFetch(filters, false); // Esegui una nuova ricerca (non una continuazione)
-        }
-    }, [filters, enabled, performFetch]);
+        return query.toArray();
 
-    const fetchNextPage = useCallback(() => {
-        if (!loading && hasMore && enabled) {
-            performFetch(filters, true); // Esegui una ricerca in continuazione (paginazione)
-        }
-    }, [loading, hasMore, enabled, filters, performFetch]);
+    }, [enabled, sortBy, sortOrder]);
 
-    return { rapportini, loading, hasMore, fetchNextPage };
+    // 4. Arricchisci e filtra i rapportini solo quando i dati o i filtri cambiano (memoizzato)
+    const processedData = useMemo(() => {
+        if (!rapportini || !anagraficheMaps) return null;
+
+        const filtered = rapportini.filter(r => {
+            const dataRapportino = new Date(r.data);
+            if (dataDa && dataRapportino < new Date(dataDa)) return false;
+            if (dataA && dataRapportino > new Date(dataA)) return false;
+            if (tecnicoId && !(r.presenze || []).includes(tecnicoId)) return false;
+            if (naveId && r.naveId !== naveId) return false;
+            if (luogoId && r.luogoId !== luogoId) return false;
+            if (tipoGiornataId && r.tipoGiornataId !== tipoGiornataId) return false;
+            return true;
+        });
+
+        const enriched = filtered.map((r: Rapportino): EnrichedRapportino => {
+            const tipoGiornata = anagraficheMaps.tipiGiornata.get(r.tipoGiornataId);
+            return {
+                ...r,
+                dataFormatted: new Date(r.data).toLocaleDateString(),
+                tipoGiornata: tipoGiornata,
+                tipoGiornataNome: tipoGiornata?.nome || 'N/D',
+                naveNome: anagraficheMaps.navi.get(r.naveId)?.nome || 'N/D',
+                luogoNome: anagraficheMaps.luoghi.get(r.luogoId)?.nome || 'N/D',
+                oreGiorno: r.oreLavoro || 0, // Semplificazione, la logica complessa andrebbe qui
+                oreOrdinarie: 0, // Placeholder
+                oreStraordinarie: 0, // Placeholder
+                isEditable: true, // Placeholder
+                isDirty: (r as any).isDirty || 0, // Includi lo stato 'dirty'
+            };
+        });
+
+        return enriched;
+
+    }, [rapportini, anagraficheMaps, dataDa, dataA, tecnicoId, naveId, luogoId, tipoGiornataId]);
+
+    // 5. Applica la paginazione all'array processato
+    const paginatedData = useMemo(() => {
+        if (!processedData) return [];
+        return processedData.slice((page - 1) * pageSize, page * pageSize);
+    }, [processedData, page, pageSize]);
+
+    const loading = rapportini === undefined || anagrafiche === undefined;
+    const hasMore = processedData ? processedData.length > page * pageSize : false;
+
+    return { rapportini: paginatedData, loading, hasMore };
 };
 
 export default useRapportini;

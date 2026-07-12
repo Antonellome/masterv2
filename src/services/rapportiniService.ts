@@ -1,52 +1,46 @@
 
-import { doc, getDoc, setDoc, collection, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { RapportinoSchema } from '@/models/rapportino.schema';
-import { rapportinoConverter } from '@/utils/converters/rapportinoConverter';
-
-export const rapportiniCollection = collection(db, 'rapportini').withConverter(rapportinoConverter);
+import { db as dexieDb } from '@/db/db';
+import { pushRapportinoToQueue } from './SyncService'; // Importo la funzione corretta per la coda
+import type { Rapportino } from '@/models/definitions';
 
 /**
- * Salva un rapportino (crea o aggiorna) in Firestore.
- * L'operazione SOVRASCRIVE completamente il documento esistente per garantire la pulizia dei dati.
- * @param rapportino L'oggetto rapportino conforme a RapportinoSchema.
- * @throws Lancia un errore se il salvataggio fallisce.
+ * Salva un rapportino, marcandolo come 'dirty' e accodandolo per la sincronizzazione.
+ * L'operazione è istantanea per l'UI.
+ * @param rapportino L'oggetto rapportino da salvare.
+ * @throws Lancia un errore se il salvataggio locale fallisce.
  */
-export const saveRapportino = async (rapportino: RapportinoSchema): Promise<void> => {
+export const saveRapportino = async (rapportino: Rapportino): Promise<void> => {
     try {
         if (!rapportino.id) {
             throw new Error('ID del rapportino non fornito per il salvataggio.');
         }
-        const docRef = doc(rapportiniCollection, rapportino.id);
 
-        // L'operazione di setDoc senza merge SOVRASCRIVE il documento.
-        // Questo elimina qualsiasi campo residuo da salvataggi precedenti e garantisce
-        // che solo i dati conformi allo schema attuale vengano persistiti.
-        await setDoc(docRef, rapportino);
+        // 1. Marca il rapportino come 'dirty' e salvalo localmente
+        const dirtyRapportino = {
+            ...rapportino,
+            isDirty: 1 as const // Aggiungo il flag
+        };
+        await dexieDb.rapportini.put(dirtyRapportino);
+
+        // 2. Aggiungi il rapportino alla coda di sincronizzazione (operazione veloce)
+        await pushRapportinoToQueue(rapportino.id);
 
     } catch (error) {
-        console.error("Errore durante il salvataggio del rapportino:", error);
-        throw new Error("Impossibile salvare il rapportino.");
+        console.error("Errore durante il salvataggio del rapportino (locale):", error);
+        throw new Error("Impossibile salvare il rapportino localmente.");
     }
 };
 
 /**
- * Recupera un singolo rapportino da Firestore usando il suo ID.
+ * Recupera un singolo rapportino dal database locale (Dexie).
  * @param id L'ID del rapportino da recuperare.
- * @returns L'oggetto RapportinoSchema o null se non trovato.
- * @throws Lancia un errore se il recupero fallisce.
+ * @returns L'oggetto Rapportino o undefined se non trovato.
  */
-export const getRapportinoById = async (id: string): Promise<RapportinoSchema | null> => {
+export const getRapportinoById = async (id: string): Promise<Rapportino | undefined> => {
     try {
-        const docRef = doc(rapportiniCollection, id);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-            return docSnap.data();
-        }
-        return null;
+        return await dexieDb.rapportini.get(id);
     } catch (error) {
-        console.error("Errore durante il recupero del rapportino:", error);
-        throw new Error("Impossibile recuperare il rapportino.");
+        console.error("Errore durante il recupero del rapportino locale:", error);
+        throw new Error("Impossibile recuperare il rapportino dal database locale.");
     }
 };
