@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthProvider';
 import { auth, db, functions } from '@/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from "firebase/auth";
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, query } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import {
   Box, Typography, CircularProgress, Alert, Button, Dialog,
   DialogActions, DialogContent, DialogTitle, DialogContentText,
@@ -18,27 +18,31 @@ import { itIT } from '@mui/x-data-grid/locales';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import PhoneIcon from '@mui/icons-material/Phone';
+import EditIcon from '@mui/icons-material/Edit'; // AGGIUNTA MATITA
 
-// MANTENUTE PER CREAZIONE/ELIMINAZIONE UTENTE
 const gestisciUtenti = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 
 interface User {
   id: string;
   nome: string;
   email: string;
+  telefono: string; 
   ruolo: 'admin' | 'user';
 }
 
-// Dialog per nuovo utente - INVARIATO
-const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean, onClose: () => void, onSave: (nome: string, email: string) => void, isSaving: boolean }) => {
+// --- Dialog Creazione Utente (INVARIATO) ---
+const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean, onClose: () => void, onSave: (nome: string, email: string, telefono: string) => void, isSaving: boolean }) => {
     const [nome, setNome] = useState('');
     const [email, setEmail] = useState('');
+    const [telefono, setTelefono] = useState(''); 
 
     const handleSave = () => {
-        if (nome && email) {
-            onSave(nome, email);
+        if (nome && email && telefono) { 
+            onSave(nome, email, telefono);
             setNome('');
             setEmail('');
+            setTelefono('');
         }
     };
 
@@ -46,15 +50,16 @@ const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean,
         <Dialog open={open} onClose={onClose}>
             <DialogTitle>Aggiungi Nuovo Utente</DialogTitle>
             <DialogContent>
-                <DialogContentText sx={{ mb: 2 }}>
-                    Verrà creato un nuovo utente e riceverà un'email per impostare la propria password. Inizialmente, avrà il ruolo di 'Utente'.
+                 <DialogContentText sx={{ mb: 2 }}>
+                    Verrà creato un nuovo utente e riceverà un'email per impostare la password. Inserisci un numero di telefono valido per l'accesso via SMS.
                 </DialogContentText>
                 <TextField autoFocus margin="dense" id="name" label="Nome e Cognome" type="text" fullWidth variant="standard" value={nome} onChange={(e) => setNome(e.target.value)} />
                 <TextField margin="dense" id="email" label="Indirizzo Email" type="email" fullWidth variant="standard" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <TextField margin="dense" id="telefono" label="Numero di Telefono (es. +393331234567)" type="tel" fullWidth variant="standard" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
-                <Button onClick={handleSave} disabled={isSaving || !nome || !email}>
+                <Button onClick={handleSave} disabled={isSaving || !nome || !email || !telefono}>
                     {isSaving ? <CircularProgress size={24} /> : 'Salva'}
                 </Button>
             </DialogActions>
@@ -62,7 +67,45 @@ const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean,
     );
 };
 
-// Dialog per conferma eliminazione - INVARIATO
+// --- AGGIUNTO DIALOGO PER LA MODIFICA ---
+const ModificaUtenteDialog = ({ open, onClose, onSave, isSaving, user }: { open: boolean, onClose: () => void, onSave: (id: string, nome: string, telefono: string) => void, isSaving: boolean, user: User | null }) => {
+    const [nome, setNome] = useState('');
+    const [telefono, setTelefono] = useState('');
+
+    useEffect(() => {
+        if (user) {
+            setNome(user.nome || '');
+            setTelefono(user.telefono || '');
+        }
+    }, [user]);
+
+    const handleSave = () => {
+        if (user && nome && telefono) {
+            onSave(user.id, nome, telefono);
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose}>
+            <DialogTitle>Modifica Utente</DialogTitle>
+            <DialogContent>
+                 <DialogContentText sx={{ mb: 2 }}>
+                    Modifica il nome o il numero di telefono dell'utente. L'email non può essere modificata.
+                </DialogContentText>
+                <TextField autoFocus margin="dense" id="edit-name" label="Nome e Cognome" type="text" fullWidth variant="standard" value={nome} onChange={(e) => setNome(e.target.value)} />
+                <TextField margin="dense" id="edit-email" label="Indirizzo Email" type="email" fullWidth variant="standard" value={user?.email || ''} disabled />
+                <TextField margin="dense" id="edit-telefono" label="Numero di Telefono" type="tel" fullWidth variant="standard" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
+                <Button onClick={handleSave} disabled={isSaving || !nome || !telefono}>
+                    {isSaving ? <CircularProgress size={24} /> : 'Salva Modifiche'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
 const ConfermaEliminazioneDialog = ({ open, onClose, onConfirm, isSaving, user }: { open: boolean, onClose: () => void, onConfirm: () => void, isSaving: boolean, user: User | null }) => (
     <Dialog open={open} onClose={onClose}>
         <DialogTitle>Conferma Eliminazione</DialogTitle>
@@ -89,13 +132,16 @@ const GestioneAmministratori = () => {
   
   const [openNewUserDialog, setOpenNewUserDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null); 
+  const [userToEdit, setUserToEdit] = useState<User | null>(null); // AGGIUNTO stato per modifica
 
-  // AZIONE 1: CORREZIONE CARICAMENTO DATI
   useEffect(() => {
     setLoading(true);
-    // Ascolta le modifiche su entrambe le collezioni per aggiornamenti in tempo reale
     const unsubUtentiMaster = onSnapshot(collection(db, 'utenti_master'), (snapshotMaster) => {
-        const masterUsers = snapshotMaster.docs.map(doc => ({ id: doc.id, ...doc.data() } as Omit<User, 'ruolo'>));
+        const masterUsers = snapshotMaster.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data(),
+            telefono: doc.data().telefono || 'N/D'
+        } as Omit<User, 'ruolo'>));
         
         const unsubAdmins = onSnapshot(collection(db, 'admins'), (snapshotAdmins) => {
             const adminIds = new Set(snapshotAdmins.docs.map(doc => doc.id));
@@ -108,22 +154,19 @@ const GestioneAmministratori = () => {
             setUtenti(combinedUsers);
             setLoading(false);
         }, (err) => {
-            console.error("Errore caricamento admins:", err);
             setError("Impossibile caricare i ruoli degli amministratori.");
             setLoading(false);
         });
 
-        return () => unsubAdmins(); // Cleanup listener admins
+        return () => unsubAdmins();
     }, (err) => {
-        console.error("Errore caricamento utenti master:", err);
         setError("Impossibile caricare gli utenti.");
         setLoading(false);
     });
 
-    return () => unsubUtentiMaster(); // Cleanup listener utenti_master
+    return () => unsubUtentiMaster();
   }, []);
 
-  // Funzione di reset password - INVARIATA
   const handleSendPasswordReset = async (email: string) => {
     if(isSaving) return;
     setIsSaving(true);
@@ -131,15 +174,12 @@ const GestioneAmministratori = () => {
       await sendPasswordResetEmail(auth, email);
       setFeedback({ type: 'success', message: `Email di reset inviata con successo a ${email}.` });
     } catch (err: any) {
-      let message = "Impossibile inviare l'email di reset.";
-      if (err.code === 'auth/user-not-found') message = "Nessun utente trovato con questo indirizzo email.";
-      setFeedback({ type: 'error', message });
+      setFeedback({ type: 'error', message: "Impossibile inviare l'email di reset." });
     } finally {
       setIsSaving(false);
     }
   };
 
-  // AZIONE 2: CORREZIONE LOGICA SWITCH
   const handleToggleRuolo = async (user: User, nuovoRuolo: 'admin' | 'user') => {
     if (user.id === currentUser?.uid) {
       setFeedback({ type: 'error', message: 'Non puoi modificare il tuo stesso ruolo.' });
@@ -154,30 +194,25 @@ const GestioneAmministratori = () => {
     try {
       const adminDocRef = doc(db, 'admins', user.id);
       if (nuovoRuolo === 'admin') {
-        // Aggiungo un documento alla collezione admins per promuovere l'utente
-        await setDoc(adminDocRef, { email: user.email, nome: user.nome }); // Aggiungo dati contestuali
+        await setDoc(adminDocRef, { email: user.email, nome: user.nome, telefono: user.telefono || 'N/D' });
       } else {
-        // Rimuovo il documento per revocare i privilegi
         await deleteDoc(adminDocRef);
       }
-      const feedbackMessage = `Ruolo di ${user.nome} aggiornato a ${nuovoRuolo === 'admin' ? 'Amministratore' : 'Utente'}.`;
-      setFeedback({ type: 'success', message: feedbackMessage });
+      setFeedback({ type: 'success', message: `Ruolo di ${user.nome} aggiornato.` });
     } catch (err: any) {
-      setUtenti(originalUtenti); // Rollback in caso di errore
-      const nomeAzione = nuovoRuolo === 'admin' ? 'Promozione' : 'Revoca';
-      setFeedback({ type: 'error', message: err.message || `${nomeAzione} fallita.` });
+      setUtenti(originalUtenti); 
+      setFeedback({ type: 'error', message: "Modifica ruolo fallita." });
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Funzione creazione utente - INVARIATA
-  const handleCreaNuovoUtente = async (nome: string, email: string) => {
+  const handleCreaNuovoUtente = async (nome: string, email: string, telefono: string) => {
     if (isSaving) return;
     setIsSaving(true);
     try {
-        await gestisciUtenti({ action: 'createUser', email, nome });
-        setFeedback({ type: 'success', message: `Utente ${nome} creato. Riceverà un'email per impostare la password.` });
+        await gestisciUtenti({ action: 'createUser', email, nome, telefono });
+        setFeedback({ type: 'success', message: `Utente ${nome} creato.` });
         setOpenNewUserDialog(false);
     } catch (err: any) {
         setFeedback({ type: 'error', message: err.message || 'Creazione utente fallita.' });
@@ -186,24 +221,35 @@ const GestioneAmministratori = () => {
     }
   };
 
-  // Funzione eliminazione utente - INVARIATA
+  // --- AGGIUNTA FUNZIONE DI UPDATE ---
+  const handleUpdateUtente = async (id: string, nome: string, telefono: string) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+        await gestisciUtenti({ action: 'updateUser', uid: id, nome, telefono });
+        setFeedback({ type: 'success', message: `Utente ${nome} aggiornato con successo.` });
+        setUserToEdit(null); // Chiudi il dialog
+    } catch (err: any) {
+        setFeedback({ type: 'error', message: err.message || 'Aggiornamento fallito.' });
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
   const handleEliminaUtente = async () => {
     if (!userToDelete || isSaving) return;
     setIsSaving(true);
-    const userNome = userToDelete.nome;
     try {
         await gestisciUtenti({ action: 'deleteUser', uid: userToDelete.id });
-        setFeedback({ type: 'success', message: `Utente ${userNome} eliminato con successo.` });
+        setFeedback({ type: 'success', message: `Utente ${userToDelete.nome} eliminato.` });
         setUserToDelete(null);
     } catch (err: any) {
         setFeedback({ type: 'error', message: err.message || 'Eliminazione fallita.' });
-        setUserToDelete(null);
     } finally {
         setIsSaving(false);
     }
   };
   
-  // Toolbar - INVARIATA
   function CustomToolbar() {
       return (
           <GridToolbarContainer>
@@ -223,6 +269,17 @@ const GestioneAmministratori = () => {
   const columns: GridColDef<User>[] = [
     { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 180 },
     { field: 'email', headerName: 'Email', flex: 1, minWidth: 200 },
+    {
+        field: 'telefono',
+        headerName: 'Telefono',
+        width: 150,
+        renderCell: (params) => (
+            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                <PhoneIcon sx={{ mr: 1, color: 'text.secondary', fontSize: '1.2rem' }} />
+                {params.value || 'N/D'}
+            </Box>
+        )
+    },
     {
       field: 'ruolo',
       headerName: 'Ruolo',
@@ -264,6 +321,14 @@ const GestioneAmministratori = () => {
         const isCurrentUser = params.row.id === currentUser?.uid;
         return (
           <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+             {/* --- AGGIUNTA MATITA --*/}
+            <Tooltip title="Modifica utente">
+              <span>
+                <IconButton color="secondary" onClick={() => setUserToEdit(params.row)} disabled={isSaving}>
+                  <EditIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
             <Tooltip title="Invia email di reset password">
               <span>
                 <IconButton color="primary" onClick={() => handleSendPasswordReset(params.row.email)} disabled={isSaving}>
@@ -284,7 +349,6 @@ const GestioneAmministratori = () => {
     }
   ];
 
-  // Resto del componente (rendering) - INVARIATO
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
   if (error) return <Alert severity="error">{error}</Alert>;
 
@@ -305,6 +369,7 @@ const GestioneAmministratori = () => {
       </Box>
 
       <NuovoUtenteDialog open={openNewUserDialog} onClose={() => setOpenNewUserDialog(false)} onSave={handleCreaNuovoUtente} isSaving={isSaving} />
+      <ModificaUtenteDialog open={!!userToEdit} onClose={() => setUserToEdit(null)} onSave={handleUpdateUtente} isSaving={isSaving} user={userToEdit} />
       <ConfermaEliminazioneDialog open={!!userToDelete} onClose={() => setUserToDelete(null)} onConfirm={handleEliminaUtente} isSaving={isSaving} user={userToDelete} />
 
       {feedback && (

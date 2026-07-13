@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "target": "riso-master-office-prod",
+    "site": "riso-master-office-prod",
     "public": "dist",
     "ignore": [
       "firebase.json",

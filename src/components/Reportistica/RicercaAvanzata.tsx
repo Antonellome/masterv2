@@ -4,7 +4,7 @@ import { db } from '@/db/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
     Paper, Typography, Button, Box, TextField, Autocomplete, Grid,
-    Snackbar, Alert, Chip
+    Snackbar, Alert, Chip, Tooltip
 } from '@mui/material';
 import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem, GridSortComparator } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
@@ -30,6 +30,8 @@ interface FlatRapportino {
     id: string;
     dataFormatted: string;
     tecniciNomi: string[];
+    mainTecnicoNome: string;
+    altriTecniciNomi: string[];
     tipoGiornataNome: string;
     naveNome: string;
     luogoNome: string;
@@ -104,11 +106,9 @@ const RicercaAvanzata: React.FC = () => {
         return rapportini.map((rapportino) => {
             const dataNormalizzata = normalizeDate(rapportino.data);
             
-            // --- LOGICA CLIENTE - BRUTALE E DEFINITIVA ---
             let clienteNome = "N/D";
             let finalClienteId: string | undefined = undefined;
 
-            // 1. TENTO CON LA NAVE
             const naveId = getCleanId(rapportino.naveId);
             if (naveId) {
                 const nave = naviMap.get(naveId);
@@ -124,7 +124,6 @@ const RicercaAvanzata: React.FC = () => {
                 }
             }
 
-            // 2. SE NON HO TROVATO NULLA, TENTO CON IL LUOGO (STESSA IDENTICA LOGICA)
             if (clienteNome === "N/D") {
                 const luogoId = getCleanId(rapportino.luogoId);
                 if (luogoId) {
@@ -141,13 +140,23 @@ const RicercaAvanzata: React.FC = () => {
                     }
                 }
             }
-            // --- FINE LOGICA CLIENTE ---
 
-            const tecnicoIds = (Array.isArray(rapportino.presenze) ? rapportino.presenze.map(getCleanId) : []).filter(Boolean) as string[];
-            const tecniciNomi = tecnicoIds.map(id => {
+            const mainTecnicoId = getCleanId(rapportino.tecnicoId);
+            const allTecnicoIdsInPresenze = (Array.isArray(rapportino.presenze) ? rapportino.presenze.map(getCleanId) : []).filter(Boolean) as string[];
+
+            const getName = (id: string) => {
                 const t = tecniciMap.get(id);
                 return t ? `${t.cognome} ${t.nome}`.trim() : `ID: ${id}`;
-            });
+            };
+            
+            const mainTecnicoNome = mainTecnicoId ? getName(mainTecnicoId) : "N/D";
+            
+            const altriTecniciNomi = allTecnicoIdsInPresenze
+                .filter(id => id !== mainTecnicoId)
+                .map(getName);
+
+            const tecnicoIds = [...new Set([mainTecnicoId, ...allTecnicoIdsInPresenze].filter(Boolean) as string[])]; 
+            const tecniciNomi = [mainTecnicoNome, ...altriTecniciNomi];
             
             const tipoGiornataId = getCleanId(rapportino.tipoGiornataId);
             const tipoGiornataObj = tipoGiornataId ? tipiGiornataMap.get(tipoGiornataId) : undefined;
@@ -164,6 +173,8 @@ const RicercaAvanzata: React.FC = () => {
                 data: dataNormalizzata,
                 dataFormatted: dayjs(dataNormalizzata).isValid() ? dayjs(dataNormalizzata).format("DD/MM/YYYY") : "Data Invalida",
                 tecniciNomi,
+                mainTecnicoNome,
+                altriTecniciNomi,
                 tipoGiornataNome: tipoGiornataObj?.nome || "N/D",
                 naveNome: naveObj?.nome || "N/D",
                 luogoNome: luogoObj?.nome || "N/D",
@@ -224,11 +235,39 @@ const RicercaAvanzata: React.FC = () => {
 
     const columns: GridColDef<FlatRapportino>[] = useMemo(() => [
         { field: 'data', headerName: 'Data', width: 110, renderCell: (params) => params.row.dataFormatted, sortComparator: dateSortComparator, type: 'date' },
-        { field: 'tecniciNomi', headerName: 'Tecnici', flex: 1.5, minWidth: 150, renderCell: params => (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, py: 1, my: 1, alignItems: 'center' }} >
-                {Array.isArray(params.value) && params.value.map((nome, index) => <Chip key={index} label={nome} size="small" variant='outlined' />)}
-            </Box>
-        )},
+        { 
+            field: 'tecniciNomi', 
+            headerName: 'Tecnici', 
+            flex: 1.5, 
+            minWidth: 150, 
+            renderCell: params => {
+                const mainTecnico = params.row.mainTecnicoNome;
+                const altriTecnici = params.row.altriTecniciNomi;
+                const fullList = [mainTecnico, ...altriTecnici].join(', ');
+                const numAltri = altriTecnici.length;
+
+                return (
+                    <Tooltip title={fullList} arrow placement="top">
+                        <Box sx={{ 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap',
+                            width: '100%',
+                            my: 'auto'
+                        }}>
+                            <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
+                                {mainTecnico}
+                            </Typography>
+                            {numAltri > 0 && (
+                                <Typography variant="body2" component="span" sx={{ ml: 0.5, color: 'text.secondary' }}>
+                                    (+{numAltri})
+                                </Typography>
+                            )}
+                        </Box>
+                    </Tooltip>
+                );
+            }
+        },
         { field: 'tipoGiornataNome', headerName: 'Tipo Giornata', flex: 1 },
         { field: 'ordineLavoro', headerName: 'Ordine Lavoro', flex: 1 },
         { field: 'naveNome', headerName: 'Nave', flex: 1 },
@@ -268,7 +307,8 @@ const RicercaAvanzata: React.FC = () => {
 
                 <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                     <DataGrid 
-                        getRowHeight={() => 'auto'} 
+                        rowHeight={40}
+                        headerHeight={48}
                         rows={filteredRapportini} 
                         columns={columns} 
                         loading={loading} 
@@ -280,12 +320,16 @@ const RicercaAvanzata: React.FC = () => {
                         density="compact" 
                         onRowClick={handleRowClick}
                         sx={{
-                            '& .MuiDataGrid-cell': {
-                                py: 1, 
-                            },
                             '& .MuiDataGrid-row': { 
                                 cursor: 'pointer' 
                             },
+                             '& .MuiDataGrid-cell': {
+                                 alignItems: 'center',
+                                 display: 'flex',
+                                 whiteSpace: 'nowrap', 
+                                 overflow: 'hidden',
+                                 textOverflow: 'ellipsis',
+                             },
                         }}
                     />
                 </Paper>
