@@ -54,11 +54,8 @@ A seguito della ricezione del file `report_tecnici.md`, la strategia è stata ag
 ## 4. Stato Avanzamento Lavori (SAL)
 
 *   **Fase 1: Setup Database Locale e Coda di Sincronizzazione:** `[COMPLETATO]`
-    *   _Il file 'src/db/db.ts' è stato creato e configurato._
 *   **Fase 2: Creazione del Motore di Sincronizzazione:** `[COMPLETATO]`
-    *   _Il file 'src/services/SyncService.ts' è stato creato e corretto per puntare alla collezione 'tecnici' corretta._
 *   **Fase 3: Refactoring (OPERAZIONE COMPATIBILITÀ TOTALE):** `[IN CORSO]`
-    *   _**Direttiva attuale:** Iniziata l'analisi e la riscrittura dei componenti sulla base del file `report_tecnici.md`._
 *   **Fase 4: Integrazione e Modifiche UI:** `[IN ATTESA]`
 
 ---
@@ -66,3 +63,36 @@ A seguito della ricezione del file `report_tecnici.md`, la strategia è stata ag
 ## 5. Registro Lavori Precedenti (Archivio degli Errori)
 
 *   Tutta l'attività precedente che ha portato all'architettura difettosa è archiviata qui come memento degli errori da non ripetere.
+
+---
+
+## 6. REGISTRO INTERVENTI CHIRURGICI (Sessione Corrente)
+
+Questo registro documenta le operazioni puntuali richieste e approvate durante l'interazione corrente, in aderenza alla "Legge del Coglione".
+
+### Intervento #1: Ripristino Visibilità Logo "R.I.S.O."
+
+*   **Problema:** Il logo testuale "R.I.S.O." risultava invisibile nella barra di navigazione superiore.
+*   **Stato:** `[COMPLETATO]`
+
+### Intervento #2: Ricostruzione Layout Pagina Report Mensili
+
+*   **Problema:** La pagina `ReportMensili.tsx` presenta un layout "centralizzato" non desiderato.
+*   **Direttiva Ricevuta:** L'utente ha fornito una descrizione dettagliata del layout e della funzionalità richiesta. Il piano precedente di "ricerca archeologica" è **obsoleto**.
+*   **Piano d'Azione Definitivo:**
+    1.  **Struttura Principale:** Modificare `ReportMensili.tsx` per mappare la lista dei `tecnici` (recuperati dal custom hook `useData`) in **ordine alfabetico**.
+    2.  **Componente Tecnico:** Per ogni tecnico, renderizzare un componente `Paper` contenente:
+        *   Il nome e cognome del tecnico.
+        *   Un `DatePicker` (viste `month` e `year`) per selezionare il mese del report, con valore di default il **mese e anno correnti**.
+        *   Un pulsante **"Genera Mensile"**.
+    3.  **Gestione Stato:**
+        *   Implementare uno stato per memorizzare il mese selezionato per *ciascun* tecnico (es. `{ [tecnicoId: string]: Dayjs }`).
+        *   Implementare uno stato per tracciare il report attualmente visualizzato (es. `activeReport: { tecnicoId: string, month: Dayjs } | null`).
+    4.  **Logica di Generazione:**
+        *   Al click su "Genera Mensile", aggiornare lo stato `activeReport` con l'ID del tecnico e il mese selezionato per lui.
+        *   La logica esistente (`calculateMonthlyReportData`) verrà usata per calcolare i dati corretti in base allo stato `activeReport`.
+    5.  **Visualizzazione Tabella:**
+        *   Se un report è attivo (`activeReport != null`), visualizzare una `DataGrid` sotto la lista dei tecnici.
+        *   La `DataGrid` mostrerà i dati calcolati e conterrà le colonne: `Data`, `Nave`, `Luogo`, `Cliente`, `Ore di lavoro`, `Trasferte`.
+        *   Il dato `Cliente` verrà recuperato tramite lookup, partendo da `rapportino` -> `naveId` -> `navi` -> `clienteId` -> `clienti`.
+*   **Stato:** `[IN ATTESA DI APPROVAZIONE PIANO]`
