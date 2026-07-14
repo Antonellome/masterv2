@@ -5,8 +5,8 @@ import dayjs from 'dayjs';
 
 const normalizeDate = (date: any): Date => {
     if (!date) return new Date('invalid');
-    if (date && typeof date.seconds === 'number') { return new Date(date.seconds * 1000); } 
-    if (typeof date.toDate === 'function') { return date.toDate(); }
+    if (date && typeof date.seconds === 'number') return new Date(date.seconds * 1000);
+    if (typeof date.toDate === 'function') return date.toDate();
     const parsedDate = dayjs(date);
     return parsedDate.isValid() ? parsedDate.toDate() : new Date('invalid');
 };
@@ -15,11 +15,6 @@ const getCleanId = (id: any): string | undefined => {
     if (typeof id === 'string' && id) return id;
     if (id && typeof id === 'object' && id.id && typeof id.id === 'string') return id.id;
     return undefined;
-};
-
-const isSameType = (tipoGiornata: TipoGiornata | undefined, name: 'ordinaria' | 'straordinario') => {
-    if (!tipoGiornata?.nome) return false;
-    return tipoGiornata.nome.trim().toLowerCase() === name;
 };
 
 export function calculateMonthlyReportData(
@@ -32,60 +27,68 @@ export function calculateMonthlyReportData(
 
     const tipiGiornataMap = new Map(masterData.tipiGiornata.map(t => [t.id, t]));
     const tariffeMap = new Map((masterData.impostazioni as Impostazioni).tariffe.map(t => [t.tipoGiornataId, t]));
-
     const selectedDayjs = dayjs(selectedMonth);
-    const filteredAndNormalized = rapportini.map(r => ({
-        ...r,
-        data: normalizeDate(r.data),
-        tecnicoId: getCleanId(r.tecnicoId),
-        dettaglioOreTecnici: r.dettaglioOreTecnici?.map(d => ({ ...d, tecnicoId: getCleanId(d.tecnicoId) })) || [],
-        tipoGiornataId: getCleanId(r.tipoGiornataId),
-        trasfertaId: getCleanId(r.trasfertaId),
-    })).filter(r => {
-        if (!dayjs(r.data).isValid()) return false; 
 
-        const rapportinoDayjs = dayjs(r.data);
+    // PRIMO FILTRO: Prende solo i rapportini del mese giusto per il tecnico giusto.
+    const monthlyTecnicoRapportini = rapportini.filter(r => {
+        const dataRapportino = normalizeDate(r.dataInizio || r.data);
+        if (!dayjs(dataRapportino).isValid()) return false;
+        
+        const rapportinoDayjs = dayjs(dataRapportino);
         const isSameMonthAndYear = rapportinoDayjs.year() === selectedDayjs.year() && rapportinoDayjs.month() === selectedDayjs.month();
         if (!isSameMonthAndYear) return false;
 
-        const isCorrectTecnico = r.tecnicoId === selectedTecnicoId || r.dettaglioOreTecnici?.some(d => d.tecnicoId === selectedTecnicoId);
-        return isCorrectTecnico;
+        const mainTecnicoId = getCleanId(r.tecnicoId);
+        const allTecnicoIdsInPresenze = (Array.isArray(r.dettaglioOre) ? r.dettaglioOre.map(d => getCleanId(d.tecnicoId)) : []).filter(Boolean) as string[];
+        const allInvolvedTecnicos = [...new Set([mainTecnicoId, ...allTecnicoIdsInPresenze])];
+        
+        return allInvolvedTecnicos.includes(selectedTecnicoId);
     });
 
-    const enrichedRapportini: EnrichedRapportino[] = filteredAndNormalized.map(r => {
-        const tipoGiornata = tipiGiornataMap.get(r.tipoGiornataId);
+    // SECONDO PASSO: Arricchisce i rapportini filtrati con le ore corrette per il tecnico selezionato.
+    // NESSUN FILTRO VIENE PIU' APPLICATO. Se un tecnico è presente con 0 ore, il report viene incluso.
+    const enrichedRapportini: EnrichedRapportino[] = monthlyTecnicoRapportini.map(r => {
         let oreEffettive = 0;
+        const mainTecnicoId = getCleanId(r.tecnicoId);
 
-        const dettaglioTecnico = r.dettaglioOreTecnici?.find(d => d.tecnicoId === selectedTecnicoId);
-        if (dettaglioTecnico) {
-            oreEffettive = dettaglioTecnico.ore || 0;
-        } else if (r.tecnicoId === selectedTecnicoId) {
+        if (Array.isArray(r.dettaglioOre)) {
+            const dettaglioTecnico = r.dettaglioOre.find(d => getCleanId(d.tecnicoId) === selectedTecnicoId);
+            if (dettaglioTecnico) {
+                oreEffettive = dettaglioTecnico.ore || 0;
+            }
+        } else if (mainTecnicoId === selectedTecnicoId) {
+            // Fallback per vecchi rapportini senza dettaglio ore
             oreEffettive = r.oreLavoro || 0;
         }
 
+        const tipoGiornata = tipiGiornataMap.get(getCleanId(r.tipoGiornataId));
         const isVecchioReportTrasferta = tipoGiornata?.categoria === 'trasferta';
-        const tipoGiornataDaUsareId = isVecchioReportTrasferta ? 't_ordinaria' : r.tipoGiornataId;
-        const trasfertaId = isVecchioReportTrasferta ? r.tipoGiornataId : r.trasfertaId;
+        const tipoGiornataDaUsareId = isVecchioReportTrasferta ? 't_ordinaria' : getCleanId(r.tipoGiornataId);
+        const trasfertaId = isVecchioReportTrasferta ? getCleanId(r.tipoGiornataId) : getCleanId(r.trasfertaId);
 
         return {
-            ...r,
-            data: r.data,
-            tipoGiornata: tipiGiornataMap.get(tipoGiornataDaUsareId),
-            oreGiorno: oreEffettive,
+            id: r.id,
+            data: normalizeDate(r.dataInizio || r.data),
+            dataInizio: r.dataInizio || r.data, // Mantiene il formato originale per ogni evenienza
+            naveId: getCleanId(r.naveId),
+            luogoId: getCleanId(r.luogoId),
+            oreGiorno: oreEffettive, // Mostra le ore del tecnico, anche se 0.
             trasfertaId,
             tipoGiornataId: tipoGiornataDaUsareId,
-            isEditable: r.tecnicoId === selectedTecnicoId,
+            tipoGiornata: tipiGiornataMap.get(tipoGiornataDaUsareId),
+            isEditable: mainTecnicoId === selectedTecnicoId,
             oreOrdinarie: 0,
-            oreStraordinarie: 0
+            oreStraordinarie: 0,
+            lavoroEseguito: r.lavoroEseguito
         };
-    }).filter(r => r.oreGiorno > 0 || r.trasfertaId);
+    });
 
+    // CALCOLO RIEPILOGO (invariato, usa `enrichedRapportini` completi)
     const riepilogo: RiepilogoMese = {
         dettaglio: new Map(),
         oreTotali: 0, giorniTotaliLavorati: 0, giorniTrasferta: 0, costoTotale: 0,
         oreOrdinarie: 0, oreStraordinarie: 0,
     };
-
     masterData.tipiGiornata.forEach(tipo => {
         const tariffa = tariffeMap.get(tipo.id);
         riepilogo.dettaglio.set(tipo.id, { 
@@ -95,7 +98,7 @@ export function calculateMonthlyReportData(
     });
 
     const groupedByDay = enrichedRapportini.reduce((acc, r) => {
-        const dayKey = format(r.data, 'yyyy-MM-dd');
+        const dayKey = format(normalizeDate(r.data), 'yyyy-MM-dd');
         if (!acc[dayKey]) acc[dayKey] = [];
         acc[dayKey].push(r);
         return acc;
@@ -116,7 +119,7 @@ export function calculateMonthlyReportData(
                 const voceRiepilogo = riepilogo.dettaglio.get(report.tipoGiornataId);
                 if (voceRiepilogo) {
                     voceRiepilogo.oreTotali += report.oreGiorno;
-                    voceRiepilogo.giorniSet?.add(dayKey);
+                    if (report.oreGiorno > 0) voceRiepilogo.giorniSet?.add(dayKey);
                 }
             }
             if (report.trasfertaId && !trasfertaProcessedForDay) {
@@ -143,8 +146,8 @@ export function calculateMonthlyReportData(
     }
 
     riepilogo.oreTotali = enrichedRapportini.reduce((sum, r) => sum + r.oreGiorno, 0);
-
-    riepilogo.giorniTrasferta = new Set(enrichedRapportini.filter(r => r.trasfertaId).map(r => format(r.data, 'yyyy-MM-dd'))).size;
+    riepilogo.giorniTotaliLavorati = new Set(enrichedRapportini.filter(r => r.oreGiorno > 0).map(r => format(normalizeDate(r.data), 'yyyy-MM-dd'))).size;
+    riepilogo.giorniTrasferta = new Set(enrichedRapportini.filter(r => r.trasfertaId).map(r => format(normalizeDate(r.data), 'yyyy-MM-dd'))).size;
 
     let costoTotaleFinale = 0;
     for (const voce of riepilogo.dettaglio.values()) {
@@ -158,41 +161,10 @@ export function calculateMonthlyReportData(
     }
 
     riepilogo.costoTotale = costoTotaleFinale;
-    riepilogo.giorniTotaliLavorati = Object.keys(groupedByDay).length;
     if (voceOrdinaria) riepilogo.oreOrdinarie = voceOrdinaria.oreTotali;
     if (voceStraordinaria) riepilogo.oreStraordinarie = voceStraordinaria.oreTotali;
+    
+    const finalRapportini = [...enrichedRapportini].sort((a, b) => (normalizeDate(a.data)?.getTime() || 0) - (normalizeDate(b.data)?.getTime() || 0));
 
-    const finalRapportini: (EnrichedRapportino | null)[] = []; 
-    for (const dayKey in groupedByDay) {
-        const reports = groupedByDay[dayKey];
-        const totalOreOrdinarieDelGiorno = reports
-            .filter(r => isSameType(r.tipoGiornata, 'ordinaria'))
-            .reduce((sum, r) => sum + r.oreGiorno, 0);
-
-        let oreOrdinarieRimanentiPerSplit = Math.min(totalOreOrdinarieDelGiorno, 8);
-
-        reports.forEach(report => {
-            const newReport = { ...report };
-            if (isSameType(report.tipoGiornata, 'ordinaria')) {
-                const oreDaAssegnare = Math.min(report.oreGiorno, oreOrdinarieRimanentiPerSplit);
-                newReport.oreOrdinarie = oreDaAssegnare;
-                newReport.oreStraordinarie = report.oreGiorno - oreDaAssegnare;
-                oreOrdinarieRimanentiPerSplit -= oreDaAssegnare;
-            } else if (isSameType(report.tipoGiornata, 'straordinario')) {
-                newReport.oreStraordinarie = report.oreGiorno;
-                newReport.oreOrdinarie = 0;
-            } else {
-                newReport.oreOrdinarie = report.oreGiorno;
-                newReport.oreStraordinarie = 0;
-            }
-            finalRapportini.push(newReport);
-        });
-    }
-
-    // Filtra gli elementi nulli o undefined e ordina in modo sicuro
-    const cleanRapportini = finalRapportini
-        .filter((r): r is EnrichedRapportino => !!r)
-        .sort((a, b) => (a.data?.getTime() || 0) - (b.data?.getTime() || 0));
-
-    return { rapportiniArricchiti: cleanRapportini, riepilogoMese: riepilogo };
+    return { rapportiniArricchiti: finalRapportini, riepilogoMese: riepilogo };
 }

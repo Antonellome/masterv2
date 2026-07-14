@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import type { Rapportino, Tecnico, Nave, Luogo, TipoGiornata, AdminUser, Cliente, Ditta, Categoria, Veicolo } from '@/models/definitions';
+import type { Rapportino, Tecnico, Nave, Luogo, TipoGiornata, AdminUser, Cliente, Ditta, Categoria, Veicolo, Impostazioni } from '@/models/definitions';
 
 // 1. DEFINIZIONE DELLE INTERFACCE PER LE TABELLE
 
@@ -30,17 +30,34 @@ export class RisoDexie extends Dexie {
   ditte!: Table<Ditta, string>;
   categorie!: Table<Categoria, string>;
   veicoli!: Table<Veicolo, string>;
+  impostazioni!: Table<Impostazioni, string>; // <-- AGGIUNTA TABELLA MANCANTE
   sync_queue!: Table<SyncQueueTask, number>;
 
   constructor() {
     super('RisoDatabase');
 
     // LA VERSIONE PIÙ RECENTE DEL DB
+    this.version(6).stores({ // <-- INCREMENTO VERSIONE
+      rapportini: 'id, data, tecnicoId, isDirty',
+      tecnici: 'id',
+      navi: 'id, nome, clienteId',
+      luoghi: 'id, nome, clienteId',
+      tipiGiornata: 'id',
+      admins: 'id',
+      clienti: 'id, nome',
+      ditte: 'id, nome',
+      categorie: 'id, nome',
+      veicoli: 'id, nome',
+      impostazioni: 'id', // <-- AGGIUNTA STORE MANCANTE
+      sync_queue: '++id, timestamp, entityId',
+    });
+    
+    // Mantengo le versioni precedenti per la migrazione degli utenti esistenti
     this.version(5).stores({
       rapportini: 'id, data, tecnicoId, isDirty',
       tecnici: 'id',
-      navi: 'id, nome, clienteId',       // Schema corretto
-      luoghi: 'id, nome, clienteId',      // Schema corretto
+      navi: 'id, nome, clienteId',
+      luoghi: 'id, nome, clienteId',
       tipiGiornata: 'id',
       admins: 'id',
       clienti: 'id, nome',
@@ -50,12 +67,11 @@ export class RisoDexie extends Dexie {
       sync_queue: '++id, timestamp, entityId',
     });
       
-    // CORREZIONE DEFINITIVA: allineo la versione 4 a quella più recente per evitare problemi.
     this.version(4).stores({
       rapportini: 'id, data, tecnicoId, isDirty',
       tecnici: 'id',
-      navi: 'id, nome, clienteId',       // Schema corretto ANCHE QUI
-      luoghi: 'id, nome, clienteId',      // Schema corretto ANCHE QUI
+      navi: 'id, nome, clienteId',
+      luoghi: 'id, nome, clienteId',
       tipiGiornata: 'id',
       admins: 'id',
       clienti: 'id, nome',
@@ -105,7 +121,7 @@ export const db = new RisoDexie();
 
 // 4. TIPI ESPORTATI PER ROBUSTEZZA
 // Tipo che rappresenta i nomi validi di tutte le tabelle anagrafiche
-export type AnagraficaTable = 'tecnici' | 'navi' | 'luoghi' | 'tipiGiornata' | 'admins' | 'clienti' | 'ditte' | 'categorie' | 'veicoli';
+export type AnagraficaTable = 'tecnici' | 'navi' | 'luoghi' | 'tipiGiornata' | 'admins' | 'clienti' | 'ditte' | 'categorie' | 'veicoli' | 'impostazioni'; // <-- AGGIUNTO
 
 // Funzione di utility per popolare le anagrafiche, che sarà usata dal SyncService
 export async function bulkPutAnagrafiche(data: any) { // Usiamo any per flessibilità

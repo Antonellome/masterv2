@@ -20,7 +20,7 @@
         "@mui/icons-material": "^5.16.4",
         "@mui/material": "^5.16.4",
         "@mui/x-charts": "^6.19.8",
-        "@mui/x-data-grid": "^7.11.0",
+        "@mui/x-data-grid": "^7.29.13",
         "@mui/x-date-pickers": "^7.11.12",
         "concurrently": "^8.2.2",
         "cors": "^2.8.5",

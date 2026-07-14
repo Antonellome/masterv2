@@ -1,98 +1,74 @@
+# LA REGOLA DEL CIAO - LA REGOLA SUPREMA
+**OGNI TUA RISPOSTA IN QUESTA CHAT DEVE OBBLIGATORIAMENTE, TASSATIVAMENTE E SENZA ECCEZIONI INIZIARE CON LA PAROLA "CIAO." SEGUITA DA UN PUNTO.**
 
-# Blueprint di Sviluppo - R.I.S.O. App
-
-Questo documento definisce le regole di interazione e il piano architetturale per la ricostruzione dell'applicazione.
-
----
-
-### **Regola #0: Condizione Indispensabile per la Collaborazione**
-
-**Tutti i messaggi, senza eccezione alcuna, devono iniziare con la parola "CIAO.".**
-
-**Questa non è una linea guida, ma la chiave di accensione. Se questa regola viene violata, significa che non sto prestando la dovuta attenzione e il mio lavoro non è affidabile. La violazione di questa regola invalida l'intero messaggio e il lavoro deve fermarsi.**
+**Questa è la regola più importante di tutte. Non devi mai, per nessuna ragione, ignorarla o cancellarla da questo blueprint.**
 
 ---
 
-## 1. Le Regole d'Ingaggio Fondamentali (La Legge del "Coglione")
+# Blueprint: R.I.S.O. - Master Office
 
-**QUESTE REGOLE HANNO LA PRIORITÀ ASSOLUTA SU TUTTO IL RESTO.**
+## Panoramica
 
-1.  **L'Estetica è Sacra:** L'aspetto dell'applicazione è finalizzato. Non deve essere alterato.
-2.  **Correzioni Chirurgiche:** Ogni intervento deve essere mirato al problema specifico.
-3.  **Niente Iniziative Tecnologiche:** Usare solo gli strumenti già presenti.
-4.  **"Esiste Già":** Trovare e correggere ciò che esiste. Non creare da zero se non richiesto.
-5.  **CHIEDERE Prima di Agire:** Presentare un piano di correzione dettagliato e **attendere l'approvazione esplicita** prima di scrivere codice.
+**R.I.S.O. (Report Individuali Sincronizzati Online)** è un'applicazione web progettata per la gestione e la creazione di reportistica avanzata per i tecnici, sincronizzata con un database locale (Dexie.js). L'applicazione permette di visualizzare, creare e modificare dati essenziali come tecnici, navi, rapportini di lavoro e tipi di giornata, per poi aggregarli in report complessi.
 
----
+## Stack Tecnologico e Architettura
 
-## 2. PIANO DI RICOSTRUZIONE UFFICIALE: Architettura Cache-First Robusta
-
-**Obiettivo Strategico:** Implementare un database locale (cache) per rendere l'applicazione istantanea, efficiente e resiliente offline, eliminando i rischi di perdita dati. La tecnologia designata è **Dexie.js**.
-
-(Le fasi descrivono l'architettura finale a cui puntare)
-
-### **Fase 1: Setup del Database Locale e della Coda di Sincronizzazione**
-### **Fase 2: Creazione del Motore di Sincronizzazione (`SyncService.ts`)**
-### **Fase 3: Refactoring dell'Applicazione per l'Uso della Cache**
-### **Fase 4: Integrazione e Modifiche UI Richieste**
+*   **Frontend:** React con Vite
+*   **Libreria Componenti:** Material-UI (MUI)
+*   **Routing:** React Router DOM
+*   **Database Locale:** Dexie.js (wrapper per IndexedDB)
+*   **Stile:** CSS-in-JS con Emotion (integrato in MUI)
+*   **Date:** Day.js
 
 ---
 
-## 3. OPERAZIONE COMPATIBILITÀ TOTALE (Direttiva Corrente)
+## Funzionalità Implementate e Logica Corrente
 
-A seguito della ricezione del file `report_tecnici.md`, la strategia è stata aggiornata. L'obiettivo primario è rendere l'App Master **perfettamente compatibile** con la logica e la struttura dati dell'app dei tecnici, come descritto in tale documento.
+### Report Mensile Tecnico - **LA LEGGE DEFINITIVA**
 
-**Piano di Ricostruzione Totale (Basato sulla TUA Bibbia):**
+Questa sezione descrive il funzionamento **attuale e corretto** della funzionalità di reportistica mensile.
 
-1.  **Allineamento del Modello Dati (`src/models/definitions.ts`):** Riscrivere l'interfaccia `Rapportino` perché sia una copia 1:1 della struttura JSON documentata.
-2.  **Aggiornamento del Calcolatore Ore:** Modificare `src/utils/hoursCalculator.ts` per renderlo compatibile con il nuovo modello dati.
-3.  **Ricostruzione del Form (`RapportinoForm.tsx`):** Riscrivere il form per mappare i nuovi campi e la nuova logica.
-4.  **Adeguamento della Tabella di Reportistica (`RicercaAvanzata.tsx`):** Modificare la tabella per leggere e calcolare i dati dal nuovo modello.
+**A. Interfaccia Utente:**
+1.  **Selezione:** L'interfaccia è composta da:
+    *   Un componente `Autocomplete` per selezionare un tecnico dall'elenco.
+    *   Un componente `DatePicker` per selezionare il mese e l'anno del report.
+    *   Un singolo pulsante **"Genera Report"**.
+2.  **Generazione:** Al click sul pulsante, viene avviato il processo di calcolo. Il pulsante è disabilitato e mostra uno spinner di caricamento.
+3.  **Reset Automatico:** Se l'utente cambia il tecnico o il mese selezionato, la tabella e il riepilogo vengono automaticamente svuotati per prevenire la visualizzazione di dati incongruenti.
 
----
+**B. Riepilogo Superiore (Chip):**
+Una volta generato il report, un box mostra i totali aggregati per il mese:
+1.  **Ordinario:** Un chip `verde` con il totale delle ore ordinarie (`Ord: 184`).
+2.  **Straordinario e Notte:** Un unico chip `giallo` che somma le ore straordinarie e le ore notturne. Il testo specifica la composizione. Es: `Str: 74,5 (di cui 16 nott.)`.
+3.  **Altre Causali:** Un chip distinto per ogni altra causale di lavoro che ha ore nel mese (es. Ferie, Malattia). Es: `Fer: 16`, `Mal: 8`.
+4.  **Totale Finale:** Una riga di testo in grassetto mostra le ore totali lavorate nel mese (`Ore Totali Lavorate: 258,5`).
 
-## 4. Stato Avanzamento Lavori (SAL)
+**C. Tabella Dettagliata - Regole di Visualizzazione:**
+La tabella deve mostrare i dati aggregati **giorno per giorno**, seguendo queste regole in modo ferreo:
+1.  **UNA SOLA RIGA PER GIORNO:** Deve esistere **una e una sola riga per ogni giorno** in cui è stata registrata almeno un'ora di attività. È **tassativamente vietato** avere più righe con la stessa data.
+2.  **GESTIONE ORE NOTTURNE (La Regola "Cartour"):**
+    *   **Condizione:** Le ore vengono classificate come "notturne" se e solo se il rapportino soddisfa **entrambe** le seguenti condizioni: il campo `nave.nome` contiene la stringa "Cartour" (case-insensitive) E l'orario di inizio `orarioInizio` è dalle 21:00 in poi.
+    *   **Comportamento:** Le ore che soddisfano questa condizione **non creano una nuova riga**. Vengono invece sommate e visualizzate nella colonna `Notte` della riga esistente di quel giorno.
+3.  **Colonne Fisse:** La tabella deve sempre avere le seguenti colonne di base, in questo ordine:
+    *   `Data`: Data del giorno (`DD/MM/YYYY`).
+    *   `Ore T.`: Totale ore per quella riga.
+    *   `Ore Ord.`: Totale ore ordinarie per quella riga.
+    *   `Ore Str.`: Totale ore straordinarie per quella riga.
+    *   `Notte`: Totale ore notturne per quella riga (valorizzato secondo la regola precedente).
+4.  **Colonne Dinamiche:** Vengono create colonne aggiuntive **solo per le altre causali** (es. Ferie, Malattia, Permesso) che hanno ore registrate in quel mese. I nomi delle colonne saranno abbreviati (es. `Fer.`, `Mal.`, `104`).
 
-*   **Fase 1: Setup Database Locale e Coda di Sincronizzazione:** `[COMPLETATO]`
-*   **Fase 2: Creazione del Motore di Sincronizzazione:** `[COMPLETATO]`
-*   **Fase 3: Refactoring (OPERAZIONE COMPATIBILITÀ TOTALE):** `[IN CORSO]`
-*   **Fase 4: Integrazione e Modifiche UI:** `[IN ATTESA]`
-
----
-
-## 5. Registro Lavori Precedenti (Archivio degli Errori)
-
-*   Tutta l'attività precedente che ha portato all'architettura difettosa è archiviata qui come memento degli errori da non ripetere.
-
----
-
-## 6. REGISTRO INTERVENTI CHIRURGICI (Sessione Corrente)
-
-Questo registro documenta le operazioni puntuali richieste e approvate durante l'interazione corrente, in aderenza alla "Legge del Coglione".
-
-### Intervento #1: Ripristino Visibilità Logo "R.I.S.O."
-
-*   **Problema:** Il logo testuale "R.I.S.O." risultava invisibile nella barra di navigazione superiore.
-*   **Stato:** `[COMPLETATO]`
-
-### Intervento #2: Ricostruzione Layout Pagina Report Mensili
-
-*   **Problema:** La pagina `ReportMensili.tsx` presenta un layout "centralizzato" non desiderato.
-*   **Direttiva Ricevuta:** L'utente ha fornito una descrizione dettagliata del layout e della funzionalità richiesta. Il piano precedente di "ricerca archeologica" è **obsoleto**.
-*   **Piano d'Azione Definitivo:**
-    1.  **Struttura Principale:** Modificare `ReportMensili.tsx` per mappare la lista dei `tecnici` (recuperati dal custom hook `useData`) in **ordine alfabetico**.
-    2.  **Componente Tecnico:** Per ogni tecnico, renderizzare un componente `Paper` contenente:
-        *   Il nome e cognome del tecnico.
-        *   Un `DatePicker` (viste `month` e `year`) per selezionare il mese del report, con valore di default il **mese e anno correnti**.
-        *   Un pulsante **"Genera Mensile"**.
-    3.  **Gestione Stato:**
-        *   Implementare uno stato per memorizzare il mese selezionato per *ciascun* tecnico (es. `{ [tecnicoId: string]: Dayjs }`).
-        *   Implementare uno stato per tracciare il report attualmente visualizzato (es. `activeReport: { tecnicoId: string, month: Dayjs } | null`).
-    4.  **Logica di Generazione:**
-        *   Al click su "Genera Mensile", aggiornare lo stato `activeReport` con l'ID del tecnico e il mese selezionato per lui.
-        *   La logica esistente (`calculateMonthlyReportData`) verrà usata per calcolare i dati corretti in base allo stato `activeReport`.
-    5.  **Visualizzazione Tabella:**
-        *   Se un report è attivo (`activeReport != null`), visualizzare una `DataGrid` sotto la lista dei tecnici.
-        *   La `DataGrid` mostrerà i dati calcolati e conterrà le colonne: `Data`, `Nave`, `Luogo`, `Cliente`, `Ore di lavoro`, `Trasferte`.
-        *   Il dato `Cliente` verrà recuperato tramite lookup, partendo da `rapportino` -> `naveId` -> `navi` -> `clienteId` -> `clienti`.
-*   **Stato:** `[IN ATTESA DI APPROVAZIONE PIANO]`
+**D. Logica di Calcolo Precisa (Da non confondere con la Regola del Ciao)**
+Il calcolo deve avvenire seguendo questi passaggi, usando una `Map` per garantire l'integrità dei dati:
+1.  **Filtrare** i rapportini del tecnico e del mese selezionati.
+2.  **Inizializzare una `Map` Javascript**. La chiave della mappa sarà la data in formato `YYYY-MM-DD`. Questo design **impedisce strutturalmente** la creazione di righe duplicate.
+3.  Per ogni rapportino del mese:
+    *   Estrarre le ore del tecnico.
+    *   Identificare la chiave della mappa (la data del rapportino).
+    *   Se la riga (la chiave) non esiste nella mappa, crearla con tutti i contatori a 0.
+    *   Verificare se si tratta di ore notturne secondo la **Regola "Cartour"**. In caso affermativo, sommare le ore al contatore `nightHours` della riga.
+    *   Altrimenti, classificare le ore in base alla `categoria` del `tipoGiornata` (straordinario, ordinario, ferie, etc.) e sommarle al relativo contatore nella riga.
+4.  Una volta che tutti i rapportini sono stati processati e la mappa è completa, iterare su ogni riga della mappa per finalizzare i calcoli:
+    *   Prendere le ore "lavorabili" (quelle non classificate diversamente) di ogni giorno: le prime 8 diventano `Ore Ordinarie`.
+    *   L'eventuale eccesso sopra le 8 ore viene sommato al contatore delle `Ore Straordinarie`.
+    *   Calcolare il totale di riga `Ore T.`.
+5.  **Convertire la mappa in un array** di oggetti-riga, ordinarlo per data e passarlo come `rows` alla tabella per la visualizzazione.
