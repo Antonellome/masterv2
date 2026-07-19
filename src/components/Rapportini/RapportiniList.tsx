@@ -1,14 +1,13 @@
 
 import React from 'react';
-import { DataGrid, GridColDef, GridValueGetterParams } from '@mui/x-data-grid';
-import { Box, Paper, IconButton, Tooltip } from '@mui/material';
+import { DataGrid, GridColDef, GridValueGetterParams, GridRenderCellParams } from '@mui/x-data-grid';
+import { Box, Paper, IconButton, Tooltip, Typography } from '@mui/material';
 import Edit from '@mui/icons-material/Edit';
 import Delete from '@mui/icons-material/Delete';
 import type { Rapportino, Tecnico } from '@/models/definitions';
-import { format } from 'date-fns';
-import it from 'date-fns/locale/it';
 import CustomToolbar from '@/components/CustomToolbar';
-import { calculateTotalHours } from '@/utils/hoursCalculator'; // <-- 1. IMPORT DEL CALCOLATORE SACRO
+import { calculateTotalHours } from '@/utils/hoursCalculator';
+import { formatDateForDisplay } from '@/utils/dateUtils'; // <-- IMPORT DELL'UNICA VERA LEGGE
 
 interface RapportiniListProps {
     rapportini: Rapportino[];
@@ -25,20 +24,24 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
 
     const columns: GridColDef[] = [
         {
-            field: 'dataInizio', // <-- 2. CORREZIONE CAMPO DATA
+            field: 'dataInizio',
             headerName: 'Data',
             width: 110,
-            // Value getter per retrocompatibilità
             valueGetter: (params: GridValueGetterParams) => {
                 const row = params.row as Partial<Rapportino>;
                 return row.dataInizio || row.data;
             },
-            valueFormatter: (params) => {
-                if (!params.value) return '';
-                const date = params.value.toDate ? params.value.toDate() : new Date(params.value);
-                return format(date, 'dd/MM/yyyy', { locale: it });
+            // --- APPLICAZIONE DELLA NUOVA LEGGE ---
+            renderCell: (params: GridRenderCellParams) => {
+                const formattedDate = formatDateForDisplay(params.value);
+                const isInvalid = formattedDate === 'Data Invalida';
+                return (
+                    <Typography color={isInvalid ? 'error' : 'inherit'}>
+                        {formattedDate}
+                    </Typography>
+                );
             },
-            type: 'date',
+            type: 'date', // Mantenuto per l'ordinamento
         },
         {
             field: 'cognome',
@@ -75,7 +78,7 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
             },
         },
         {
-            field: 'oreTotali', // <-- 3. NUOVA COLONNA ORE CON CALCOLATORE
+            field: 'oreTotali',
             headerName: 'Ore',
             type: 'number',
             width: 80,
@@ -124,7 +127,7 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
                 initialState={{
                     pagination: { paginationModel: { pageSize: 50 } },
                     sorting: {
-                        sortModel: [{ field: 'dataInizio', sort: 'desc' }], // <-- CORREZIONE ORDINAMENTO
+                        sortModel: [{ field: 'dataInizio', sort: 'desc' }],
                     },
                 }}
                 pageSizeOptions={[25, 50, 100]}

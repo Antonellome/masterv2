@@ -1,5 +1,6 @@
+
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
-import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
+import { useAnagraficaData } from '@/contexts/DataContext.tsx'; 
 import { Box, Chip, Typography } from '@mui/material';
 import dayjs from 'dayjs';
 import { Timestamp } from 'firebase/firestore';
@@ -56,10 +57,8 @@ const columns: GridColDef<ScadenzaRow>[] = [
 ];
 
 const ScadenzeGrid = () => {
-    // CORREZIONE: Destruttura correttamente i dati da useData
-    const { veicoli, documenti, tecnici } = useData();
+    const { veicoli, tecnici } = useAnagraficaData();
 
-    // CORREZIONE: Utilizza le proprietà corrette degli oggetti
     const rows: ScadenzaRow[] = [
         ...(veicoli || []).flatMap((v: Veicolo): ScadenzaRow[] => [
             { id: `${v.id}-ass`, origine: `${v.targa}`, tipoScadenza: 'Assicurazione', dataScadenza: v.scadenzaAssicurazione },
@@ -67,9 +66,6 @@ const ScadenzeGrid = () => {
             { id: `${v.id}-rev`, origine: `${v.targa}`, tipoScadenza: 'Revisione', dataScadenza: v.scadenzaRevisione },
             { id: `${v.id}-tagl`, origine: `${v.targa}`, tipoScadenza: 'Tagliando', dataScadenza: v.scadenzaTagliando },
             { id: `${v.id}-tachi`, origine: `${v.targa}`, tipoScadenza: 'Tachigrafo', dataScadenza: v.scadenzaTachigrafo },
-        ].filter(item => item.dataScadenza)),
-        ...(documenti || []).flatMap((d: Documento): ScadenzaRow[] => [
-            { id: `${d.id}-scad`, origine: d.nome, tipoScadenza: 'Scadenza Documento', dataScadenza: d.dataScadenza },
         ].filter(item => item.dataScadenza)),
         ...(tecnici || []).flatMap((t: Tecnico): ScadenzaRow[] => [
             { id: `${t.id}-visita`, origine: `${t.cognome} ${t.nome}`, tipoScadenza: 'Visita Medica', dataScadenza: t.scadenzaVisita },

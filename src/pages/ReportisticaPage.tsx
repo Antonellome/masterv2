@@ -5,6 +5,7 @@ import AddIcon from '@mui/icons-material/Add';
 import RicercaAvanzata from '@/components/Reportistica/RicercaAvanzata';
 import AnalisiOre from '@/components/Reportistica/AnalisiOre';
 import ReportMensili from '@/components/Reportistica/ReportMensili';
+import CumulativiTecnici from '@/components/Reportistica/CumulativiTecnici'; // <-- IMPORTAZIONE NUOVO COMPONENTE
 
 // Pannello semplificato: un semplice contenitore condizionale
 function CustomTabPanel(props: { children?: React.ReactNode; index: number; value: number; }) {
@@ -28,6 +29,7 @@ const ReportisticaPage = () => {
         <Tabs value={value} onChange={handleChange} variant="scrollable" scrollButtons="auto" sx={{ flexGrow: 1 }}>
           <Tab label="Ricerca Avanzata" />
           <Tab label="Report Mensili" />
+          <Tab label="Cumulativi Tecnici" /> {/* <-- NUOVA SCHEDA */}
           <Tab label="Analisi Ore Lavorate" />
         </Tabs>
         <Tooltip title="Nuovo Rapportino">
@@ -48,7 +50,9 @@ const ReportisticaPage = () => {
                 <ReportMensili />
             </CustomTabPanel>
             <CustomTabPanel value={value} index={2}>
-                {/* AnalisiOre riceve il padding dal genitore e non ha bisogno di stili di layout complessi */}
+                <CumulativiTecnici /> {/* <-- NUOVO PANNELLO */}
+            </CustomTabPanel>
+            <CustomTabPanel value={value} index={3}>
                 <AnalisiOre />
             </CustomTabPanel>
         </Paper>

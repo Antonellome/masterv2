@@ -1,40 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '@/firebase';
-import { Button, Box, CircularProgress, Typography, Alert, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Snackbar } from '@mui/material';
+import React, { useState } from 'react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { Button, Box, CircularProgress, Typography, Alert, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 
-// Riferimento alle Cloud Functions
-const runMigrationCallable = httpsCallable(functions, 'executeMigration');
-const forceAdminCallable = httpsCallable(functions, 'forceAdmin');
+// La funzione, come confermato dalla console di Firebase, è in us-central1.
+// Questa è la configurazione corretta e definitiva.
+const functions = getFunctions(undefined, 'us-central1');
+const executeMigrationCallable = httpsCallable(functions, 'executeMigration');
 
 const MigrationRunner = () => {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{ success: boolean; message: string; } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [openConfirm, setOpenConfirm] = useState(false);
-    const [syncing, setSyncing] = useState(false);
-    const [syncMessage, setSyncMessage] = useState<string | null>(null);
-
-    useEffect(() => {
-        const synchronizePermissions = async () => {
-            setSyncing(true);
-            setSyncMessage("Sincronizzazione permessi in corso...");
-            try {
-                await forceAdminCallable();
-                setSyncMessage("Permessi di amministratore sincronizzati con successo.");
-            } catch (err) {
-                console.error("Errore durante la sincronizzazione dei permessi:", err);
-                setSyncMessage("Errore durante la sincronizzazione dei permessi.");
-            }
-            setTimeout(() => {
-                setSyncing(false);
-                setSyncMessage(null);
-            }, 3000); // Nasconde il messaggio dopo 3 secondi
-        };
-
-        synchronizePermissions();
-    }, []);
 
     const handleOpenConfirm = () => {
         setResult(null);
@@ -53,19 +31,23 @@ const MigrationRunner = () => {
         setResult(null);
 
         try {
-            const response = await runMigrationCallable({});
-            const data = response.data as { success: boolean; message: string; createdCount: number };
+            const response = await executeMigrationCallable({});
+            const data = response.data as { success: boolean; rapportiniAggiornati: number; message: string };
 
             if (data.success) {
-                setResult({ success: true, message: data.message });
+                const message = data.rapportiniAggiornati > 0 
+                    ? `Migrazione completata con successo! ${data.rapportiniAggiornati} rapportini sono stati aggiornati.` 
+                    : "Database già aggiornato. Nessuna modifica necessaria.";
+                setResult({ success: true, message });
             } else {
                 setError(data.message || "Si è verificato un errore sconosciuto durante la migrazione.");
             }
 
         } catch (err: any) {
             console.error("Errore grave durante l'esecuzione della migrazione:", err);
+            console.error("Dettagli errore Firebase:", err.details);
             const errorMessage = err.message || "Errore sconosciuto. Controlla i log della Cloud Function per maggiori dettagli.";
-            setError(`Errore durante l'esecuzione della migrazione: ${errorMessage}`);
+            setError(`Errore grave durante l'esecuzione della migrazione: ${errorMessage}`);
         } finally {
             setLoading(false);
         }
@@ -77,22 +59,22 @@ const MigrationRunner = () => {
                 Strumento di Migrazione Dati
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Questo strumento serve per sanare la base di dati, creando i profili mancanti per i tecnici che esistono nel sistema di autenticazione ma non in anagrafica (tecnici "fantasma").
+                Questo strumento aggiorna i vecchi rapportini alla nuova struttura dati. L'operazione è sicura e può essere eseguita più volte.
             </Typography>
             
             <Button 
                 variant="contained"
                 color="warning"
                 onClick={handleOpenConfirm}
-                disabled={loading || syncing}
+                disabled={loading}
             >
-                {loading ? 'Esecuzione in corso...' : 'Avvia Migrazione Tecnici Fantasma'}
+                {loading ? 'Esecuzione in corso...' : 'Avvia Migrazione Dati'}
             </Button>
 
             {loading && <CircularProgress size={24} sx={{ ml: 2 }} />}
 
             {result && (
-                <Alert severity={result.success ? 'success' : 'error'} sx={{ mt: 2 }}>
+                <Alert severity={result.success ? 'success' : 'info'} sx={{ mt: 2 }}>
                     {result.message}
                 </Alert>
             )}
@@ -102,14 +84,11 @@ const MigrationRunner = () => {
                 </Alert>
             )}
 
-            <Dialog
-                open={openConfirm}
-                onClose={handleCloseConfirm}
-            >
-                <DialogTitle>Conferma Migrazione</DialogTitle>
+            <Dialog open={openConfirm} onClose={handleCloseConfirm}>
+                <DialogTitle>Conferma Migrazione Dati</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        Stai per avviare il processo di migrazione dei "tecnici fantasma". Questa operazione non modifica o elimina dati esistenti, ma aggiunge solo i profili mancanti.
+                        Stai per avviare il processo di aggiornamento dei rapportini. L'operazione potrebbe richiedere alcuni minuti.
                         <br/><br/>
                         Sei sicuro di voler procedere?
                     </DialogContentText>
@@ -121,12 +100,6 @@ const MigrationRunner = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            <Snackbar
-                open={syncing}
-                message={syncMessage}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-            />
         </Box>
     );
 };

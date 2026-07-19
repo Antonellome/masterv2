@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import {
     Box,
@@ -24,12 +25,17 @@ import {
 import Edit from '@mui/icons-material/Edit';
 import Delete from '@mui/icons-material/Delete';
 import Add from '@mui/icons-material/Add';
-import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
+
+// AGGIORNAMENTO: Utilizziamo il context moderno e i nuovi servizi
+import { useAnagraficaData } from '@/contexts/DataContext';
+import { saveTipoGiornata, deleteTipoGiornata } from '@/services/tipiGiornataService';
+
 import TipoGiornataForm from '@/components/TipiGiornata/TipoGiornataForm';
 import type { TipoGiornata } from '@/models/definitions';
 
 const GestioneTipiGiornata: React.FC = () => {
-    const { tipiGiornata, loading, error, addData, updateData, deleteData } = useData();
+    // Lettura dati dal context locale (veloce e offline-first)
+    const { tipiGiornata, loading, error } = useAnagraficaData();
 
     const [formOpen, setFormOpen] = useState(false);
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -58,15 +64,12 @@ const GestioneTipiGiornata: React.FC = () => {
         setItemToDelete(null);
     };
 
+    // AGGIORNAMENTO: Utilizzo del nuovo service per il salvataggio
     const handleSave = async (formData: Partial<TipoGiornata>) => {
         try {
-            if (selectedTipoGiornata && selectedTipoGiornata.id) {
-                await updateData('tipiGiornata', selectedTipoGiornata.id, formData);
-                setFeedback({ type: 'success', message: `"${formData.nome}" aggiornato con successo.` });
-            } else {
-                await addData('tipiGiornata', formData);
-                setFeedback({ type: 'success', message: `"${formData.nome}" creato con successo.` });
-            }
+            const dataToSave = { ...selectedTipoGiornata, ...formData };
+            await saveTipoGiornata(dataToSave);
+            setFeedback({ type: 'success', message: `"${formData.nome}" salvato con successo.` });
             handleCloseForm();
         } catch (err) {
             console.error("Errore nel salvataggio:", err);
@@ -74,10 +77,11 @@ const GestioneTipiGiornata: React.FC = () => {
         }
     };
 
+    // AGGIORNAMENTO: Utilizzo del nuovo service per l'eliminazione
     const handleDelete = async () => {
         if (itemToDelete && itemToDelete.id) {
             try {
-                await deleteData('tipiGiornata', itemToDelete.id);
+                await deleteTipoGiornata(itemToDelete.id);
                 setFeedback({ type: 'success', message: 'Tipo giornata eliminato con successo.' });
             } catch (err) {
                 console.error("Errore eliminazione:", err);
@@ -96,7 +100,7 @@ const GestioneTipiGiornata: React.FC = () => {
                 <Button variant="contained" startIcon={<Add />} onClick={() => handleOpenForm()}>Aggiungi Tipo Giornata</Button>
             </Stack>
 
-            {error && <Alert severity="error" sx={{ my: 2 }}>{error}</Alert>}
+            {error && <Alert severity="error" sx={{ my: 2 }}>{error.message}</Alert>}
             {feedback && <Alert severity={feedback.type} sx={{ my: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
 
             <TableContainer component={Paper}>
@@ -110,8 +114,8 @@ const GestioneTipiGiornata: React.FC = () => {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {tipiGiornata && tipiGiornata.map((item) => (
-                            <TableRow key={item.id}>
+                        {tipiGiornata && [...tipiGiornata].sort((a,b) => a.nome.localeCompare(b.nome)).map((item) => (
+                            <TableRow key={item.id} hover>
                                 <TableCell>{item.nome}</TableCell>
                                 <TableCell>{typeof item.tariffa === 'number' ? item.tariffa.toFixed(2) : 'N/D'}</TableCell>
                                 <TableCell>{item.tipo}</TableCell>

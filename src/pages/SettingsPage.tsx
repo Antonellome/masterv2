@@ -7,6 +7,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import ThemeIcon from '@mui/icons-material/InvertColors';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import SystemUpdateIcon from '@mui/icons-material/SystemUpdate';
+import DataUsageIcon from '@mui/icons-material/DataUsage';
 
 import GestioneAmministratori from '@/components/Settings/GestioneAmministratori';
 import GeneralSettingsTab from '@/components/Settings/GeneralSettingsTab';
@@ -14,6 +15,7 @@ import BackupTab from '@/components/Settings/BackupTab';
 import OrariTab from '@/components/Settings/OrariTab';
 import ThemeTab from '@/components/Settings/ThemeTab';
 import VersioneAppTab from '@/components/Settings/VersioneAppTab';
+import MigrationRunner from '@/components/Settings/MigrationRunner';
 
 const SettingsPage = () => {
   const [tabValue, setTabValue] = useState(0);
@@ -38,6 +40,7 @@ const SettingsPage = () => {
         <Tab icon={<ScheduleIcon />} label="Orari" />
         <Tab icon={<ThemeIcon />} label="Tema" />
         <Tab icon={<SystemUpdateIcon />} label="Versione App" />
+        <Tab icon={<DataUsageIcon />} label="Migrazione" />
       </Tabs>
 
       <Box sx={{ pt: 2, minHeight: 400 }}>
@@ -47,6 +50,7 @@ const SettingsPage = () => {
         {tabValue === 3 && <OrariTab />}
         {tabValue === 4 && <ThemeTab />}
         {tabValue === 5 && <VersioneAppTab />}
+        {tabValue === 6 && <MigrationRunner />}
       </Box>
 
     </Paper>

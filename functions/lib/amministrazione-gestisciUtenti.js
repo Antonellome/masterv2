@@ -15,131 +15,98 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.amministrazione_gestisciUtenti = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
-// Inizializza l'SDK di Admin se non è già stato fatto
+// INIZIALIZZAZIONE
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const auth = admin.auth();
 const db = admin.firestore();
 /**
- * Funzione centralizzata per la gestione degli utenti e degli amministratori.
- * Verifica che il chiamante sia un amministratore prima di eseguire qualsiasi azione.
- * Azioni supportate:
- * - createUser: Crea un nuovo utente in Firebase Auth e nella collezione 'utenti_master'.
- * - deleteUser: Elimina un utente da Firebase Auth e dalle collezioni Firestore.
- * - setRole: Promuove un utente ad admin o lo retrocede a utente normale,
- *            spostando il suo record tra le collezioni 'amministratori' e 'utenti_master'.
+ * Funzione UNIFICATA e CORRETTA per la gestione utenti.
+ * Utilizza ESCLUSIVAMENTE la collezione `admins` per la logica degli amministratori.
  */
 exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.onCall(async (data, context) => {
-    // 1. Verifica che il chiamante sia un amministratore autenticato
+    // 1. CHECK PERMESSI: Unificato e corretto su collezione `admins`
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Autenticazione richiesta.");
     }
     try {
-        const adminDoc = await db.collection("amministratori").doc(context.auth.uid).get();
+        const adminDoc = await db.collection("admins").doc(context.auth.uid).get();
         if (!adminDoc.exists) {
-            throw new functions.https.HttpsError("permission-denied", "Solo gli amministratori possono eseguire questa azione.");
+            throw new functions.https.HttpsError("permission-denied", "Azione consentita solo agli amministratori.");
         }
     }
     catch (error) {
         throw new functions.https.HttpsError("internal", "Errore durante la verifica dei permessi.", error);
     }
-    const { action, uid, email, nome, role } = data;
+    const { action, uid, email, nome, telefono } = data;
     try {
         switch (action) {
-            // --- CREAZIONE DI UN NUOVO UTENTE ---
+            // --- CREAZIONE UTENTE --- (Logica invariata, ma più pulita)
             case "createUser": {
-                if (!email || !nome) {
-                    throw new functions.https.HttpsError("invalid-argument", "Email e nome sono richiesti per creare un utente.");
+                if (!email || !nome || !telefono) {
+                    throw new functions.https.HttpsError("invalid-argument", "Email, nome e telefono sono richiesti.");
                 }
-                // Crea l'utente in Firebase Authentication
-                const newUserRecord = await auth.createUser({ email, displayName: nome });
-                // Aggiunge l'utente alla collezione degli utenti "normali"
-                await db.collection("utenti_master").doc(newUserRecord.uid).set({ nome, email });
-                return { success: true, message: `Utente ${nome} creato con successo.` };
+                const newUserRecord = await auth.createUser({ email, displayName: nome, phoneNumber: telefono });
+                await db.collection("utenti_master").doc(newUserRecord.uid).set({ nome, email, telefono });
+                return { success: true, message: `Utente ${nome} creato.` };
             }
-            // --- ELIMINAZIONE DI UN UTENTE ---
+            // --- MODIFICA UTENTE --- (Logica corretta e unificata)
+            case "updateUser": {
+                if (!uid || !nome || !telefono) {
+                    throw new functions.https.HttpsError("invalid-argument", "UID, nome e telefono sono richiesti per l'aggiornamento.");
+                }
+                // Aggiorna Authentication
+                await auth.updateUser(uid, { displayName: nome, phoneNumber: telefono });
+                const dataToUpdate = { nome, telefono };
+                // Aggiorna Firestore con una transazione per garantire coerenza
+                await db.runTransaction(async (transaction) => {
+                    const userMasterRef = db.collection("utenti_master").doc(uid);
+                    const adminRef = db.collection("admins").doc(uid);
+                    // Aggiorna sempre la master list
+                    transaction.update(userMasterRef, dataToUpdate);
+                    // Se l'utente è un admin, aggiorna anche la collezione admins
+                    const adminDoc = await transaction.get(adminRef);
+                    if (adminDoc.exists) {
+                        transaction.update(adminRef, dataToUpdate);
+                    }
+                });
+                return { success: true, message: `Utente ${nome} aggiornato.` };
+            }
+            // --- ELIMINAZIONE UTENTE --- (Logica corretta e unificata)
             case "deleteUser": {
                 if (!uid) {
                     throw new functions.https.HttpsError("invalid-argument", "UID dell'utente richiesto per l'eliminazione.");
                 }
-                // Elimina l'utente da Firebase Authentication
                 await auth.deleteUser(uid);
-                // Elimina l'utente da entrambe le possibili collezioni in Firestore
-                await db.collection("amministratori").doc(uid).delete();
+                // Elimina da tutte le possibili collezioni per pulizia definitiva
                 await db.collection("utenti_master").doc(uid).delete();
+                await db.collection("admins").doc(uid).delete();
+                await db.collection("amministratori").doc(uid).delete(); // Pulizia finale della vecchia collezione
                 return { success: true, message: "Utente eliminato con successo." };
             }
-            // --- IMPOSTAZIONE DEL RUOLO (PROMOZIONE/REVOCA) ---
-            case "setRole": {
-                if (!uid || !role) {
-                    throw new functions.https.HttpsError("invalid-argument", "UID e ruolo sono richiesti.");
-                }
-                // Trova i dati dell'utente (potrebbe essere in una delle due collezioni)
-                let userData = {};
-                const adminDoc = await db.collection("amministratori").doc(uid).get();
-                if (adminDoc.exists) {
-                    userData = adminDoc.data();
-                }
-                else {
-                    const userDoc = await db.collection("utenti_master").doc(uid).get();
-                    if (userDoc.exists) {
-                        userData = userDoc.data();
-                    }
-                }
-                // Se non troviamo l'utente da nessuna parte, cerchiamo in Auth
-                if (!userData.email) {
-                    const authUser = await auth.getUser(uid);
-                    userData = { nome: authUser.displayName, email: authUser.email };
-                }
-                if (role === "admin") {
-                    // Promuovi ad Amministratore
-                    await db.collection("amministratori").doc(uid).set({ nome: userData.nome || 'N/A', email: userData.email || 'N/A' });
-                    await db.collection("utenti_master").doc(uid).delete();
-                    return { success: true, message: "Utente promosso ad amministratore." };
-                }
-                else if (role === "user") {
-                    // Retrocedi a Utente
-                    await db.collection("utenti_master").doc(uid).set({ nome: userData.nome || 'N/A', email: userData.email || 'N/A' });
-                    await db.collection("amministratori").doc(uid).delete();
-                    return { success: true, message: "Privilegi di amministratore revocati." };
-                }
-                else {
-                    throw new functions.https.HttpsError("invalid-argument", `Ruolo non valido: ${role}.`);
-                }
-            }
+            // L'azione `setRole` è stata rimossa perché gestita dal frontend. Questo previene conflitti.
             default:
-                throw new functions.https.HttpsError("invalid-argument", "Azione non valida.");
+                throw new functions.https.HttpsError("invalid-argument", `Azione non valida o non riconosciuta: '${action}'.`);
         }
     }
     catch (error) {
-        console.error(`Errore durante l'azione '${action}' sull'utente ${uid}:`, error);
-        // Restituisce un messaggio d'errore più specifico se disponibile
+        console.error(`ERRORE durante l'azione '${action}' sull'utente ${uid}:`, error);
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
-        throw new functions.https.HttpsError("internal", error.message || "Si è verificato un errore interno.");
+        throw new functions.https.HttpsError("internal", error.message || "Si è verificato un errore interno catastrofico.");
     }
 });
 //# sourceMappingURL=amministrazione-gestisciUtenti.js.map

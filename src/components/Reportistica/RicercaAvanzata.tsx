@@ -104,7 +104,8 @@ const RicercaAvanzata: React.FC = () => {
         const luoghiMap = new Map(anagraficaLuoghi.map((l) => [l.id, l]));
 
         return rapportini.map((rapportino) => {
-            const dataNormalizzata = normalizeDate(rapportino.data);
+            const dataDaNormalizzare = (rapportino as any).dataInizio || rapportino.data;
+            const dataNormalizzata = normalizeDate(dataDaNormalizzare);
             
             let clienteNome = "N/D";
             let finalClienteId: string | undefined = undefined;

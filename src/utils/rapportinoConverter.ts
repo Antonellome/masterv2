@@ -1,6 +1,5 @@
 
 import type { Rapportino, DettaglioOre } from '@/models/definitions';
-import { Timestamp } from 'firebase/firestore';
 
 /**
  * Questa è l'interfaccia STANDARD a cui ogni rapportino deve essere convertito
@@ -9,13 +8,9 @@ import { Timestamp } from 'firebase/firestore';
 export interface RapportinoStandard {
     id: string;
     isNew: boolean;
-    
-    // Campi anagrafici
     tecnicoId: string;
-    dataInizio: Date;
+    dataInizio: any; 
     tipoGiornataId: string;
-
-    // Campi di dettaglio
     naveId: string | null;
     luogoId: string | null;
     veicoloId: string | null;
@@ -23,11 +18,7 @@ export interface RapportinoStandard {
     descrizioneBreve: string;
     lavoroEseguito: string;
     materialiImpiegati: string;
-
-    // Dettaglio ore standardizzato
     dettaglioOre: DettaglioOre[];
-
-    // Metadati originali per il salvataggio
     originalData: Rapportino;
 }
 
@@ -43,14 +34,12 @@ const SEPARATORE_NOTE_LEGACY = '\n\n---\n\n';
 export function convertToRapportinoStandard(rapportino: Partial<Rapportino> | null): RapportinoStandard {
     const isNew = !rapportino || !rapportino.id;
 
-    // --- VALORI DI DEFAULT PER UN NUOVO RAPPORTINO ---
     if (isNew) {
-        const now = new Date();
         return {
-            id: '', // Sarà generato al salvataggio
+            id: '', 
             isNew: true,
             tecnicoId: '',
-            dataInizio: now,
+            dataInizio: new Date(),
             tipoGiornataId: '',
             naveId: null,
             luogoId: null,
@@ -64,13 +53,13 @@ export function convertToRapportinoStandard(rapportino: Partial<Rapportino> | nu
         };
     }
 
-    // --- LOGICA DI CONVERSIONE PER UN RAPPORTINO ESISTENTE ---
     const original = rapportino as Rapportino;
 
-    // 1. Conversione Data
-    const dataInizio = (original.dataInizio as Timestamp)?.toDate() || (original.data as Timestamp)?.toDate() || new Date();
+    // --- LA CORREZIONE. NESSUNA CONVERSIONE. NESSUNA IPOTESI. ---
+    // Passiamo il dato grezzo (che sia un Timestamp o un oggetto {seconds: ...}).
+    // La responsabilità di interpretarlo è del componente che lo usa, tramite `parseToDayjs`.
+    const dataInizio = original.dataInizio || original.data;
 
-    // 2. Conversione Lavoro Eseguito e Materiali (per retrocompatibilità)
     let lavoroEseguito = original.lavoroEseguito || '';
     let materialiImpiegati = original.materialiImpiegati || '';
     if (!lavoroEseguito && (original as any).note) {
@@ -79,22 +68,20 @@ export function convertToRapportinoStandard(rapportino: Partial<Rapportino> | nu
         materialiImpiegati = materiali.join(SEPARATORE_NOTE_LEGACY) || '';
     }
 
-    // 3. Conversione Dettaglio Ore (IL CUORE DEL PROBLEMA)
     const dettaglioOreRaw = original.dettaglioOre || (original as any).dettaglioOreTecnici || [];
     const dettaglioOre: DettaglioOre[] = (dettaglioOreRaw as any[]).map(d => ({
         tecnicoId: d.tecnicoId,
         oraInizio: d.oraInizio || null,
         oraFine: d.oraFine || null,
-        // Privilegia le ore esplicite se presenti, altrimenti le lascia undefined
         ore: typeof d.ore === 'number' ? d.ore : undefined,
-        isManual: d.isManual || (typeof d.ore === 'number'), // Se ha un campo 'ore' è da considerare manuale
+        isManual: d.isManual || (typeof d.ore === 'number'),
     }));
 
     return {
         id: original.id,
         isNew: false,
         tecnicoId: original.tecnicoId,
-        dataInizio: dataInizio,
+        dataInizio: dataInizio, // Ecco il dato, non corrotto.
         tipoGiornataId: original.tipoGiornataId || '',
         naveId: original.naveId || null,
         luogoId: original.luogoId || null,

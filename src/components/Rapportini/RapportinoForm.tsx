@@ -6,18 +6,21 @@ import {
 } from '@mui/material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import { Timestamp } from 'firebase/firestore';
 import type { Rapportino, TipoGiornata, Tecnico, Nave, Luogo, Veicolo, DettaglioOre } from '@/models/definitions';
 import { saveRapportino } from '@/services/rapportiniService';
-import { useData } from '@/hooks/useData';
+import { useCollectionData } from '@/hooks/useCollectionData';
 import { v4 as uuidv4 } from 'uuid';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { convertToRapportinoStandard, RapportinoStandard } from '@/utils/rapportinoConverter';
+import { convertToRapportinoStandard } from '@/utils/rapportinoConverter';
 import { calculateTotalHours } from '@/utils/hoursCalculator';
+import { parseToDayjs } from '@/utils/dateUtils'; // <-- IMPORT DELL'UNICA VERA LEGGE
 
 dayjs.locale('it');
+
+// --- VIA LA VECCHIA LOGICA INUTILE ---
 
 // Stato interno per la UI
 interface DettaglioOreState extends DettaglioOre { nome: string; }
@@ -28,19 +31,21 @@ interface RapportinoFormProps {
     initialDate?: dayjs.Dayjs;
 }
 
-// ======================================================================================
-// == RAPPORITNO FORM - VERSIONE "TRADUTTORE UNIVERSALE" (2024-07-28)
-// ======================================================================================
 const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: rapportinoGrezzzo, initialDate }) => {
     
-    // 1. USARE IL TRADUTTORE PER AVERE DATI PULITI
     const standardData = useMemo(() => convertToRapportinoStandard(rapportinoGrezzzo), [rapportinoGrezzzo]);
 
-    const { tecnici, navi, luoghi, veicoli, tipiGiornata, loading: loadingMasterData } = useData();
+    const { data: tecnici, loading: loadingTecnici } = useCollectionData<Tecnico>('tecnici';
+    const { data: navi, loading: loadingNavi } = useCollectionData<Nave>('navi');
+    const { data: luoghi, loading: loadingLuoghi } = useCollectionData<Luogo>('luoghi');
+    const { data: veicoli, loading: loadingVeicoli } = useCollectionData<Veicolo>('veicoli');
+    const { data: tipiGiornata, loading: loadingTipiGiornata } = useCollectionData<TipoGiornata>('tipiGiornata');
 
-    // 2. STATI DEL FORM BASATI ESCLUSIVAMENTE SUI DATI STANDARD
+    const loadingMasterData = loadingTecnici || loadingNavi || loadingLuoghi || loadingVeicoli || loadingTipiGiornata;
+
     const [tecnicoScrivente, setTecnicoScrivente] = useState<Tecnico | null>(null);
-    const [dataInizio, setDataInizio] = useState<dayjs.Dayjs | null>(dayjs(standardData.dataInizio));
+    // --- APPLICAZIONE DELLA NUOVA LEGGE ---
+    const [dataInizio, setDataInizio] = useState<Dayjs | null>(parseToDayjs(standardData.dataInizio) || (initialDate ? dayjs(initialDate) : dayjs()));
     const [tipoGiornataId, setTipoGiornataId] = useState(standardData.tipoGiornataId);
     const [nave, setNave] = useState<Nave | null>(null);
     const [luogo, setLuogo] = useState<Luogo | null>(null);
@@ -55,23 +60,21 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: ra
     const tipiGiornataMap = useMemo(() => new Map(tipiGiornata.map(t => [t.id, t])), [tipiGiornata]);
     const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`)), [tecnici]);
 
-    // 3. EFFETTO DI POPOLAMENTO SEMPLIFICATO
     useEffect(() => {
         if (loadingMasterData) return;
 
-        // Popola il form usando solo i dati standardizzati
         setTecnicoScrivente(tecniciMap.get(standardData.tecnicoId) || null);
         setNave(navi.find(n => n.id === standardData.naveId) || null);
         setLuogo(luoghi.find(l => l.id === standardData.luogoId) || null);
         setLavoroEseguito(standardData.lavoroEseguito);
         setMaterialiImpiegati(standardData.materialiImpiegati);
         setTipoGiornataId(standardData.tipoGiornataId);
-        setDataInizio(dayjs(standardData.dataInizio));
+        // --- APPLICAZIONE DELLA NUOVA LEGGE (ANCHE QUI) ---
+        setDataInizio(parseToDayjs(standardData.dataInizio) || (initialDate ? dayjs(initialDate) : dayjs()));
 
         const dettagliConNome = standardData.dettaglioOre.map(d => {
             const tecnico = tecniciMap.get(d.tecnicoId);
             const tipoGiornata = tipiGiornataMap.get(standardData.tipoGiornataId);
-            // **RISPOSTA SULLE ORE CORRETTE**: Usa il calcolatore se le ore non sono manuali
             const oreCalcolate = calculateTotalHours(tipoGiornata, [d]);
             return {
                 ...d,
@@ -81,7 +84,7 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: ra
         });
         setDettaglioOre(dettagliConNome);
 
-    }, [standardData, loadingMasterData, tecniciMap, navi, luoghi, tipiGiornataMap]);
+    }, [standardData, loadingMasterData, tecniciMap, navi, luoghi, tipiGiornataMap, initialDate]);
 
     
     const handleAddTecnico = (_: any, tecnico: Tecnico | null) => {
@@ -89,8 +92,8 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: ra
             const nuovoDettaglio: DettaglioOreState = {
                 tecnicoId: tecnico.id,
                 nome: `${tecnico.cognome} ${tecnico.nome}`,
-                ore: 8, // Default
-                isManual: true, // Le ore aggiunte da qui sono sempre manuali
+                ore: 8,
+                isManual: true,
             };
             setDettaglioOre(prev => [...prev, nuovoDettaglio]);
         }
@@ -104,7 +107,6 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: ra
         setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== tecnicoId));
     };
 
-    // 4. LOGICA DI SALVATAGGIO CHE SCRIVE SEMPRE NEL FORMATO NUOVO
     const handleSubmit = async () => {
         if (!tecnicoScrivente || !tipoGiornataId || !dataInizio) { setFormError("Compilare i campi obbligatori."); return; }
         setFormError(null);
@@ -122,12 +124,10 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: ra
                 luogoId: luogo?.id || null,
                 lavoroEseguito,
                 materialiImpiegati,
-                // Scrive sempre il dettaglio ore nel formato nuovo e pulito
                 dettaglioOre: dettaglioOre.map(({nome, ...rest}) => rest),
                 updatedAt: Timestamp.now(),
                 updatedBy: tecnicoScrivente.id,
                 version: (standardData.originalData?.version || 0) + 1,
-                // Rimuove i campi legacy sporchi
                 data: undefined,
                 note: undefined,
                 dettaglioOreTecnici: undefined,
@@ -149,7 +149,6 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: ra
                 <Grid container spacing={2} sx={{ mt: 1 }}>
                     {formError && <Grid item xs={12}><Alert severity="error">{formError}</Alert></Grid>}
                     
-                    {/* CAMPI FORM (ora più semplici) */}
                     <Grid item xs={12} md={8}>
                         <Autocomplete value={tecnicoScrivente} onChange={(_, v) => setTecnicoScrivente(v)} options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} isOptionEqualToValue={(o, v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Tecnico Responsabile" />} />
                     </Grid>

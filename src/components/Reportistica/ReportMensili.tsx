@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Paper, Typography, Box, Button, TextField, Autocomplete, CircularProgress, Chip } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
@@ -5,15 +6,12 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
 import 'dayjs/locale/it';
-import { useAlert } from '@/contexts/AlertContext';
 import { db } from '@/db/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Tecnico, Nave, TipoGiornata, Rapportino } from '@/models/definitions';
 
 dayjs.extend(isBetween);
-dayjs.extend(customParseFormat);
 dayjs.locale('it');
 
 // --- INTERFACCE --- 
@@ -39,31 +37,19 @@ interface ReportData {
     cols: GridColDef[];
 }
 
-// --- HELPERS (FINALMENTE COMPLETI) --- 
-const getCleanId = (id: any): string | undefined => (typeof id === 'string' && id) || (id?.id as string | undefined);
-
-const normalizeDate = (date: any): Date | null => {
-    if (!date) return null;
-    if (date instanceof Date) return date;
-    if (typeof date.toDate === 'function') return date.toDate();
-    if (date.seconds) return new Date(date.seconds * 1000);
-    const d = dayjs(date, 'DD/MM/YYYY', true);
-    return d.isValid() ? d.toDate() : (dayjs(date).isValid() ? dayjs(date).toDate() : null);
+// --- HELPERS (CORRETTI E ALLINEATI A CUMULATIVITECNICI.TSX) --- 
+const getCleanId = (id: any): string | undefined => {
+    if (typeof id === 'string' && id) return id;
+    if (id && typeof id === 'object' && id.id && typeof id.id === 'string') return id.id;
+    return undefined;
 };
 
-const normalizeTime = (time: any): Dayjs | null => {
-    if (!time) return null;
-    if (dayjs.isDayjs(time)) return time;
-    if (typeof time.toDate === 'function') return dayjs(time.toDate());
-    if (time instanceof Date) return dayjs(time);
-    if (typeof time === 'string') {
-        let d = dayjs(time, 'HH:mm', true);
-        if (d.isValid()) return d;
-        d = dayjs(time);
-        if (d.isValid()) return d;
-    }
-    if (time.seconds) return dayjs(new Date(time.seconds * 1000));
-    return null;
+const normalizeDate = (date: any): Date => {
+    if (!date) return new Date('invalid');
+    if (date && typeof date.seconds === 'number') { return new Date(date.seconds * 1000); }
+    if (typeof date.toDate === 'function') { return date.toDate(); }
+    const parsedDate = dayjs(date);
+    return parsedDate.isValid() ? parsedDate.toDate() : new Date('invalid');
 };
 
 const parseFloatWithComma = (value: any): number => {
@@ -86,7 +72,7 @@ const abbreviate = (name: string): string => {
     return name.substring(0, 4);
 };
 
-// --- LOGICA DI CALCOLO --- 
+// --- LOGICA DI CALCOLO (RISCRITTA E ALLINEATA) --- 
 const calculateReportData = (
     selectedTecnico: Tecnico,
     selectedMonth: Dayjs,
@@ -98,23 +84,62 @@ const calculateReportData = (
     const tipiGiornataMap = new Map(allTipiGiornata.map(t => [t.id, t]));
     const startOfMonth = selectedMonth.startOf('month');
     const endOfMonth = selectedMonth.endOf('month');
+    const selectedTecnicoId = getCleanId(selectedTecnico.id)!;
 
     const rapportiniDelMese = allRapportini.filter(r => {
-        const dataRapportino = normalizeDate(r.data);
-        return dataRapportino && dayjs(dataRapportino).isBetween(startOfMonth, endOfMonth, 'day', '[]');
+        // LOGICA DATA CORRETTA
+        const dataDaNormalizzare = (r as any).dataInizio || r.data;
+        const dataNormalizzata = normalizeDate(dataDaNormalizzare);
+        const dataRapportino = dayjs(dataNormalizzata);
+        return dataRapportino.isValid() && dataRapportino.isBetween(startOfMonth, endOfMonth, 'day', '[]');
+    });
+
+    // Filtra solo i rapportini dove il tecnico è coinvolto
+    const rapportiniTecnico = rapportiniDelMese.filter(r => {
+        const allLegacyTecnici = new Set<string>();
+        const addId = (id: any) => { const cleanId = getCleanId(id); if (cleanId) allLegacyTecnici.add(cleanId); };
+        addId(r.tecnicoId); (r.altriTecniciIds || []).forEach(addId); (r.presenze || []).forEach(addId);
+        const dettaglioTecniciIds = new Set((r.dettaglioOreTecnici || []).map(d => getCleanId(d.tecnicoId)));
+        return allLegacyTecnici.has(selectedTecnicoId) || dettaglioTecniciIds.has(selectedTecnicoId);
     });
 
     const aggregationMap = new Map<string, any>();
     const dynamicHourTypesInMonth = new Map<string, TipoGiornata>();
 
-    for (const r of rapportiniDelMese) {
+    for (const r of rapportiniTecnico) {
         let oreDelTecnico = 0;
-        const dettaglioTecnico = r.dettaglioOreTecnici?.find(d => getCleanId(d.tecnicoId) === selectedTecnico.id);
-        oreDelTecnico = dettaglioTecnico ? parseFloatWithComma(dettaglioTecnico.ore) : (getCleanId(r.tecnicoId) === selectedTecnico.id ? parseFloatWithComma(r.oreLavoro) : 0);
+        const isNewHybridModel = r.dettaglioOreTecnici && Array.isArray(r.dettaglioOreTecnici) && r.dettaglioOreTecnici.length > 0;
+        const principaleId = getCleanId(r.tecnicoId);
+
+        if (isNewHybridModel) {
+            const dettaglioTecnico = r.dettaglioOreTecnici!.find(d => getCleanId(d.tecnicoId) === selectedTecnicoId);
+            if (dettaglioTecnico) {
+                oreDelTecnico = parseFloatWithComma(dettaglioTecnico.ore);
+            } else if (principaleId === selectedTecnicoId) {
+                 const orePrincipale = parseFloatWithComma(r.oreLavoro);
+                 const oreDistribuite = r.dettaglioOreTecnici!.reduce((sum, d) => sum + parseFloatWithComma(d.ore), 0);
+                 if (orePrincipale > oreDistribuite) {
+                     const techsInDettaglio = new Set(r.dettaglioOreTecnici!.map(d => getCleanId(d.tecnicoId)));
+                     if (!techsInDettaglio.has(principaleId)) {
+                         oreDelTecnico = orePrincipale;
+                     }
+                 }
+            }
+
+        } else { // Modello Legacy
+            const allLegacyTecnici = new Set<string>();
+            const addId = (id: any) => { const cleanId = getCleanId(id); if (cleanId) allLegacyTecnici.add(cleanId); };
+            addId(r.tecnicoId); (r.altriTecniciIds || []).forEach(addId); (r.presenze || []).forEach(addId);
+
+            if (allLegacyTecnici.has(selectedTecnicoId)) {
+                const monteOre = parseFloatWithComma(r.oreLavoro);
+                oreDelTecnico = monteOre / (allLegacyTecnici.size || 1);
+            }
+        }
 
         if (oreDelTecnico <= 0) continue;
 
-        const dataRapportino = normalizeDate(r.data)!;
+        const dataRapportino = normalizeDate((r as any).dataInizio || r.data)!;
         const dayKey = dayjs(dataRapportino).format('YYYY-MM-DD');
 
         if (!aggregationMap.has(dayKey)) {
@@ -123,9 +148,7 @@ const calculateReportData = (
         const aggregatedRow = aggregationMap.get(dayKey)!;
 
         const nave = r.naveId ? naviMap.get(getCleanId(r.naveId)) : undefined;
-        
         const isCartourNightRule = !!(nave?.nome.toLowerCase().includes('cartour'));
-        
         const tipoGiornataId = getCleanId(r.tipoGiornataId);
         const tipoGiornata = tipoGiornataId ? tipiGiornataMap.get(tipoGiornataId) : undefined;
 
@@ -196,7 +219,7 @@ const ReportMensili: React.FC = () => {
     const masterDataLoading = !allRapportini || !allTecnici || !allNavi || !allTipiGiornata;
 
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
-    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs());
+    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs().year(2026).month(6)); // Default to July 2026 for convenience
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportData, setReportData] = useState<ReportData | null>(null);
 

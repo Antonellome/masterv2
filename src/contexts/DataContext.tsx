@@ -2,28 +2,23 @@
 import React, { 
     createContext, 
     useContext, 
-    useState, 
-    useEffect, 
-    useCallback, 
     useMemo,
     ReactNode
 } from 'react';
-import { getFirestore, collection, getDocs, doc, addDoc, updateDoc, deleteDoc, FirestoreDataConverter } from 'firebase/firestore';
-import { 
-    Tecnico,
-} from '@/models/definitions';
 import {
-    tecnicoConverter,
-    clienteConverter,
-    dittaConverter,
-    naveConverter,
-    luogoConverter,
-    categoriaConverter,
-    tipoGiornataConverter,
-    veicoloConverter
-} from '@/firebase/converters';
-import { useAuth } from './AuthProvider';
+    Tecnico,
+    Cliente,
+    Ditta,
+    Nave,
+    Luogo,
+    Categoria,
+    TipoGiornata,
+    Veicolo
+} from '@/models/definitions';
+// AGGIORNAMENTO: Importiamo il nostro hook per i dati locali
+import { useCollectionData } from '@/hooks/useCollectionData';
 
+// Funzione helper per creare le mappe, rimane invariata
 const createMap = <T extends { id: string }>(items: T[] | undefined): { [id: string]: T } => {
     if (!items) return {};
     return items.reduce((acc, item) => {
@@ -32,152 +27,62 @@ const createMap = <T extends { id: string }>(items: T[] | undefined): { [id: str
     }, {} as { [id: string]: T });
 };
 
-export type CollectionName = keyof AllData;
-
-interface AllData {
-    tecnici: Tecnico[];
-    clienti: any[];
-    ditte: any[];
-    navi: any[];
-    luoghi: any[];
-    categorie: any[];
-    tipiGiornata: any[];
-    veicoli: any[];
-}
-
-const converters: { [K in CollectionName]: FirestoreDataConverter<AllData[K][number]> } = {
-    tecnici: tecnicoConverter,
-    clienti: clienteConverter,
-    ditte: dittaConverter,
-    navi: naveConverter,
-    luoghi: luogoConverter,
-    categorie: categoriaConverter,
-    tipiGiornata: tipoGiornataConverter,
-    veicoli: veicoloConverter,
-};
-
+// Le interfacce rimangono per lo più le stesse, ma rimuoviamo le funzioni di scrittura
 interface DataContextType {
     tecnici: Tecnico[];
-    clienti: any[];
-    ditte: any[];
-    navi: any[];
-    luoghi: any[];
-    categorie: any[];
-    tipiGiornata: any[];
-    veicoli: any[];
+    clienti: Cliente[];
+    ditte: Ditta[];
+    navi: Nave[];
+    luoghi: Luogo[];
+    categorie: Categoria[];
+    tipiGiornata: TipoGiornata[];
+    veicoli: Veicolo[];
     tecniciMap: { [id: string]: Tecnico };
-    clientiMap: { [id: string]: any };
-    naviMap: { [id: string]: any };
-    luoghiMap: { [id: string]: any };
-    tipiGiornataMap: { [id: string]: any };
-    loading: boolean;
-    error: string | null;
-    refreshData: () => void;
-    addDocument: <T extends { id: string }>(collectionName: CollectionName, data: T) => Promise<string>;
-    updateDocument: <T extends object>(collectionName: CollectionName, id: string, data: Partial<T>) => Promise<void>;
-    deleteDocument: (collectionName: CollectionName, id: string) => Promise<void>;
+    clientiMap: { [id: string]: Cliente };
+    naviMap: { [id: string]: Nave };
+    luoghiMap: { [id: string]: Luogo };
+    tipiGiornataMap: { [id: string]: TipoGiornata };
+    loading: boolean; // Un unico stato di caricamento aggregato
+    error: any; // Gestirà gli errori aggregati
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
-const db = getFirestore();
-
-const COLLECTION_NAMES: CollectionName[] = ['tecnici', 'clienti', 'ditte', 'navi', 'luoghi', 'categorie', 'tipiGiornata', 'veicoli'];
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
-    const { user, userRole } = useAuth();
-    const [data, setData] = useState<AllData>({ 
-        tecnici: [], clienti: [], ditte: [], navi: [], luoghi: [], 
-        categorie: [], tipiGiornata: [], veicoli: []
-    });
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    const refreshData = useCallback(() => setRefreshTrigger(prev => prev + 1), []);
+    // --- SOSTITUZIONE LOGICA DI FETCH ---
+    // Usiamo il nostro hook offline-first per ogni anagrafica
+    const { data: tecnici, loading: loadingTecnici, error: errorTecnici } = useCollectionData<Tecnico>('tecnici');
+    const { data: clienti, loading: loadingClienti, error: errorClienti } = useCollectionData<Cliente>('clienti');
+    const { data: ditte, loading: loadingDitte, error: errorDitte } = useCollectionData<Ditta>('ditte');
+    const { data: navi, loading: loadingNavi, error: errorNavi } = useCollectionData<Nave>('navi');
+    const { data: luoghi, loading: loadingLuoghi, error: errorLuoghi } = useCollectionData<Luogo>('luoghi');
+    const { data: categorie, loading: loadingCategorie, error: errorCategorie } = useCollectionData<Categoria>('categorie');
+    const { data: tipiGiornata, loading: loadingTipiGiornata, error: errorTipiGiornata } = useCollectionData<TipoGiornata>('tipiGiornata');
+    const { data: veicoli, loading: loadingVeicoli, error: errorVeicoli } = useCollectionData<Veicolo>('veicoli');
 
-    useEffect(() => {
-        if (!user || userRole !== 'Amministratore') {
-            setLoading(false);
-            setData({ tecnici: [], clienti: [], ditte: [], navi: [], luoghi: [], categorie: [], tipiGiornata: [], veicoli: [] });
-            return;
-        }
+    // Aggreghiamo gli stati di loading e error
+    const loading = loadingTecnici || loadingClienti || loadingDitte || loadingNavi || loadingLuoghi || loadingCategorie || loadingTipiGiornata || loadingVeicoli;
+    const error = errorTecnici || errorClienti || errorDitte || errorNavi || errorLuoghi || errorCategorie || errorTipiGiornata || errorVeicoli;
+    // --- FINE SOSTITUZIONE ---
 
-        const initializeAndFetchData = async () => {
-            setLoading(true);
-            setError(null);
-            
-            try {
-                const fetchPromises = COLLECTION_NAMES.map(name => {
-                    const collectionRef = collection(db, name).withConverter(converters[name]);
-                    return getDocs(collectionRef).then(snapshot => ({
-                        key: name,
-                        data: snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
-                    }));
-                });
+    // La creazione delle mappe rimane identica, sfruttando i dati locali
+    const tecniciMap = useMemo(() => createMap(tecnici), [tecnici]);
+    const clientiMap = useMemo(() => createMap(clienti), [clienti]);
+    const naviMap = useMemo(() => createMap(navi), [navi]);
+    const luoghiMap = useMemo(() => createMap(luoghi), [luoghi]);
+    const tipiGiornataMap = useMemo(() => createMap(tipiGiornata), [tipiGiornata]);
 
-                const results = await Promise.allSettled(fetchPromises);
-
-                const newState: AllData = { 
-                    tecnici: [], clienti: [], ditte: [], navi: [], luoghi: [], 
-                    categorie: [], tipiGiornata: [], veicoli: []
-                };
-                let a_err:string[] = [];
-
-                results.forEach((result, index) => {
-                    const collectionName = COLLECTION_NAMES[index];
-                    if (result.status === 'fulfilled') {
-                        newState[collectionName] = result.value.data as any;
-                    } else {
-                        console.error(`Errore caricamento ${collectionName}:`, result.reason);
-                        a_err.push(collectionName);
-                        newState[collectionName] = []; // Ensure it's an empty array on failure
-                    }
-                });
-                if (a_err.length > 0) {
-                    setError(`Errore nel caricamento delle seguenti collezioni: ${a_err.join(', ')}`)
-                }
-
-                setData(newState);
-
-            } catch (err: unknown) {
-                console.error("DataContext: Errore grave e imprevisto nel recupero dei dati", err);
-                const message = err instanceof Error ? err.message : 'Si è verificato un errore critico.';
-                setError(message);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        initializeAndFetchData();
-    }, [user, userRole, refreshTrigger]);
-
-    const addDocument = useCallback(async <T extends { id: string }>(collectionName: CollectionName, data: T): Promise<string> => {
-        const collectionRef = collection(db, collectionName).withConverter(converters[collectionName]);
-        const docRef = await addDoc(collectionRef, data as any);
-        refreshData();
-        return docRef.id;
-    }, [refreshData]);
-
-    const updateDocument = useCallback(async <T extends object>(collectionName: CollectionName, id: string, data: Partial<T>) => {
-        const docRef = doc(db, collectionName, id).withConverter(converters[collectionName]);
-        await updateDoc(docRef, data as any);
-        refreshData();
-    }, [refreshData]);
-
-    const deleteDocument = useCallback(async (collectionName: CollectionName, id: string) => {
-        const docRef = doc(db, collectionName, id);
-        await deleteDoc(docRef);
-        refreshData();
-    }, [refreshData]);
-
-    const tecniciMap = useMemo(() => createMap(data.tecnici), [data.tecnici]);
-    const clientiMap = useMemo(() => createMap(data.clienti), [data.clienti]);
-    const naviMap = useMemo(() => createMap(data.navi), [data.navi]);
-    const luoghiMap = useMemo(() => createMap(data.luoghi), [data.luoghi]);
-    const tipiGiornataMap = useMemo(() => createMap(data.tipiGiornata), [data.tipiGiornata]);
-
+    // Il valore fornito dal context ora è più semplice e pulito
     const value = useMemo(() => ({
-        ...data,
+        tecnici: tecnici || [],
+        clienti: clienti || [],
+        ditte: ditte || [],
+        navi: navi || [],
+        luoghi: luoghi || [],
+        categorie: categorie || [],
+        tipiGiornata: tipiGiornata || [],
+        veicoli: veicoli || [],
         tecniciMap,
         clientiMap,
         naviMap,
@@ -185,11 +90,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         tipiGiornataMap,
         loading,
         error,
-        refreshData,
-        addDocument,
-        updateDocument,
-        deleteDocument,
-    }), [data, tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, loading, error, refreshData, addDocument, updateDocument, deleteDocument]);
+    }), [
+        tecnici, clienti, ditte, navi, luoghi, categorie, tipiGiornata, veicoli, 
+        tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, 
+        loading, error
+    ]);
 
     return (
         <DataContext.Provider value={value}>
@@ -198,10 +103,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     );
 };
 
-export const useDataContext = () => {
+// L'hook per consumare il context viene rinominato per chiarezza
+export const useAnagraficaData = () => {
     const context = useContext(DataContext);
     if (context === undefined) {
-        throw new Error('useDataContext deve essere usato all\'interno di un DataProvider');
+        throw new Error('useAnagraficaData deve essere usato all\'interno di un DataProvider');
     }
     return context;
 };

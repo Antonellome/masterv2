@@ -1,6 +1,8 @@
 {
+  "functions": {
+    "source": "functions"
+  },
   "hosting": {
-    "site": "riso-master-office-prod",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -13,5 +15,9 @@
         "destination": "/index.html"
       }
     ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   }
 }

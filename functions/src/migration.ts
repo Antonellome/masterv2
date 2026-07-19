@@ -1,86 +1,102 @@
 
-import * as admin from "firebase-admin";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import * as logger from "firebase-functions/logger";
+import { getFirestore } from "firebase-admin/firestore";
+import { logger } from "firebase-functions";
 
 /**
- * Funzione onCall per migrare gli utenti da Firebase Authentication a Firestore.
- * Identifica gli utenti che non hanno un profilo nella collezione 'tecnici' e li crea.
+ * Contiene la logica effettiva della migrazione.
+ * Viene chiamata dalla funzione onCall v2 in index.ts.
  */
-export const executeMigration = onCall(
-    { region: "europe-west1", cors: true },
-    async (request) => {
-        logger.info("========================================");
-        logger.info(">>> ESECUZIONE MIGRAZIONE UTENTI v2 <<<");
-        logger.info("========================================");
+export async function _doMigrationLogic() {
+  // L'INIZIALIZZAZIONE DEL DB VIENE SPOSTATA QUI.
+  // Questo evita qualsiasi problema di race condition durante l'avvio della funzione.
+  const db = getFirestore();
 
-        // 1. Controllo dei permessi di amministrazione
-        if (!request.auth) {
-            throw new HttpsError("unauthenticated", "La richiesta deve essere autenticata.");
-        }
-        if (request.auth.token.admin !== true) {
-            logger.warn(`Tentativo di accesso non autorizzato da UID: ${request.auth.uid}`);
-            throw new HttpsError("permission-denied", "Accesso negato. Solo gli amministratori possono eseguire la migrazione.");
-        }
+  logger.info("Inizio migrazione rapportini v3: Aggiunta log granulari.");
 
-        logger.info(`Migrazione avviata dall'amministratore: ${request.auth.uid}`);
+  try {
+    logger.info("Caricamento collezioni navi e clienti...");
+    const naviSnapshot = await db.collection("navi").get();
+    const naviMap = new Map<string, any>();
+    naviSnapshot.forEach((doc) => naviMap.set(doc.id, doc.data()));
+    logger.info(`Trovate ${naviMap.size} navi.`);
 
-        const db = admin.firestore();
-        const auth = admin.auth();
-        let createdCount = 0;
+    const clientiSnapshot = await db.collection("clienti").get();
+    const clientiMap = new Map<string, any>();
+    clientiSnapshot.forEach((doc) => clientiMap.set(doc.id, doc.data()));
+    logger.info(`Trovati ${clientiMap.size} clienti.`);
 
-        try {
-            // 2. Ottenere tutti gli utenti da Firebase Authentication
-            const listUsersResult = await auth.listUsers();
-            const allAuthUsers = listUsersResult.users;
-            logger.info(`Trovati ${allAuthUsers.length} utenti in Firebase Authentication.`);
+    logger.info("Ricerca rapportini da migrare (cliente === null)...");
+    const rapportiniDaMigrareSnapshot = await db
+      .collection("rapportini")
+      .where("cliente", "==", null)
+      .get();
 
-            // 3. Ottenere tutti i tecnici da Firestore
-            const tecniciSnapshot = await db.collection("tecnici").get();
-            const firestoreTecniciIds = new Set(tecniciSnapshot.docs.map(doc => doc.id));
-            logger.info(`Trovati ${firestoreTecniciIds.size} documenti nella collezione 'tecnici'.`);
-
-            // 4. Identificare e creare i tecnici mancanti
-            const batch = db.batch();
-            for (const user of allAuthUsers) {
-                if (!firestoreTecniciIds.has(user.uid)) {
-                    logger.info(`Trovato utente mancante in Firestore (UID: ${user.uid}, Email: ${user.email}). Creazione in corso...`);
-                    
-                    const docRef = db.collection("tecnici").doc(user.uid);
-                    
-                    // Estrai nome e cognome dall'email (o usa placeholder)
-                    const email = user.email || "";
-                    const nameParts = email.split('@')[0].split('.');
-                    const nome = nameParts[0] ? nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1) : "Utente";
-                    const cognome = nameParts[1] ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1) : "Migrato";
-
-                    batch.set(docRef, {
-                        nome: nome,
-                        cognome: cognome,
-                        attivo: true, // Imposta l'utente come attivo di default
-                        email: email,
-                    });
-                    createdCount++;
-                }
-            }
-
-            // 5. Eseguire il batch di scrittura
-            if (createdCount > 0) {
-                await batch.commit();
-                logger.info(`Batch commit completato. Creati ${createdCount} nuovi tecnici.`);
-            } else {
-                logger.info("Nessun tecnico mancante trovato. Il database è già sincronizzato.");
-            }
-
-            return {
-                success: true,
-                message: `Migrazione completata con successo. Creati ${createdCount} nuovi profili tecnico.`,
-                createdCount: createdCount
-            };
-
-        } catch (error) {
-            logger.error("Errore durante l'esecuzione della migrazione:", error);
-            throw new HttpsError("internal", "Si è verificato un errore interno durante la migrazione. Controlla i log per i dettagli.");
-        }
+    if (rapportiniDaMigrareSnapshot.empty) {
+      const message = "Nessun rapportino da migrare trovato. Database già aggiornato.";
+      logger.info(message);
+      return { success: true, message, rapportiniAggiornati: 0 };
     }
-);
+
+    logger.info(`Trovati ${rapportiniDaMigrareSnapshot.size} rapportini da elaborare.`);
+    const batch = db.batch();
+    let contatoreAggiornati = 0;
+
+    for (const doc of rapportiniDaMigrareSnapshot.docs) {
+        logger.info(`--- Inizio elaborazione rapportino ID: ${doc.id} ---`);
+        try {
+            const rapportino = doc.data();
+
+            // Log della struttura del singolo rapportino per debug
+            logger.debug(`Dati rapportino ${doc.id}:`, { data: rapportino });
+
+            const naveId = rapportino.sede?.idNave;
+
+            if (naveId) {
+                logger.info(`Rapportino ${doc.id} ha naveId: ${naveId}. Cerco la nave...`);
+                const nave = naviMap.get(naveId);
+
+                if (nave && nave.clienteId) {
+                    logger.info(`Trovata nave ${naveId} con clienteId: ${nave.clienteId}. Cerco il cliente...`);
+                    const cliente = clientiMap.get(nave.clienteId);
+
+                    if (cliente) {
+                        logger.info(`Trovato cliente ${cliente.ragioneSociale} (${nave.clienteId}). Aggiungo al batch.`);
+                        const updateData = {
+                            "cliente.idCliente": nave.clienteId,
+                            "cliente.ragioneSocialeCliente": cliente.ragioneSociale,
+                        };
+                        batch.update(doc.ref, updateData);
+                        contatoreAggiornati++;
+                    } else {
+                        logger.warn(`Cliente non trovato per clienteId: ${nave.clienteId} (da nave ${naveId}) - Rapportino ${doc.id}`);
+                    }
+                } else {
+                    logger.warn(`Nave non trovata o senza clienteId per naveId: ${naveId} - Rapportino ${doc.id}`);
+                }
+            } else {
+                logger.warn(`Rapportino ${doc.id} non ha un idNave in sede, lo ignoro.`);
+            }
+        } catch (innerError) {
+            logger.error(`!!! Errore CRITICO durante l'elaborazione del singolo rapportino ID: ${doc.id}. Questo rapportino verrà saltato.`, innerError);
+        }
+        logger.info(`--- Fine elaborazione rapportino ID: ${doc.id} ---\n`);
+    }
+
+    if (contatoreAggiornati > 0) {
+        logger.info(`Esecuzione del batch commit per ${contatoreAggiornati} aggiornamenti...`);
+        await batch.commit();
+        logger.info("Batch commit completato con successo.");
+    } else {
+        logger.info("Nessun rapportino è stato modificato, non eseguo il batch commit.");
+    }
+
+    const message = `Migrazione completata. ${contatoreAggiornati} rapportini sono stati aggiornati. Controllare i log per eventuali avvisi o errori su singoli documenti.`;
+    logger.info(message);
+
+    return { success: true, message, rapportiniAggiornati: contatoreAggiornati };
+
+  } catch (error) {
+    logger.error("Errore CATASTROFICO durante la migrazione (v3):", error);
+    throw new Error(`Errore durante la migrazione: ${error}`);
+  }
+}

@@ -1,5 +1,5 @@
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthProvider';
@@ -11,8 +11,9 @@ import { GlobalStyles, Box, CircularProgress, Typography } from '@mui/material';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
-import { syncStandard } from '@/services/SyncService'; // CORREZIONE
+import { syncStandard } from '@/services/SyncService';
 
+// ... (lazy imports invariati)
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const SignupPage = lazy(() => import('@/pages/SignupPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
@@ -30,24 +31,36 @@ const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 
+
 const AppContent = () => {
   const { loading: authLoading, user } = useAuth();
   const [syncing, setSyncing] = useState(true);
+  const initialSyncDone = useRef(false); // Flag per tracciare la prima sincronizzazione
 
   useEffect(() => {
     const runSync = async () => {
-      if (user) {
+      // Esegui solo se c'è un utente e la sincronizzazione iniziale non è ancora avvenuta
+      if (user && !initialSyncDone.current) {
+        initialSyncDone.current = true; // Imposta il flag per prevenire esecuzioni future
         setSyncing(true);
-        console.log("Utente autenticato, avvio sincronizzazione standard.");
-        await syncStandard(); // CORREZIONE
+        console.log("Utente autenticato, avvio sincronizzazione standard UNA TANTUM.");
+        await syncStandard();
         console.log("Sincronizzazione standard completata.");
         setSyncing(false);
+      } else if (!user) {
+        // Se l'utente fa logout, resetta il flag
+        initialSyncDone.current = false;
+        setSyncing(false); 
       }
     };
-    runSync();
-  }, [user]);
 
-  if (authLoading || (user && syncing)) {
+    if (!authLoading) {
+       runSync();
+    }
+  }, [user, authLoading]); // Dipende da user e authLoading per gestire login/logout
+
+  // Mostra il loader durante l'autenticazione iniziale o la primissima sincronizzazione
+  if (authLoading || (user && syncing && !initialSyncDone.current)) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />

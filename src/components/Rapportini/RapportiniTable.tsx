@@ -1,33 +1,40 @@
+
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { Box, Typography, Alert, CircularProgress, IconButton, Tooltip } from '@mui/material';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import { Box, Typography, Alert, IconButton, Tooltip } from '@mui/material';
+import { DataGrid, GridColDef, GridRenderCellParams, GridSlots } from '@mui/x-data-grid';
 import Edit from '@mui/icons-material/Edit';
 import Delete from '@mui/icons-material/Delete';
 import Visibility from '@mui/icons-material/Visibility';
 import { Timestamp } from 'firebase/firestore';
-import { useData } from '@/contexts/DataContext';
+// AGGIORNAMENTO: Usiamo il nuovo hook del context refattorizzato
+import { useAnagraficaData } from '@/contexts/DataContext'; 
 import type { Rapportino } from '@/models/definitions';
 import dayjs from 'dayjs';
 import RapportinoView from '@/components/Rapportini/RapportinoView';
 import { useReactToPrint } from 'react-to-print';
+// AGGIORNAMENTO: Importiamo il servizio per l'eliminazione
+import { deleteRapportino } from '@/services/rapportiniService';
+import CustomGridOverlay from '@/components/CustomGridOverlay';
 
 interface RapportiniTableProps {
+  rapportini: Rapportino[]; // Riceve i rapportini come prop
+  loading: boolean; // Riceve lo stato di caricamento
   onEdit: (rapportino: Rapportino) => void;
 }
 
-const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
-  // Ora importiamo anche tipiGiornataMap
-  const { rapportini, tecniciMap, naviMap, luoghiMap, clientiMap, tipiGiornataMap, loading, error, deleteData } = useData();
+const RapportiniTable: React.FC<RapportiniTableProps> = ({ rapportini, loading, onEdit }) => {
+  
+  // Usiamo il context solo per ottenere le mappe delle anagrafiche
+  const { tecniciMap, naviMap, luoghiMap, tipiGiornataMap, error } = useAnagraficaData();
+  
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedRapportino, setSelectedRapportino] = useState<Rapportino | null>(null);
   const componentToPrintRef = useRef(null);
   const handlePrint = useReactToPrint({ content: () => componentToPrintRef.current });
 
+  // Usiamo useRef per l'onEdit per evitare ricreazioni delle colonne
   const onEditRef = useRef(onEdit);
-
-  useEffect(() => {
-    onEditRef.current = onEdit;
-  }, [onEdit]);
+  useEffect(() => { onEditRef.current = onEdit; }, [onEdit]);
 
   const handleOpenView = useCallback((rapportino: Rapportino) => {
     setSelectedRapportino(rapportino);
@@ -41,27 +48,25 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
 
   const handleDelete = useCallback(async (id: string) => {
     if (window.confirm('Sei sicuro di voler eliminare questo rapportino?')) {
-      await deleteData('rapportini', id);
-    }
-  }, [deleteData]);
-
-  // Funzione CORRETTA per ottenere i nomi dei tecnici
-  const getTecniciNomi = useCallback((rapportino: Rapportino): string => {
-    if (!rapportino.presenze || rapportino.presenze.length === 0) {
-      return 'N/D';
-    }
-    const nomi = new Set<string>();
-    rapportino.presenze.forEach(tecnicoId => {
-      const tecnico = tecniciMap[tecnicoId];
-      if (tecnico) {
-        nomi.add(`${tecnico.nome} ${tecnico.cognome}`);
+      try {
+        await deleteRapportino(id);
+        // La UI si aggiornerà automaticamente grazie alla natura reattiva di Dexie
+      } catch (err) {
+        console.error("Errore durante l'eliminazione:", err);
+        alert("Impossibile eliminare il rapportino.");
       }
-    });
-    return Array.from(nomi).join(', ');
+    }
+  }, []);
+
+  const getTecniciNomi = useCallback((rapportino: Rapportino): string => {
+    if (!rapportino.presenze || rapportino.presenze.length === 0) return 'N/D';
+    return Array.from(new Set(
+        rapportino.presenze.map(id => tecniciMap[id] ? `${tecniciMap[id].nome} ${tecniciMap[id].cognome}` : 'ID Sconosciuto')
+    )).join(', ');
   }, [tecniciMap]);
 
   const columns: GridColDef[] = useMemo(() => [
-    { field: 'data', headerName: 'Data', width: 120, valueFormatter: params => params.value ? dayjs((params.value as Timestamp).toDate()).format('DD/MM/YYYY') : 'N/D' },
+    { field: 'dataInizio', headerName: 'Data', width: 120, valueFormatter: params => params.value ? dayjs((params.value as Timestamp).toDate()).format('DD/MM/YYYY') : 'N/D' },
     { 
       field: 'tecnici', 
       headerName: 'Tecnici', 
@@ -72,60 +77,42 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
         return <Tooltip title={nomi}><Typography noWrap>{nomi}</Typography></Tooltip>;
       } 
     },
-    // Colonna TIPO GIORNATA corretta
     {
-      field: 'tipoGiornata',
+      field: 'tipoGiornataId',
       headerName: 'Tipo Giornata',
       flex: 1,
       minWidth: 150,
-      valueGetter: (params) => {
-        const id = params.row.tipoGiornataId || params.row.giornataId; // Prova entrambi gli ID
-        if (tipiGiornataMap && id) {
-          return tipiGiornataMap[id]?.nome || 'N/D';
-        }
-        return 'N/D';
-      }
+      valueGetter: ({ value }) => (tipiGiornataMap && value ? tipiGiornataMap[value]?.nome : 'N/D'),
     },
-    { field: 'nave', headerName: 'Nave', flex: 1, minWidth: 150, valueGetter: (params) => (params.row.naveId && naviMap[params.row.naveId]?.nome) || 'N/D' },
-    { field: 'luogo', headerName: 'Luogo', flex: 1, minWidth: 150, valueGetter: (params) => (params.row.luogoId && luoghiMap[params.row.luogoId]?.nome) || 'N/D' },
-    { field: 'cliente', headerName: 'Cliente', flex: 1, minWidth: 150, valueGetter: (params) => (params.row.clienteId && clientiMap[params.row.clienteId]?.nome) || 'N/D' },
+    { field: 'naveId', headerName: 'Nave', flex: 1, minWidth: 150, valueGetter: ({ value }) => (naviMap && value ? naviMap[value]?.nome : 'N/D') },
+    { field: 'luogoId', headerName: 'Luogo', flex: 1, minWidth: 150, valueGetter: ({ value }) => (luoghiMap && value ? luoghiMap[value]?.nome : 'N/D') },
     {
       field: 'actions',
       headerName: 'Azioni',
-      align: 'right',
-      headerAlign: 'right',
-      width: 130,
-      sortable: false,
+      align: 'right', headerAlign: 'right',
+      width: 130, sortable: false, filterable: false, disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => (
-        <Box onClick={(e) => e.stopPropagation()}>
-            <Tooltip title="Vedi Dettagli">
-                <IconButton onClick={() => handleOpenView(params.row as Rapportino)} size="small"><Visibility /></IconButton>
-            </Tooltip>
-            <Tooltip title="Modifica">
-                <IconButton onClick={() => onEditRef.current(params.row as Rapportino)} size="small"><Edit /></IconButton>
-            </Tooltip>
-            <Tooltip title="Elimina">
-                <IconButton onClick={() => handleDelete(params.row.id as string)} size="small"><Delete /></IconButton>
-            </Tooltip>
+        <Box>
+            <Tooltip title="Vedi Dettagli"><IconButton onClick={() => handleOpenView(params.row as Rapportino)} size="small"><Visibility /></IconButton></Tooltip>
+            <Tooltip title="Modifica"><IconButton onClick={() => onEditRef.current(params.row as Rapportino)} size="small"><Edit /></IconButton></Tooltip>
+            <Tooltip title="Elimina"><IconButton onClick={() => handleDelete(params.row.id as string)} size="small"><Delete /></IconButton></Tooltip>
         </Box>
       ),
     },
-  ], [getTecniciNomi, naviMap, luoghiMap, clientiMap, tipiGiornataMap, handleOpenView, handleDelete]);
+  ], [getTecniciNomi, naviMap, luoghiMap, tipiGiornataMap, handleOpenView, handleDelete]);
 
   const sortedRapportini = useMemo(() => {
       if (!rapportini) return [];
+      // Ordiniamo i dati ricevuti come prop
       return [...rapportini].sort((a, b) => {
-          const dateA = a.data as Timestamp;
-          const dateB = b.data as Timestamp;
-          if (!dateA && !dateB) return 0;
-          if (!dateA) return 1;
-          if (!dateB) return -1;
-          return dateB.toMillis() - dateA.toMillis();
+          const dateA = a.dataInizio as Timestamp;
+          const dateB = b.dataInizio as Timestamp;
+          return (dateB?.toMillis() || 0) - (dateA?.toMillis() || 0);
       });
   }, [rapportini]);
 
   if (error) {
-    return <Alert severity="error">Errore nel caricamento dei rapportini: {error}</Alert>;
+    return <Alert severity="error">Errore nel caricamento delle anagrafiche: {error.message || 'Errore sconosciuto'}</Alert>;
   }
 
   return (
@@ -136,35 +123,11 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ onEdit }) => {
         loading={loading}
         rowHeight={48}
         onRowClick={(params) => handleOpenView(params.row as Rapportino)}
-        sx={{
-          border: 0,
-          color: 'rgba(255,255,255,0.8)',
-          '&, .MuiDataGrid-cell, .MuiDataGrid-columnHeader': {
-              borderColor: 'rgba(255,255,255,0.1)'
-          },
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: 'rgba(0,0,0,0.2)',
-            color: 'white',
-            fontWeight: 'bold',
-          },
-          '& .MuiDataGrid-row:hover': {
-            backgroundColor: 'rgba(255,255,255,0.05)',
-            cursor: 'pointer'
-          },
-          '& .MuiDataGrid-virtualScroller': {
-              backgroundColor: 'rgba(0,0,0,0.1)'
-          },
-          '& .MuiDataGrid-footerContainer': {
-              backgroundColor: 'rgba(0,0,0,0.2)',
-          },
-          '& .MuiTablePagination-root': {
-              color: 'rgba(255,255,255,0.8)'
-          }
-        }}
+        density="compact"
         slots={{
-          loadingOverlay: () => <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)' }}><CircularProgress color="inherit" /></Box>,
-          noRowsOverlay: () => <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Typography>Nessun rapportino trovato</Typography></Box>,
-        }}
+          loadingOverlay: () => <CustomGridOverlay>Caricamento rapportini...</CustomGridOverlay>,
+          noRowsOverlay: () => <CustomGridOverlay>Nessun rapportino trovato</CustomGridOverlay>,
+        } as Partial<GridSlots>}
       />
       {selectedRapportino && (
         <RapportinoView

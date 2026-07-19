@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -17,9 +17,9 @@ import {
 } from '@mui/material';
 import DirectionsBoatIcon from '@mui/icons-material/DirectionsBoat';
 import PlaceIcon from '@mui/icons-material/Place';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { useData } from '@/hooks/useData';
+// AGGIORNAMENTO: Importiamo i nostri hook moderni
+import { useAnagraficaData } from '@/contexts/DataContext';
+import { useCollectionData } from '@/hooks/useCollectionData';
 import { Checkin } from '@/models/definitions';
 
 // --- INTERFACCE ---
@@ -30,7 +30,7 @@ interface AggregatedData {
   count: number;
 }
 
-// --- COMPONENTI INTERNI ---
+// --- COMPONENTI INTERNI (invariati) ---
 const RiepilogoTable = ({ title, data, icon }: { title: string, data: AggregatedData[], icon: React.ReactNode }) => (
     <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
         <Box display="flex" alignItems="center" mb={2}>
@@ -70,42 +70,13 @@ const RiepilogoTable = ({ title, data, icon }: { title: string, data: Aggregated
 
 // --- COMPONENTE PRINCIPALE ---
 const CheckinVisivo: React.FC = () => {
-  const [checkins, setCheckins] = useState<Checkin[]>([]);
-  const [loadingCheckins, setLoadingCheckins] = useState<boolean>(true);
-  const [errorCheckins, setErrorCheckins] = useState<string | null>(null);
+  // 1. Carichiamo i dati dai nostri hook locali
+  const { data: checkins, loading: loadingCheckins, error: errorCheckins } = useCollectionData<Checkin>('checkin_giornalieri');
+  const { navi, luoghi, loading: loadingAnagrafiche, error: errorAnagrafiche } = useAnagraficaData();
 
-  const { navi, luoghi, loading: loadingAnagrafiche, error: errorAnagrafiche } = useData();
-
-  // 1. Carica i check-in di oggi
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const checkinsRef = collection(db, 'checkin_giornalieri');
-    const q = query(
-      checkinsRef,
-      where('data', '>=', Timestamp.fromDate(today)),
-      where('data', '<', Timestamp.fromDate(tomorrow))
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const checkinsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Checkin));
-        setCheckins(checkinsData);
-        setLoadingCheckins(false);
-    }, (error) => {
-        console.error("Errore nel caricamento dei check-in:", error);
-        setErrorCheckins("Errore caricamento check-in.");
-        setLoadingCheckins(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Aggrega i dati per la visualizzazione
+  // 2. Aggrega i dati per la visualizzazione (la logica interna non cambia)
   const { naviAgg, luoghiAgg } = useMemo(() => {
-    if (checkins.length === 0) {
+    if (!checkins || checkins.length === 0) {
         return { naviAgg: [], luoghiAgg: [] };
     }
 
@@ -135,11 +106,14 @@ const CheckinVisivo: React.FC = () => {
 
   }, [checkins, navi, luoghi]);
 
-  if (loadingAnagrafiche || loadingCheckins) {
+  const loading = loadingAnagrafiche || loadingCheckins;
+  const error = errorAnagrafiche || errorCheckins;
+
+  if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
   }
-  if (errorAnagrafiche || errorCheckins) {
-    return <Alert severity="error">{errorAnagrafiche || errorCheckins}</Alert>
+  if (error) {
+    return <Alert severity="error">{typeof error === 'string' ? error : error.message}</Alert>
   }
 
   return (

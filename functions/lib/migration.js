@@ -1,108 +1,75 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.executeMigration = void 0;
-const admin = __importStar(require("firebase-admin"));
-const https_1 = require("firebase-functions/v2/https");
-const logger = __importStar(require("firebase-functions/logger"));
+exports._doMigrationLogic = void 0;
+const firestore_1 = require("firebase-admin/firestore");
+const firebase_functions_1 = require("firebase-functions");
+const db = (0, firestore_1.getFirestore)();
 /**
- * Funzione onCall per migrare gli utenti da Firebase Authentication a Firestore.
- * Identifica gli utenti che non hanno un profilo nella collezione 'tecnici' e li crea.
+ * Contiene la logica effettiva della migrazione.
+ * Viene chiamata dalla funzione onCall v2 in index.ts.
  */
-exports.executeMigration = (0, https_1.onCall)({ region: "europe-west1", cors: true }, async (request) => {
-    logger.info("========================================");
-    logger.info(">>> ESECUZIONE MIGRAZIONE UTENTI v2 <<<");
-    logger.info("========================================");
-    // 1. Controllo dei permessi di amministrazione
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "La richiesta deve essere autenticata.");
-    }
-    if (request.auth.token.admin !== true) {
-        logger.warn(`Tentativo di accesso non autorizzato da UID: ${request.auth.uid}`);
-        throw new https_1.HttpsError("permission-denied", "Accesso negato. Solo gli amministratori possono eseguire la migrazione.");
-    }
-    logger.info(`Migrazione avviata dall'amministratore: ${request.auth.uid}`);
-    const db = admin.firestore();
-    const auth = admin.auth();
-    let createdCount = 0;
+async function _doMigrationLogic() {
+    firebase_functions_1.logger.info("Inizio migrazione rapportini senza cliente (v2).");
     try {
-        // 2. Ottenere tutti gli utenti da Firebase Authentication
-        const listUsersResult = await auth.listUsers();
-        const allAuthUsers = listUsersResult.users;
-        logger.info(`Trovati ${allAuthUsers.length} utenti in Firebase Authentication.`);
-        // 3. Ottenere tutti i tecnici da Firestore
-        const tecniciSnapshot = await db.collection("tecnici").get();
-        const firestoreTecniciIds = new Set(tecniciSnapshot.docs.map(doc => doc.id));
-        logger.info(`Trovati ${firestoreTecniciIds.size} documenti nella collezione 'tecnici'.`);
-        // 4. Identificare e creare i tecnici mancanti
+        const naviSnapshot = await db.collection("navi").get();
+        const naviMap = new Map();
+        naviSnapshot.forEach((doc) => naviMap.set(doc.id, doc.data()));
+        firebase_functions_1.logger.info(`Trovate ${naviMap.size} navi.`);
+        const clientiSnapshot = await db.collection("clienti").get();
+        const clientiMap = new Map();
+        clientiSnapshot.forEach((doc) => clientiMap.set(doc.id, doc.data()));
+        firebase_functions_1.logger.info(`Trovati ${clientiMap.size} clienti.`);
+        const rapportiniDaMigrareSnapshot = await db
+            .collection("rapportini")
+            .where("cliente", "==", null)
+            .get();
+        if (rapportiniDaMigrareSnapshot.empty) {
+            const message = "Nessun rapportino da migrare trovato. La migrazione è già completata.";
+            firebase_functions_1.logger.info(message);
+            return { success: true, message, rapportiniAggiornati: 0 };
+        }
+        firebase_functions_1.logger.info(`Trovati ${rapportiniDaMigrareSnapshot.size} rapportini da migrare.`);
         const batch = db.batch();
-        for (const user of allAuthUsers) {
-            if (!firestoreTecniciIds.has(user.uid)) {
-                logger.info(`Trovato utente mancante in Firestore (UID: ${user.uid}, Email: ${user.email}). Creazione in corso...`);
-                const docRef = db.collection("tecnici").doc(user.uid);
-                // Estrai nome e cognome dall'email (o usa placeholder)
-                const email = user.email || "";
-                const nameParts = email.split('@')[0].split('.');
-                const nome = nameParts[0] ? nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1) : "Utente";
-                const cognome = nameParts[1] ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1) : "Migrato";
-                batch.set(docRef, {
-                    nome: nome,
-                    cognome: cognome,
-                    attivo: true, // Imposta l'utente come attivo di default
-                    email: email,
-                });
-                createdCount++;
+        let contatoreAggiornati = 0;
+        rapportiniDaMigrareSnapshot.forEach((doc) => {
+            var _a;
+            const rapportino = doc.data();
+            const naveId = (_a = rapportino.sede) === null || _a === void 0 ? void 0 : _a.idNave;
+            if (naveId) {
+                const nave = naviMap.get(naveId);
+                if (nave && nave.clienteId) {
+                    const cliente = clientiMap.get(nave.clienteId);
+                    if (cliente) {
+                        const updateData = {
+                            "cliente.idCliente": nave.clienteId,
+                            "cliente.ragioneSocialeCliente": cliente.ragioneSociale,
+                        };
+                        batch.update(doc.ref, updateData);
+                        contatoreAggiornati++;
+                        firebase_functions_1.logger.info(`Rapportino ${doc.id} aggiornato con cliente ${cliente.ragioneSociale}`);
+                    }
+                    else {
+                        firebase_functions_1.logger.warn(`Cliente non trovato per clienteId: ${nave.clienteId} (da nave ${naveId})`);
+                    }
+                }
+                else {
+                    firebase_functions_1.logger.warn(`Nave non trovata o senza clienteId per naveId: ${naveId}`);
+                }
             }
-        }
-        // 5. Eseguire il batch di scrittura
-        if (createdCount > 0) {
-            await batch.commit();
-            logger.info(`Batch commit completato. Creati ${createdCount} nuovi tecnici.`);
-        }
-        else {
-            logger.info("Nessun tecnico mancante trovato. Il database è già sincronizzato.");
-        }
-        return {
-            success: true,
-            message: `Migrazione completata con successo. Creati ${createdCount} nuovi profili tecnico.`,
-            createdCount: createdCount
-        };
+            else {
+                firebase_functions_1.logger.info(`Rapportino ${doc.id} non ha una nave associata, lo ignoro.`);
+            }
+        });
+        await batch.commit();
+        const message = `Migrazione completata con successo. ${contatoreAggiornati} rapportini sono stati aggiornati.`;
+        firebase_functions_1.logger.info(message);
+        return { success: true, message, rapportiniAggiornati: contatoreAggiornati };
     }
     catch (error) {
-        logger.error("Errore durante l'esecuzione della migrazione:", error);
-        throw new https_1.HttpsError("internal", "Si è verificato un errore interno durante la migrazione. Controlla i log per i dettagli.");
+        firebase_functions_1.logger.error("Errore durante la migrazione (v2):", error);
+        // Rilancia l'errore per essere gestito dalla funzione onCall
+        throw new Error(`Errore durante la migrazione: ${error}`);
     }
-});
+}
+exports._doMigrationLogic = _doMigrationLogic;
 //# sourceMappingURL=migration.js.map
