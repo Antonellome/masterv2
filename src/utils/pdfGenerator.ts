@@ -1,97 +1,173 @@
-
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import dayjs from 'dayjs';
-import { Rapportino, Tecnico, Veicolo, Nave, Luogo, TipoGiornata } from '@/models/definitions';
+import type { Rapportino, DettaglioOreTecnico, Tecnico } from '@/models/definitions';
 
-// Helper to resolve ID to name
-const getNome = (collection: any[], id: string | undefined): string => {
-    if (!id) return 'N/D';
-    const item = collection.find(t => t.id === id);
-    if (!item) return `ID non trovato`;
-    if ('cognome' in item && 'nome' in item) return `${item.cognome} ${item.nome}`.trim();
-    if ('targa' in item && 'nome' in item) return `${item.targa} - ${item.nome}`.trim();
-    return item.nome;
+// --- HELPERS ---
+const addWrappedText = (doc: jsPDF, text: string, x: number, y: number, maxWidth: number, lineHeight: number): number => {
+    if (!text) return y;
+    const lines = doc.splitTextToSize(text, maxWidth);
+    doc.text(lines, x, y);
+    return y + (lines.length * lineHeight);
 };
 
-interface Anagrafiche {
-    tecnici: Tecnico[];
-    veicoli: Veicolo[];
-    navi: Nave[];
-    luoghi: Luogo[];
-    tipiGiornata: TipoGiornata[];
-}
+const formatOrario = (d: DettaglioOreTecnico): string => {
+    const ore = (d.ore || 0).toFixed(2).replace('.', ',');
+    return `${ore} ore`;
+};
 
-export const generateRapportinoPage = (
-    pdfDoc: jsPDF,
-    rapportinoData: Rapportino,
-    anagrafiche: Anagrafiche
-) => {
-    const { tecnici, veicoli, navi, luoghi, tipiGiornata } = anagrafiche;
 
-    // ### HEADER ###
-    pdfDoc.setFontSize(16);
-    pdfDoc.setFont('helvetica', 'bold');
-    pdfDoc.text("Tecnologie Industriali Navali", 105, 15, { align: 'center' });
+// --- GENERATORE PDF PRINCIPALE ---
+export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<string, Tecnico>): Blob => {
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const contentWidth = pageWidth - (margin * 2);
+    let currentY = 15;
+    const blueColor = '#003366';
 
-    pdfDoc.setFontSize(12);
-    pdfDoc.setFont('helvetica', 'normal');
-    pdfDoc.text("Rapportino di Intervento", 105, 22, { align: 'center' });
+    // 1. INTESTAZIONE
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(blueColor);
+    doc.text('Tecnologie Industriali Navali S.R.L.', pageWidth / 2, currentY, { align: 'center' });
+    currentY += 6;
 
-    pdfDoc.setLineWidth(0.5);
-    pdfDoc.line(20, 27, 190, 27);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor('#000000');
+    const companyDetails =
+        `Sede Legale: Via Gulli, 62/64 - cap. 98123 Messina\n` +
+        `Tel 0903384994 - cell. +39 3460249518 / +39 3460227234\n` +
+        `Cod. Fisc. e Part. I.V.A.: 03862480832 - e-mail: tin.srl@tinpec.it\n` +
+        `Impianti elettrici di bordo e di terra - Meccanica industriale e navale`;
+    doc.text(companyDetails, pageWidth / 2, currentY, { align: 'center' });
+    currentY += 12;
 
-    // ### FOOTER ###
-    pdfDoc.setFontSize(8);
-    pdfDoc.setTextColor(150); // Gray
-    pdfDoc.text("R.I.S.O.", 20, 285);
-    pdfDoc.text("Master Office", 20, 289);
-    pdfDoc.text("Report Individuali Sincronizzati Online", 20, 293);
-    pdfDoc.setTextColor(0); // Reset to black
+    // 2. LINEA E TITOLO
+    doc.setDrawColor(blueColor);
+    doc.setLineWidth(0.5);
+    doc.line(margin, currentY, pageWidth - margin, currentY);
+    currentY += 10;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(blueColor);
+    doc.text('RAPPORTO DI INTERVENTO TECNICO', pageWidth / 2, currentY, { align: 'center' });
+    currentY += 15;
 
-    // ### BODY ### (with y-shift to make space for header)
-    const yShift = 15;
-    pdfDoc.setFontSize(11);
-    const dataRap = dayjs(rapportinoData.data.toDate()).format('DD/MM/YYYY');
-    pdfDoc.text(`Data: ${dataRap}`, 20, 30 + yShift);
-    pdfDoc.text(`Tipo Giornata: ${getNome(tipiGiornata, rapportinoData.giornataId)}`, 100, 30 + yShift);
-    pdfDoc.text(`Tecnico Responsabile: ${getNome(tecnici, rapportinoData.tecnicoId)}`, 20, 40 + yShift);
+    // 3. DETTAGLI RAPPORTO
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor('#000000');
 
-    pdfDoc.line(20, 45 + yShift, 190, 45 + yShift);
-    pdfDoc.setFontSize(14);
-    pdfDoc.text("Dettagli Intervento", 20, 55 + yShift);
-    pdfDoc.setFontSize(11);
-    pdfDoc.text(`Nave: ${getNome(navi, rapportinoData.naveId)}`, 20, 65 + yShift);
-    pdfDoc.text(`Luogo: ${getNome(luoghi, rapportinoData.luogoId)}`, 20, 72 + yShift);
-    pdfDoc.text(`Veicolo: ${getNome(veicoli, rapportinoData.veicoloId)}`, 20, 79 + yShift);
-    pdfDoc.text(`Descrizione Breve: ${rapportinoData.descrizioneBreve || 'Nessuna'}`, 20, 86 + yShift);
+    const fieldGap = 7;
+    const labelWidth = 35;
+    const valueX = margin + labelWidth;
+    let fieldY = currentY;
 
-    pdfDoc.setFontSize(14);
-    pdfDoc.text("Lavoro Eseguito", 20, 100 + yShift);
-    pdfDoc.setFontSize(11);
-    const lavoroLines = pdfDoc.splitTextToSize(rapportinoData.lavoroEseguito || 'Nessuno', 170);
-    pdfDoc.text(lavoroLines, 20, 107 + yShift);
+    const dataRapportino = (rapportino as any).dataInizio || rapportino.data;
+    doc.text('Data:', margin, fieldY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(dayjs(dataRapportino).isValid() ? dayjs(dataRapportino).format('DD MMMM YYYY') : 'Data non specificata', valueX, fieldY);
+    fieldY += fieldGap;
 
-    pdfDoc.setFontSize(14);
-    pdfDoc.text("Materiali Impiegati", 20, 150 + yShift);
-    pdfDoc.setFontSize(11);
-    const materialiLines = pdfDoc.splitTextToSize(rapportinoData.materialiImpiegati || 'Nessuno', 170);
-    pdfDoc.text(materialiLines, 20, 157 + yShift);
+    // ORDINE DI LAVORO (se presente)
+    if (rapportino.ordineLavoro) {
+        doc.setFont('helvetica', 'bold');
+        doc.text('Ordine Lavoro:', margin, fieldY);
+        doc.setFont('helvetica', 'normal');
+        doc.text(rapportino.ordineLavoro, valueX, fieldY);
+        fieldY += fieldGap;
+    }
 
-    pdfDoc.line(20, 200 + yShift, 190, 200 + yShift);
-    pdfDoc.setFontSize(14);
-    pdfDoc.text("Dettaglio Ore Lavoro", 20, 210 + yShift);
-    pdfDoc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Nave/Impianto:', margin, fieldY);
+    doc.text('Luogo:', margin, fieldY + fieldGap);
+    doc.text('Veicolo:', margin, fieldY + fieldGap * 2);
 
-    const oreBody = (rapportinoData.dettaglioOreTecnici || []).map(d => [
-        getNome(tecnici, d.tecnicoId),
-        `${d.ore || 0} ore`
-    ]);
+    doc.setFont('helvetica', 'normal');
+    doc.text(rapportino.nave?.nome || '--', valueX, fieldY);
+    doc.text(rapportino.luogo?.nome || '--', valueX, fieldY + fieldGap);
+    doc.text(rapportino.veicolo?.nome || '--', valueX, fieldY + fieldGap * 2);
 
-    autoTable(pdfDoc, { startY: 215 + yShift, head: [['Tecnico', 'Ore']], body: oreBody, theme: 'grid' });
+    currentY = fieldY + (fieldGap * 3) + 5;
 
-    const finalY = (pdfDoc as any).lastAutoTable.finalY + 10;
-    pdfDoc.setFontSize(12);
-    pdfDoc.setFont('helvetica', 'bold');
-    pdfDoc.text(`Totale Ore Lavoro: ${rapportinoData.oreLavoro || 0}`, 20, finalY);
+    // 4. TABELLA TECNICI
+    const tableHead = [['Tecnici Intervenuti', 'Orari']];
+    const tableBody = (rapportino.dettaglioOreTecnici || []).map((d: DettaglioOreTecnico) => {
+        const tecnico = tecniciMap.get(d.tecnicoId as string);
+        const nomeCompleto = tecnico ? `${tecnico.cognome} ${tecnico.nome}`.trim() : (d.nome || 'N/D');
+        return [nomeCompleto, formatOrario(d)];
+    });
+
+    autoTable(doc, {
+        head: tableHead,
+        body: tableBody,
+        startY: currentY,
+        theme: 'grid',
+        headStyles: { fillColor: '#343a40', textColor: 255, fontStyle: 'bold', halign: 'center' },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 70, halign: 'right', fontStyle: 'italic' } },
+        didDrawPage: (data) => { currentY = data.cursor?.y || 0; }
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    // 5. LINEA BLU E SEZIONI DESCRITTIVE
+    doc.setDrawColor(blueColor);
+    doc.setLineWidth(0.5);
+    doc.line(margin, currentY, pageWidth - margin, currentY);
+    currentY += 8;
+
+    const addSection = (title: string, content: string | undefined) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(title, margin, currentY);
+        currentY += 4;
+        doc.setFont('helvetica', 'normal');
+        currentY = addWrappedText(doc, content || '--', margin, currentY, contentWidth, 5);
+        currentY += 8;
+    };
+    
+    addSection('Breve Descrizione Lavoro', rapportino.descrizioneBreve);
+    addSection('Materiali Impiegati', rapportino.materialiImpiegati);
+    addSection('Lavoro Eseguito', rapportino.lavoroEseguito);
+
+    // 6. SEZIONE FIRME (LAYOUT DEFINITIVO, SECONDO ORDINE)
+    let signatureY = pageHeight - 75; // Aumento spazio dal fondo
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.3);
+    doc.line(margin, signatureY, pageWidth - margin, signatureY);
+    signatureY += 8;
+
+    const leftColX = margin;
+    const rightColX = pageWidth / 2 + 10;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+
+    // --- COLONNA SINISTRA: CLIENTE ---
+    doc.text('Per accettazione (firma del responsabile)', leftColX, signatureY);
+    signatureY += 6;
+    doc.text(`Nome Firmatario: ${rapportino.firmaFirmatarioNome || ''}`, leftColX, signatureY);
+    signatureY += 5;
+    doc.text(`Società: ${rapportino.firmaFirmatarioSocieta || ''}`, leftColX, signatureY);
+    signatureY += 5;
+
+    if (rapportino.firmaVettoriale) {
+        try {
+            doc.addImage(rapportino.firmaVettoriale, 'PNG', leftColX, signatureY, 70, 25, 'FIRMA_CLIENTE', 'NONE');
+        } catch (e) { console.error("Errore immagine firma:", e); }
+    }
+
+    // --- COLONNA DESTRA: TECNICO ---
+    let signatureYRight = pageHeight - 75 + 8; // Riallinea la Y per la colonna dx
+    doc.text('Firma Tecnico Responsabile', rightColX, signatureYRight);
+    signatureYRight += 15; // Spazio per la firma testuale
+
+    const mainTecnico = tecniciMap.get(rapportino.tecnicoId as string);
+    const mainTecnicoName = mainTecnico ? `${mainTecnico.cognome} ${mainTecnico.nome}`.trim() : 'N/D';
+    doc.text(mainTecnicoName, rightColX, signatureYRight);
+
+    return doc.output('blob');
 };

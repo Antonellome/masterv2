@@ -7,9 +7,12 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 import 'dayjs/locale/it';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { db } from '@/db/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Tecnico, Nave, TipoGiornata, Rapportino } from '@/models/definitions';
+import PdfPreviewDialog from './PdfPreviewDialog'; // Importa il dialog
 
 dayjs.extend(isBetween);
 dayjs.locale('it');
@@ -37,7 +40,7 @@ interface ReportData {
     cols: GridColDef[];
 }
 
-// --- HELPERS (CORRETTI E ALLINEATI A CUMULATIVITECNICI.TSX) --- 
+// --- HELPERS --- 
 const getCleanId = (id: any): string | undefined => {
     if (typeof id === 'string' && id) return id;
     if (id && typeof id === 'object' && id.id && typeof id.id === 'string') return id.id;
@@ -72,7 +75,7 @@ const abbreviate = (name: string): string => {
     return name.substring(0, 4);
 };
 
-// --- LOGICA DI CALCOLO (RISCRITTA E ALLINEATA) --- 
+// --- LOGICA DI CALCOLO --- 
 const calculateReportData = (
     selectedTecnico: Tecnico,
     selectedMonth: Dayjs,
@@ -87,14 +90,12 @@ const calculateReportData = (
     const selectedTecnicoId = getCleanId(selectedTecnico.id)!;
 
     const rapportiniDelMese = allRapportini.filter(r => {
-        // LOGICA DATA CORRETTA
         const dataDaNormalizzare = (r as any).dataInizio || r.data;
         const dataNormalizzata = normalizeDate(dataDaNormalizzare);
         const dataRapportino = dayjs(dataNormalizzata);
         return dataRapportino.isValid() && dataRapportino.isBetween(startOfMonth, endOfMonth, 'day', '[]');
     });
 
-    // Filtra solo i rapportini dove il tecnico è coinvolto
     const rapportiniTecnico = rapportiniDelMese.filter(r => {
         const allLegacyTecnici = new Set<string>();
         const addId = (id: any) => { const cleanId = getCleanId(id); if (cleanId) allLegacyTecnici.add(cleanId); };
@@ -125,8 +126,7 @@ const calculateReportData = (
                      }
                  }
             }
-
-        } else { // Modello Legacy
+        } else { 
             const allLegacyTecnici = new Set<string>();
             const addId = (id: any) => { const cleanId = getCleanId(id); if (cleanId) allLegacyTecnici.add(cleanId); };
             addId(r.tecnicoId); (r.altriTecniciIds || []).forEach(addId); (r.presenze || []).forEach(addId);
@@ -219,9 +219,14 @@ const ReportMensili: React.FC = () => {
     const masterDataLoading = !allRapportini || !allTecnici || !allNavi || !allTipiGiornata;
 
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
-    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs().year(2026).month(6)); // Default to July 2026 for convenience
+    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs().year(2026).month(6));
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportData, setReportData] = useState<ReportData | null>(null);
+    
+    // State per il PDF e il Dialog
+    const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
     const uniqueTecnici = useMemo(() => {
         if (!allTecnici) return [];
@@ -246,6 +251,51 @@ const ReportMensili: React.FC = () => {
         }, 50);
     };
 
+    const handleGenerateAndShowPdf = () => {
+        if (!reportData || !selectedTecnico) return;
+
+        setIsGeneratingPdf(true);
+        setPdfUrl(null);
+        setPdfDialogOpen(true);
+
+        // La generazione effettiva avviene in un timeout per permettere al dialog di aprirsi con il loader
+        setTimeout(() => {
+            const doc = new jsPDF();
+            const title = `Report Mensile per ${selectedTecnico.cognome} ${selectedTecnico.nome} - ${selectedMonth.format('MMMM YYYY')}`;
+            doc.setFontSize(18);
+            doc.text(title, 14, 22);
+
+            const summary = reportData.summary;
+            const summaryText = [
+              `Ore Totali Lavorate: ${summary.oreTotali.toLocaleString('it-IT')}`,
+              `Ordinario: ${summary.oreOrdinarie.toLocaleString('it-IT')}`,
+              `Straordinario: ${(summary.oreStraordinarie + summary.notte).toLocaleString('it-IT')}`,
+            ];
+            doc.setFontSize(11);
+            doc.text(summaryText, 14, 32);
+
+            const columnsForPdf = [...baseColumns, ...reportData.cols];
+            const tableHeaders = columnsForPdf.map(col => col.headerName);
+            const tableBody = reportData.rows.map(row => 
+              columnsForPdf.map(col => row[col.field] ?? '')
+            );
+
+            autoTable(doc, {
+              head: [tableHeaders],
+              body: tableBody,
+              startY: 50,
+              headStyles: { fillColor: '#4A90E2', textColor: 255, fontStyle: 'bold' },
+              styles: { font: 'helvetica', cellPadding: 3, fontSize: 9 },
+              alternateRowStyles: { fillColor: '#f5f5f5' }
+            });
+
+            const pdfOutput = doc.output('blob');
+            const url = URL.createObjectURL(pdfOutput);
+            setPdfUrl(url);
+            setIsGeneratingPdf(false);
+        }, 100); 
+    };
+
     const baseColumns: GridColDef[] = [
         { field: 'data', headerName: 'Data', flex: 1.2, align: 'left', headerAlign: 'left' },
         { field: 'oreTotali', headerName: 'Ore T.', type: 'number', flex: 0.8, align: 'right', headerAlign: 'right' },
@@ -266,6 +316,9 @@ const ReportMensili: React.FC = () => {
                     <Autocomplete options={uniqueTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={selectedTecnico} onChange={(_, v) => setSelectedTecnico(v)} isOptionEqualToValue={(o, v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Seleziona Tecnico" />} sx={{ minWidth: 250, flexGrow: 1 }} loading={masterDataLoading} />
                     <DatePicker views={['month', 'year']} label="Mese Report" value={selectedMonth} onChange={(v) => { if (v) setSelectedMonth(v); }} />
                     <Button variant="contained" onClick={handleGenerateReport} disabled={!selectedTecnico || isGenerating} startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : null}>{isGenerating ? 'Generando...' : 'Genera Report'}</Button>
+                    {reportData && (
+                       <Button variant="outlined" onClick={handleGenerateAndShowPdf} disabled={isGenerating}>Crea PDF</Button>
+                    )}
                 </Paper>
 
                 {isGenerating && <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><CircularProgress /></Box>}
@@ -301,6 +354,14 @@ const ReportMensili: React.FC = () => {
                         </Paper>
                     </Box>
                 )}
+                
+                <PdfPreviewDialog
+                    open={pdfDialogOpen}
+                    onClose={() => setPdfDialogOpen(false)}
+                    pdfUrl={pdfUrl}
+                    isGenerating={isGeneratingPdf}
+                    fileName={`Report_${selectedTecnico?.cognome}_${selectedMonth.format('MM-YYYY')}.pdf`}
+                />
             </Box>
         </LocalizationProvider>
     );

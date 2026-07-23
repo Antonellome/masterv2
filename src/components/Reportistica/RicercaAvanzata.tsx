@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { db } from '@/db/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
     Paper, Typography, Button, Box, TextField, Autocomplete, Grid,
-    Snackbar, Alert, Chip, Tooltip
+    Snackbar, Alert, Tooltip, CircularProgress
 } from '@mui/material';
 import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem, GridSortComparator } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
@@ -17,15 +17,18 @@ import { useNavigate } from 'react-router-dom';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { Tecnico, Nave, Cliente, Luogo, TipoGiornata } from '@/models/definitions';
+import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Veicolo, Rapportino } from '@/models/definitions';
 import { useCollectionData } from '@/hooks/useCollectionData';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import { db as firestoreDb } from '@/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 
+import { generateRapportinoPdf } from '@/utils/pdfGenerator';
+import PdfPreviewDialog from '@/components/common/PdfPreviewDialog';
+
 dayjs.locale('it');
 
-// --- INTERFACCE & HELPERS ---
+// --- INTERFACES & HELPERS ---
 interface FlatRapportino {
     id: string;
     dataFormatted: string;
@@ -77,39 +80,94 @@ const getCleanId = (id: any): string | undefined => {
 const RicercaAvanzata: React.FC = () => {
     const navigate = useNavigate();
     
-    const rapportini = useLiveQuery(() => db.rapportini.toArray(), []);
-    const { data: anagraficaTecnici, loading: lTecn } = useCollectionData<Tecnico>('tecnici');
-    const { data: anagraficaNavi, loading: lNav } = useCollectionData<Nave>('navi');
-    const { data: anagraficaClienti, loading: lCli } = useCollectionData<Cliente>('clienti');
-    const { data: anagraficaLuoghi, loading: lLuo } = useCollectionData<Luogo>('luoghi');
-    const { data: anagraficaTipiGiornata, loading: lTip } = useCollectionData<TipoGiornata>('tipiGiornata');
+    const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) as Rapportino[] | undefined;
+    const { data: anagraficaTecnici = [] } = useCollectionData<Tecnico>('tecnici');
+    const { data: anagraficaNavi = [] } = useCollectionData<Nave>('navi');
+    const { data: anagraficaClienti = [] } = useCollectionData<Cliente>('clienti');
+    const { data: anagraficaLuoghi = [] } = useCollectionData<Luogo>('luoghi');
+    const { data: anagraficaTipiGiornata = [] } = useCollectionData<TipoGiornata>('tipiGiornata');
+    const { data: anagraficaVeicoli = [] } = useCollectionData<Veicolo>('veicoli');
     
-    const anagraficheLoading = lTecn || lNav || lCli || lLuo || lTip;
+    const anagraficheLoading = !anagraficaTecnici || !anagraficaNavi || !anagraficaClienti || !anagraficaLuoghi || !anagraficaTipiGiornata || !anagraficaVeicoli;
     const rapportiniLoading = rapportini === undefined;
 
     const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' });
     const [rowToDelete, setRowToDelete] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
 
-    const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
-    const handlePrintOrShare = useCallback((id: string) => { /* Logica Stampa */ }, []);
+    // State for PDF Preview
+    const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+    const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+    const [pdfGenerating, setPdfGenerating] = useState(false);
+    const [activeRapportinoId, setActiveRapportinoId] = useState<string | null>(null);
 
+    const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
+
+    const { tecniciMap, naviMap, clientiMap, tipiGiornataMap, luoghiMap, veicoliMap } = useMemo(() => {
+        if (anagraficheLoading) return { tecniciMap: new Map(), naviMap: new Map(), clientiMap: new Map(), tipiGiornataMap: new Map(), luoghiMap: new Map(), veicoliMap: new Map() };
+        return {
+            tecniciMap: new Map(anagraficaTecnici.map((t) => [t.id, t])),
+            naviMap: new Map(anagraficaNavi.map((n) => [n.id, n])),
+            clientiMap: new Map(anagraficaClienti.map((c) => [c.id, c])),
+            tipiGiornataMap: new Map(anagraficaTipiGiornata.map((tg) => [tg.id, tg])),
+            luoghiMap: new Map(anagraficaLuoghi.map((l) => [l.id, l])),
+            veicoliMap: new Map(anagraficaVeicoli.map((v) => [v.id, v]))
+        };
+    }, [anagraficaTecnici, anagraficaNavi, anagraficaClienti, anagraficaTipiGiornata, anagraficaLuoghi, anagraficaVeicoli, anagraficheLoading]);
+
+    const handlePrintShareClick = useCallback(async (id: string) => {
+        const rapportino = rapportini?.find(r => r.id === id);
+        if (!rapportino) {
+            setSnackbar({ open: true, message: 'Rapportino non trovato.', severity: 'error' });
+            return;
+        }
+
+        setPdfGenerating(true);
+        setActiveRapportinoId(id);
+
+        try {
+            // STEP 1: Ricostruire l'oggetto completo come facevamo prima
+            const nave = naviMap.get(getCleanId(rapportino.naveId) || '');
+            const fullRapportino: Rapportino = {
+                ...rapportino,
+                data: normalizeDate(rapportino.data),
+                nave: nave || undefined,
+                luogo: luoghiMap.get(getCleanId(rapportino.luogoId) || '') || undefined,
+                veicolo: veicoliMap.get(getCleanId(rapportino.veicoloId) || '') || undefined,
+                dettaglioOreTecnici: (rapportino.dettaglioOreTecnici || []).map(d => ({
+                    ...d,
+                    nome: tecniciMap.get(getCleanId(d.tecnicoId) || '')?.nome || 'N/D'
+                }))
+            };
+
+            // STEP 2: Generare il PDF con l'oggetto completo
+            const blob = generateRapportinoPdf(fullRapportino, tecniciMap);
+            setPdfBlob(blob);
+            setPdfPreviewOpen(true);
+        } catch (error) {
+            console.error("Errore generazione PDF:", error);
+            setSnackbar({ open: true, message: 'Errore durante la creazione del PDF.', severity: 'error' });
+        } finally {
+            setPdfGenerating(false);
+        }
+    }, [rapportini, tecniciMap, naviMap, luoghiMap, veicoliMap]);
+
+    const getPdfFileName = () => {
+        if (!activeRapportinoId) return 'Rapportino.pdf';
+        const rapportino = rapportini?.find(r => r.id === activeRapportinoId);
+        if (!rapportino) return 'Rapportino.pdf';
+        const mainTecnico = tecniciMap.get(getCleanId(rapportino.tecnicoId) || '');
+        const dateStr = dayjs(normalizeDate(rapportino.data)).format('YYYY-MM-DD');
+        return `Rapportino_${mainTecnico?.cognome || 'TEC'}_${dateStr}.pdf`;
+    };
+    
     const flatRapportini = useMemo((): FlatRapportino[] => {
         if (!rapportini || anagraficheLoading) return [];
-
-        const tecniciMap = new Map(anagraficaTecnici.map((t) => [t.id, t]));
-        const naviMap = new Map(anagraficaNavi.map((n) => [n.id, n]));
-        const clientiMap = new Map(anagraficaClienti.map((c) => [c.id, c]));
-        const tipiGiornataMap = new Map(anagraficaTipiGiornata.map((tg) => [tg.id, tg]));
-        const luoghiMap = new Map(anagraficaLuoghi.map((l) => [l.id, l]));
-
         return rapportini.map((rapportino) => {
             const dataDaNormalizzare = (rapportino as any).dataInizio || rapportino.data;
             const dataNormalizzata = normalizeDate(dataDaNormalizzare);
-            
             let clienteNome = "N/D";
             let finalClienteId: string | undefined = undefined;
-
             const naveId = getCleanId(rapportino.naveId);
             if (naveId) {
                 const nave = naviMap.get(naveId);
@@ -117,14 +175,10 @@ const RicercaAvanzata: React.FC = () => {
                     const clienteId = getCleanId(nave.clienteId);
                     if (clienteId) {
                         const cliente = clientiMap.get(clienteId);
-                        if (cliente) {
-                            clienteNome = cliente.nome;
-                            finalClienteId = cliente.id;
-                        }
+                        if (cliente) { clienteNome = cliente.nome; finalClienteId = cliente.id; }
                     }
                 }
             }
-
             if (clienteNome === "N/D") {
                 const luogoId = getCleanId(rapportino.luogoId);
                 if (luogoId) {
@@ -133,47 +187,33 @@ const RicercaAvanzata: React.FC = () => {
                         const clienteId = getCleanId(luogo.clienteId);
                         if (clienteId) {
                             const cliente = clientiMap.get(clienteId);
-                            if (cliente) {
-                                clienteNome = cliente.nome;
-                                finalClienteId = cliente.id;
-                            }
+                            if (cliente) { clienteNome = cliente.nome; finalClienteId = cliente.id; }
                         }
                     }
                 }
             }
-
             const mainTecnicoId = getCleanId(rapportino.tecnicoId);
             const allTecnicoIdsInPresenze = (Array.isArray(rapportino.presenze) ? rapportino.presenze.map(getCleanId) : []).filter(Boolean) as string[];
-
             const getName = (id: string) => {
                 const t = tecniciMap.get(id);
                 return t ? `${t.cognome} ${t.nome}`.trim() : `ID: ${id}`;
             };
-            
             const mainTecnicoNome = mainTecnicoId ? getName(mainTecnicoId) : "N/D";
-            
-            const altriTecniciNomi = allTecnicoIdsInPresenze
-                .filter(id => id !== mainTecnicoId)
-                .map(getName);
-
-            const tecnicoIds = [...new Set([mainTecnicoId, ...allTecnicoIdsInPresenze].filter(Boolean) as string[])]; 
-            const tecniciNomi = [mainTecnicoNome, ...altriTecniciNomi];
-            
+            const altriTecniciNomi = allTecnicoIdsInPresenze.filter(id => id !== mainTecnicoId).map(getName);
+            const tecnicoIds = [...new Set([mainTecnicoId, ...allTecnicoIdsInPresenze].filter(Boolean) as string[])];
             const tipoGiornataId = getCleanId(rapportino.tipoGiornataId);
             const tipoGiornataObj = tipoGiornataId ? tipiGiornataMap.get(tipoGiornataId) : undefined;
             const naveObj = naveId ? naviMap.get(naveId) : undefined;
             const luogoId = getCleanId(rapportino.luogoId);
             const luogoObj = luogoId ? luoghiMap.get(luogoId) : undefined;
-
             let oreTotaliRapporto = rapportino.dettaglioOreTecnici?.reduce((sum, d) => sum + (d.ore || 0), 0) ?? Number(rapportino.oreLavoro) ?? 0;
             const dettaglioResponsabile = rapportino.dettaglioOreTecnici?.find(d => getCleanId(d.tecnicoId) === getCleanId(rapportino.tecnicoId));
             let oreResponsabile = dettaglioResponsabile?.ore ?? (rapportino.dettaglioOreTecnici ? 0 : oreTotaliRapporto);
-
             return {
                 id: rapportino.id,
                 data: dataNormalizzata,
                 dataFormatted: dayjs(dataNormalizzata).isValid() ? dayjs(dataNormalizzata).format("DD/MM/YYYY") : "Data Invalida",
-                tecniciNomi,
+                tecniciNomi: [mainTecnicoNome, ...altriTecniciNomi],
                 mainTecnicoNome,
                 altriTecniciNomi,
                 tipoGiornataNome: tipoGiornataObj?.nome || "N/D",
@@ -190,7 +230,30 @@ const RicercaAvanzata: React.FC = () => {
                 luogoId: luogoId,
             };
         });
-    }, [rapportini, anagraficaTecnici, anagraficaNavi, anagraficaClienti, anagraficaLuoghi, anagraficaTipiGiornata, anagraficheLoading]);
+    }, [rapportini, anagraficheLoading, naviMap, clientiMap, luoghiMap, tecniciMap, tipiGiornataMap]);
+
+    // DEBUGGING LOGIC
+    useEffect(() => {
+        if (flatRapportini.length > 0 && rapportini) {
+            const debugData = dayjs('2026-07-17');
+            const targetDataString = debugData.format('DD/MM/YYYY');
+
+            const targetRapportino = flatRapportini.find(r => 
+                r.dataFormatted === targetDataString && 
+                r.naveNome.toLowerCase() === 'iginia' && 
+                r.mainTecnicoNome.toLowerCase().includes('scuderi')
+            );
+
+            if (targetRapportino) {
+                console.log("--- DEBUG: RAPPORTO SPECIFICO TROVATO ---");
+                console.log("DATI ELABORATI (per la tabella):", JSON.stringify(targetRapportino, null, 2));
+                
+                const originalRawRapportino = rapportini.find(r => r.id === targetRapportino.id);
+                console.log("DATI GREZZI (dal database):", JSON.stringify(originalRawRapportino, null, 2));
+                console.log("--- FINE DEBUG ---");
+            }
+        }
+    }, [flatRapportini, rapportini]);
     
     const filteredRapportini = useMemo(() => {
         return flatRapportini.filter(r => {
@@ -237,32 +300,18 @@ const RicercaAvanzata: React.FC = () => {
     const columns: GridColDef<FlatRapportino>[] = useMemo(() => [
         { field: 'data', headerName: 'Data', width: 110, renderCell: (params) => params.row.dataFormatted, sortComparator: dateSortComparator, type: 'date' },
         { 
-            field: 'tecniciNomi', 
-            headerName: 'Tecnici', 
-            flex: 1.5, 
-            minWidth: 150, 
+            field: 'tecniciNomi', headerName: 'Tecnici', flex: 1.5, minWidth: 150, 
             renderCell: params => {
                 const mainTecnico = params.row.mainTecnicoNome;
                 const altriTecnici = params.row.altriTecniciNomi;
                 const fullList = [mainTecnico, ...altriTecnici].join(', ');
                 const numAltri = altriTecnici.length;
-
                 return (
                     <Tooltip title={fullList} arrow placement="top">
-                        <Box sx={{ 
-                            overflow: 'hidden', 
-                            textOverflow: 'ellipsis', 
-                            whiteSpace: 'nowrap',
-                            width: '100%',
-                            my: 'auto'
-                        }}>
-                            <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
-                                {mainTecnico}
-                            </Typography>
+                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', my: 'auto' }}>
+                            <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}> {mainTecnico} </Typography>
                             {numAltri > 0 && (
-                                <Typography variant="body2" component="span" sx={{ ml: 0.5, color: 'text.secondary' }}>
-                                    (+{numAltri})
-                                </Typography>
+                                <Typography variant="body2" component="span" sx={{ ml: 0.5, color: 'text.secondary' }}> (+{numAltri}) </Typography>
                             )}
                         </Box>
                     </Tooltip>
@@ -277,14 +326,19 @@ const RicercaAvanzata: React.FC = () => {
         { field: 'oreResponsabile', headerName: 'Ore Resp.', width: 100, align: 'right', headerAlign: 'right' },
         { field: 'oreTotali', headerName: 'Ore Totali', width: 100, align: 'right', headerAlign: 'right' },
         {
-            field: 'actions', type: 'actions', headerName: 'Azioni', width: 100,
+            field: 'actions', type: 'actions', headerName: 'Azioni', width: 120,
             getActions: ({ id }) => [
-                <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={(e) => { e.stopPropagation(); handleEdit(id as string);}} />,
-                <GridActionsCellItem icon={<PrintIcon />} label="Stampa" onClick={(e) => { e.stopPropagation(); handlePrintOrShare(id as string);}} />,
-                <GridActionsCellItem icon={<DeleteIcon color="error" />} label="Elimina" onClick={(e) => { e.stopPropagation(); handleDeleteRequest(id as string);}} />,
+                <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={(e) => { e.stopPropagation(); handleEdit(id as string);}} showInMenu />, 
+                <GridActionsCellItem 
+                    icon={pdfGenerating && activeRapportinoId === id ? <CircularProgress size={24} /> : <PrintIcon />}
+                    label="Stampa / Condividi" 
+                    onClick={(e) => { e.stopPropagation(); handlePrintShareClick(id as string);}} 
+                    disabled={pdfGenerating && activeRapportinoId === id}
+                />,
+                <GridActionsCellItem icon={<DeleteIcon color="error" />} label="Elimina" onClick={(e) => { e.stopPropagation(); handleDeleteRequest(id as string);}} showInMenu />,
             ],
         },
-    ], [handleEdit, handlePrintOrShare, handleDeleteRequest]);
+    ], [handleEdit, handlePrintShareClick, handleDeleteRequest, pdfGenerating, activeRapportinoId]);
     
     const loading = anagraficheLoading || rapportiniLoading;
 
@@ -302,40 +356,42 @@ const RicercaAvanzata: React.FC = () => {
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaClienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaTipiGiornata} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><TextField label="Ordine di Lavoro" value={filters.ordineLavoro} onChange={e => handleFilterChange('ordineLavoro', e.target.value)} fullWidth size="small" /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera</Button></Grid>
+                        <Grid item xs={12}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
                     </Grid>
                 </Paper>
 
                 <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                     <DataGrid 
-                        rowHeight={40}
-                        headerHeight={48}
                         rows={filteredRapportini} 
                         columns={columns} 
                         loading={loading} 
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText} 
                         slots={{ toolbar: GridToolbar }} 
-                        slotProps={{ toolbar: { showQuickFilter: true } }} 
+                        slotProps={{ toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 500 } } }} 
                         initialState={{ pagination: { paginationModel: { pageSize: 25 } }, sorting: { sortModel: [{ field: 'data', sort: 'desc' }] } }} 
                         pageSizeOptions={[10, 25, 50, 100]} 
                         density="compact" 
                         onRowClick={handleRowClick}
-                        sx={{
-                            '& .MuiDataGrid-row': { 
-                                cursor: 'pointer' 
-                            },
-                             '& .MuiDataGrid-cell': {
-                                 alignItems: 'center',
-                                 display: 'flex',
-                                 whiteSpace: 'nowrap', 
-                                 overflow: 'hidden',
-                                 textOverflow: 'ellipsis',
-                             },
-                        }}
+                        sx={{ border: 0, '& .MuiDataGrid-row': { cursor: 'pointer' }, '& .MuiDataGrid-cell': { alignItems: 'center', display: 'flex', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', }, }}
                     />
                 </Paper>
                 
                 <ConfirmationDialog open={!!rowToDelete} onClose={() => setRowToDelete(null)} onConfirm={handleConfirmDelete} title="Conferma Eliminazione" description={"Sei sicuro di voler eliminare questo rapportino? L'azione è irreversibile."} />
+                
+                {pdfPreviewOpen &&
+                    <PdfPreviewDialog
+                        open={pdfPreviewOpen}
+                        onClose={() => {
+                            setPdfPreviewOpen(false);
+                            setPdfBlob(null);
+                            setActiveRapportinoId(null);
+                        }}
+                        pdfBlob={pdfBlob}
+                        fileName={getPdfFileName()}
+                        canShare={!!navigator.share}
+                    />
+                }
+
                 {snackbar && <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(null)}><Alert onClose={() => setSnackbar(null)} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>}
             </Box>
         </LocalizationProvider>

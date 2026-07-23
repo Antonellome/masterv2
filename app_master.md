@@ -31,7 +31,7 @@
     *   **Stato:** **NON RISOLTO - CRITICITÀ MEDIA.**
 
 *   **[C-5] Bug Funzionale Grave in Cumulativi Tecnici:**
-    *   **Stato:** **NON RISOLTO - CRITICITÀ ALTA.**
+    *   **Stato:** **RISOLTO (Logica di calcolo corretta, in attesa di refactoring visuale).**
 
 *   **[C-6] Violazione Totale del Pattern Offline-First in Analisi Ore:**
     *   **File:** `src/components/Reportistica/AnalisiOre.tsx`
@@ -60,6 +60,6 @@
     3.  **Logica di Calcolo:** La logica per calcolare costi e ore (`analisi`) è ben strutturata e resiliente, con controlli per dati mancanti.
 *   **Criticità Rilevate:** **[C-6]**. Il componente è un'anomalia architetturale che deve essere completamente riscritta per utilizzare la fonte dati locale (Dexie.js).
 
-**Prossimo Passo dell'Analisi:** **STOP all'analisi di nuove funzionalità.** La Fase 5 ha rivelato criticità troppo gravi per essere ignorate. La priorità assoluta ora è la **risoluzione dei problemi**, partendo dal bug bloccante **[C-5]** che rende inutilizzabile la sezione "Cumulativi Tecnici". Inizierò a formulare un piano di debug e correzione per questo componente.
+**Prossimo Passo dell'Analisi:** La criticità [C-5] è stata risolta a livello di logica di calcolo. Ora si procederà con il refactoring visuale di `CumulativiTecnici.tsx` come documentato nel `blueprint.md`.
 
 ---

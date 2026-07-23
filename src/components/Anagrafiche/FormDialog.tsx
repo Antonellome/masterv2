@@ -7,7 +7,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { FormField, Anagrafica } from '@/models/definitions';
-import { safeGetDayjs } from '@/utils/dateUtils';
+import { parseToDayjs } from '@/utils/dateUtils';
 
 interface SelectFieldProps {
     field: FormField;
@@ -132,7 +132,7 @@ const FormDialog = <T extends Anagrafica>({ open, onClose, onSave, fields, initi
             case 'date':
                 return <DatePicker 
                             label={field.label} 
-                            value={safeGetDayjs(value as string)} 
+                            value={parseToDayjs(value as string)} 
                             onChange={(date) => handleChange(field.name, date?.toISOString() ?? null)} 
                             sx={{ width: '100%' }} 
                         />;

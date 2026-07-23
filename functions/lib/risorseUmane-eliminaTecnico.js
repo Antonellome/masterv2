@@ -15,54 +15,51 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.eliminaTecnico = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
-/**
- * Funzione per eliminare un tecnico (utente Auth e/o documento Firestore).
- * Verifica che il chiamante sia un amministratore.
- * È progettata per essere resiliente e pulire i record "orfani" di Firestore.
- */
+const logger = __importStar(require("firebase-functions/logger"));
 exports.eliminaTecnico = functions.region('europe-west1').https.onCall(async (data, context) => {
-    // 1. Verifica dei permessi (CORRETTA)
-    if (!context.auth || context.auth.token.role !== 'admin') {
-        throw new functions.https.HttpsError('permission-denied', 'Questa funzione può essere chiamata solo da un amministratore.');
+    var _a, _b;
+    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'admin') {
+        logger.error(`Tentativo non autorizzato. UID: ${((_b = context.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'Nessuno'}`);
+        throw new functions.https.HttpsError("permission-denied", "Solo gli amministratori possono eliminare i tecnici.");
     }
     const { uid } = data;
     if (!uid) {
-        throw new functions.https.HttpsError('invalid-argument', 'UID del tecnico non fornito.');
+        throw new functions.https.HttpsError("invalid-argument", "Dati non validi. È necessario fornire 'uid'.");
     }
+    logger.info(`Richiesta di eliminazione per UID: ${uid} dall'admin: ${context.auth.token.email}`);
     try {
-        // 2. Tentativo di eliminazione dell'utente da Firebase Authentication.
-        try {
-            await admin.auth().deleteUser(uid);
-            console.log(`Utente di autenticazione ${uid} eliminato con successo.`);
-        }
-        catch (authError) {
-            if (authError.code === 'auth/user-not-found') {
-                console.log(`L'utente di autenticazione ${uid} non è stato trovato. Si procederà con la pulizia di Firestore.`);
-            }
-            else {
-                console.error(`Errore durante l'eliminazione dell'utente di autenticazione ${uid}, ma si tenterà comunque di pulire Firestore. Errore:`, authError);
-            }
-        }
-        // 3. Eliminazione del documento da Firestore.
-        const tecnicoRef = admin.firestore().collection('tecnici').doc(uid);
-        await tecnicoRef.delete();
-        console.log(`Documento Firestore 'tecnici/${uid}' eliminato con successo.`);
-        return { message: `Operazione di eliminazione per il tecnico ${uid} completata.` };
+        await admin.auth().deleteUser(uid);
+        await admin.firestore().collection("tecnici").doc(uid).delete();
+        logger.info(`Tecnico con UID: ${uid} eliminato con successo.`);
+        return { status: "success", message: `Tecnico con UID: ${uid} eliminato.` };
     }
     catch (error) {
-        console.error(`Errore generale durante l'eliminazione del tecnico ${uid}:`, error);
-        throw new functions.https.HttpsError('internal', `Si è verificato un errore imprevisto durante la pulizia del tecnico. Dettagli: ${error.message}`);
+        logger.error(`Errore durante l'eliminazione del tecnico con UID ${uid}:`, error);
+        if (error.code === 'auth/user-not-found') {
+            throw new functions.https.HttpsError("not-found", `Nessun utente trovato con UID: ${uid}.`);
+        }
+        throw new functions.https.HttpsError("internal", `Errore interno durante l'eliminazione. ${error.message}`);
     }
 });
 //# sourceMappingURL=risorseUmane-eliminaTecnico.js.map

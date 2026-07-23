@@ -15,39 +15,43 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.risorseUmane_gestisciAccessoTecnico = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
-// L'SDK di Admin è già inizializzato nel file index.ts principale
 exports.risorseUmane_gestisciAccessoTecnico = functions.region("europe-west1").https.onCall(async (data, context) => {
-    var _a;
-    // 1. CONTROLLO AUTENTICAZIONE E PERMESSI DA AMMINISTRATORE
-    if (!context.auth || context.auth.token.role !== 'admin') {
-        logger.error(`Tentativo non autorizzato a risorseUmane_gestisciAccessoTecnico. UID: ${(_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid}`);
-        throw new functions.https.HttpsError("permission-denied", "Accesso negato. Solo gli amministratori possono eseguire questa operazione.");
+    var _a, _b;
+    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'admin') {
+        logger.error(`Tentativo non autorizzato. UID: ${((_b = context.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'Nessuno'}`);
+        throw new functions.https.HttpsError("permission-denied", "Solo gli amministratori possono gestire l'accesso.");
     }
-    // 2. VALIDAZIONE DATI IN INGRESSO
     const { uid, action } = data;
     if (!uid || (action !== "enable" && action !== "disable")) {
-        throw new functions.https.HttpsError("invalid-argument", "Dati non validi. È necessario fornire 'uid' e 'action' (enable/disable).");
+        throw new functions.https.HttpsError("invalid-argument", "Dati non validi. Fornire 'uid' e 'action' ('enable'/'disable').");
     }
     logger.info(`Richiesta di ${action} per UID: ${uid} dall'admin: ${context.auth.token.email}`);
     try {
-        // 3. LOGICA PRINCIPALE
         const newState = action === "enable";
-        // Aggiorna lo stato in Firebase Authentication
         await admin.auth().updateUser(uid, { disabled: !newState });
         logger.info(`Stato utente in Auth aggiornato per UID: ${uid}`);
-        // Aggiorna lo stato nel documento Firestore
         const tecnicoRef = admin.firestore().collection("tecnici").doc(uid);
         await tecnicoRef.update({ appAccess: newState });
         logger.info(`Stato documento in Firestore aggiornato per UID: ${uid}`);

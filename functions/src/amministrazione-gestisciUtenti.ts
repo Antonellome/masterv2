@@ -1,101 +1,57 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import * as logger from "firebase-functions/logger";
 
-// INIZIALIZZAZIONE
-if (admin.apps.length === 0) {
-  admin.initializeApp();
+interface GestisciUtentiData {
+    uid: string;
+    role: 'admin' | 'tecnico';
 }
-const auth = admin.auth();
-const db = admin.firestore();
 
-/**
- * Funzione UNIFICATA e CORRETTA per la gestione utenti.
- * Utilizza ESCLUSIVAMENTE la collezione `admins` per la logica degli amministratori.
- */
-export const amministrazione_gestisciUtenti = functions.region("europe-west1").https.onCall(async (data, context) => {
-  // 1. CHECK PERMESSI: Unificato e corretto su collezione `admins`
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Autenticazione richiesta.");
-  }
-  try {
-    const adminDoc = await db.collection("admins").doc(context.auth.uid).get();
-    if (!adminDoc.exists) {
-      throw new functions.https.HttpsError("permission-denied", "Azione consentita solo agli amministratori.");
+export const amministrazione_gestisciUtenti = functions.region("europe-west1").https.onCall(async (data: GestisciUtentiData, context: functions.https.CallableContext) => {
+    // 1. CONTROLLO AUTENTICAZIONE E PERMESSI
+    if (context.auth?.token.role !== 'admin') {
+        logger.error(
+            `Tentativo non autorizzato. UID: ${context.auth?.uid || 'Nessuno'}`
+        );
+        throw new functions.https.HttpsError(
+            "permission-denied",
+            "Solo gli amministratori possono gestire i ruoli."
+        );
     }
-  } catch (error) {
-     throw new functions.https.HttpsError("internal", "Errore durante la verifica dei permessi.", error);
-  }
 
-  const { action, uid, email, nome, telefono } = data;
+    // 2. VALIDAZIONE DATI
+    const { uid, role } = data;
+    if (!uid || (role !== 'admin' && role !== 'tecnico')) {
+        throw new functions.https.HttpsError(
+            "invalid-argument",
+            "Dati non validi. Fornire 'uid' e 'role' ('admin' o 'tecnico')."
+        );
+    }
 
-  try {
-    switch (action) {
+    logger.info(`Richiesta di impostare il ruolo '${role}' per UID: ${uid} dall'admin: ${context.auth.token.email}`);
 
-      // --- CREAZIONE UTENTE --- (Logica invariata, ma più pulita)
-      case "createUser": {
-        if (!email || !nome || !telefono) {
-          throw new functions.https.HttpsError("invalid-argument", "Email, nome e telefono sono richiesti.");
-        }
-        const newUserRecord = await auth.createUser({ email, displayName: nome, phoneNumber: telefono });
-        await db.collection("utenti_master").doc(newUserRecord.uid).set({ nome, email, telefono });
-        return { success: true, message: `Utente ${nome} creato.` };
-      }
+    try {
+        // 3. IMPOSTA CUSTOM CLAIM
+        await admin.auth().setCustomUserClaims(uid, { role: role });
 
-      // --- MODIFICA UTENTE --- (Logica corretta e unificata)
-      case "updateUser": {
-        if (!uid || !nome || !telefono) {
-          throw new functions.https.HttpsError("invalid-argument", "UID, nome e telefono sono richiesti per l'aggiornamento.");
-        }
-
-        // Aggiorna Authentication
-        await auth.updateUser(uid, { displayName: nome, phoneNumber: telefono });
-
-        const dataToUpdate = { nome, telefono };
-
-        // Aggiorna Firestore con una transazione per garantire coerenza
-        await db.runTransaction(async (transaction) => {
-          const userMasterRef = db.collection("utenti_master").doc(uid);
-          const adminRef = db.collection("admins").doc(uid);
-
-          // Aggiorna sempre la master list
-          transaction.update(userMasterRef, dataToUpdate);
-
-          // Se l'utente è un admin, aggiorna anche la collezione admins
-          const adminDoc = await transaction.get(adminRef);
-          if (adminDoc.exists) {
-            transaction.update(adminRef, dataToUpdate);
-          }
+        // Opzionale: Aggiorna anche un campo nel documento utente in Firestore
+        await admin.firestore().collection('tecnici').doc(uid).update({
+            role: role,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
-        return { success: true, message: `Utente ${nome} aggiornato.` };
-      }
+        logger.info(`Ruolo '${role}' impostato con successo per UID: ${uid}`);
+        return { status: "success", message: `Ruolo '${role}' aggiornato per l'utente ${uid}.` };
 
-      // --- ELIMINAZIONE UTENTE --- (Logica corretta e unificata)
-      case "deleteUser": {
-        if (!uid) {
-          throw new functions.https.HttpsError("invalid-argument", "UID dell'utente richiesto per l'eliminazione.");
+    } catch (error: any) {
+        logger.error(`Errore nell'impostare il ruolo per UID ${uid}:`, error);
+        if (error.code === 'auth/user-not-found') {
+            throw new functions.https.HttpsError("not-found", `Nessun utente trovato in Authentication con UID: ${uid}.`);
         }
-        await auth.deleteUser(uid);
-        
-        // Elimina da tutte le possibili collezioni per pulizia definitiva
-        await db.collection("utenti_master").doc(uid).delete();
-        await db.collection("admins").doc(uid).delete();
-        await db.collection("amministratori").doc(uid).delete(); // Pulizia finale della vecchia collezione
-
-        return { success: true, message: "Utente eliminato con successo." };
-      }
-
-      // L'azione `setRole` è stata rimossa perché gestita dal frontend. Questo previene conflitti.
-
-      default:
-        throw new functions.https.HttpsError("invalid-argument", `Azione non valida o non riconosciuta: '${action}'.`);
+        throw new functions.https.HttpsError(
+            "internal",
+            `Errore interno durante l'aggiornamento del ruolo. ${error.message}`
+        );
     }
-  } catch (error: any) {
-    console.error(`ERRORE durante l'azione '${action}' sull'utente ${uid}:`, error);
-    if (error instanceof functions.https.HttpsError) {
-        throw error;
-    }
-    throw new functions.https.HttpsError("internal", error.message || "Si è verificato un errore interno catastrofico.");
-  }
 });

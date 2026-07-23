@@ -14,47 +14,29 @@ import { useReactToPrint } from 'react-to-print';
 
 dayjs.locale('it');
 
+// --- CONFIGURAZIONE STILI --- 
+const UI_HIGHLIGHT_COLOR = '#E0E0E0';
+const PRINT_HIGHLIGHT_COLOR = '#E0E0E0';
+
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
-// This wrapper is crucial. It prevents useLiveQuery from breaking if the db table object is not ready on the first render.
 const safeQuery = <T,>(query: () => Promise<T[] | undefined> | undefined): () => Promise<T[] | any[]> => {
     return () => {
         try {
-            // The query function itself might be undefined if db is not ready
             const promise = query?.();
-            // The promise can be undefined if the table is not ready
             return promise || Promise.resolve([]);
         } catch (e) {
-            // In case the query function throws an error
             console.error("SafeQuery caught an error:", e);
             return Promise.resolve([]);
         }
     };
 };
 
-const LegendaReport: React.FC = () => (
-    <Box sx={{ mt: 2, p: 1, border: '1px solid', borderColor: 'grey.300', borderRadius: 1, fontSize: '0.75rem' }}>
-        <Typography variant="caption" display="block" gutterBottom><b>Legenda:</b></Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px 8px'}}>
-            <span><b>8</b>: Ore Ordinarie</span>
-            <span><b>8+2</b>: Ordinarie + Straordinarie</span>
-            <span><b>+2</b>: Solo Straordinarie</span>
-            <span><b>5N</b>: Ore Notturne (Cartour)</span>
-            <span><b>8F</b>: Ferie</span>
-            <span><b>8M</b>: Malattia</span>
-            <span><b>8P</b>: Permesso</span>
-            <span><b>8FE</b>: Festività</span>
-             <span><b>8L</b>: Legge 104</span>
-        </Box>
-    </Box>
-);
-
 const MensileTecnici: React.FC = () => {
     const theme = useTheme();
     const printRef = useRef<HTMLDivElement>(null);
 
-    // --- UNIFIED & ROBUST DATA FETCHING via useLiveQuery --- 
     const allDitte = useLiveQuery(safeQuery(() => db.ditte?.toArray()), []);
     const allCategorie = useLiveQuery(safeQuery(() => db.categorieTecnici?.toArray()), []);
     const allTecnici = useLiveQuery(safeQuery(() => db.tecnici?.toArray()), []);
@@ -63,7 +45,8 @@ const MensileTecnici: React.FC = () => {
     const allTipiGiornata = useLiveQuery(safeQuery(() => db.tipiGiornata?.toArray()), []);
     const impostazioni = useLiveQuery(() => db.impostazioni?.get(1), []);
 
-    // Separate loading states, they are true only if data is not yet available.
+    const gtechId = useMemo(() => allDitte?.find(d => d.nome?.toLowerCase() === 'g-tech')?.id, [allDitte]);
+
     const ditteLoading = allDitte === undefined;
     const categorieLoading = allCategorie === undefined;
     const naviLoading = allNavi === undefined;
@@ -86,6 +69,18 @@ const MensileTecnici: React.FC = () => {
         allNavi ? [...allNavi].sort((a, b) => (a?.nome || '').localeCompare(b?.nome || '')) : [], 
     [allNavi]);
 
+    const fullLegendaString = useMemo(() => {
+        const formatoOreLegenda: Record<string, string> = {
+            "'8'": "Ore Ordinarie", "+'3": "Ore Straordinarie", "'8+3'": "8 Ordinarie + 3 Straordinarie",
+        };
+        const legendaCodici: Record<string, string> = {
+            'F': 'Ferie', 'M': 'Malattia', 'P': 'Permesso', 'FE': 'Festivo', 'L': '104', 'N': 'Notturna'
+        };
+        const oreParts = Object.entries(formatoOreLegenda).map(([key, value]) => `${key} = ${value}`);
+        const codiciParts = Object.entries(legendaCodici).map(([key, value]) => `${key} = ${value}`);
+        return `Legenda: ${[...oreParts, ...codiciParts].join('; ')}`;
+    }, []);
+
     const filteredTecnici = useMemo(() => {
         if (!allTecnici) return [];
         return allTecnici
@@ -106,10 +101,8 @@ const MensileTecnici: React.FC = () => {
         setReportData(null);
 
         const rawData: RawData = {
-            rapportini: allRapportini,
-            tipiGiornata: allTipiGiornata,
-            impostazioni: impostazioni as Impostazioni | undefined,
-            navi: allNavi
+            rapportini: allRapportini, tipiGiornata: allTipiGiornata, 
+            impostazioni: impostazioni as Impostazioni | undefined, navi: allNavi
         };
         
         setTimeout(() => {
@@ -136,23 +129,8 @@ const MensileTecnici: React.FC = () => {
         setReportData(null);
     };
 
-    const handleNaviChange = (_: any, value: Nave[]) => {
-        setSelectedNavi(value);
-        setReportData(null);
-    }
-
-    const handleTecniciChange = (_: any, value: Tecnico[]) => {
-        setSelectedTecnici(value);
-        setReportData(null);
-    }
-
-    const getDittaStyle = (dittaId?: number) => {
-        const ditta = ditteMap.get(dittaId ?? -1);
-        if (ditta?.nome.toLowerCase().includes('tin')) {
-            return { backgroundColor: theme.palette.grey[200] };
-        }
-        return {};
-    }
+    const handleNaviChange = (_: any, value: Nave[]) => { setSelectedNavi(value); setReportData(null); }
+    const handleTecniciChange = (_: any, value: Tecnico[]) => { setSelectedTecnici(value); setReportData(null); }
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
@@ -160,70 +138,16 @@ const MensileTecnici: React.FC = () => {
                 <Paper sx={{ p: 2, mb: 2 }}>
                     <Typography variant="h6" gutterBottom>Filtri Report</Typography>
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2, mb: 2 }}>
-                        <Autocomplete 
-                            options={ditteOptions}
-                            getOptionLabel={(option) => option?.nome || ''}
-                            value={selectedDitta}
-                            onChange={handleDittaChange}
-                            renderInput={(params) => <TextField {...params} label="Ditta" />}
-                            loading={ditteLoading}
-                            isOptionEqualToValue={(option, value) => option.id === value.id}
-                        />
-                         <Autocomplete 
-                            options={categorieOptions}
-                            getOptionLabel={(option) => option?.nome || ''}
-                            value={selectedCategoria}
-                            onChange={handleCategoriaChange}
-                            renderInput={(params) => <TextField {...params} label="Categoria" />}
-                            loading={categorieLoading}
-                            isOptionEqualToValue={(option, value) => option.id === value.id}
-                        />
+                        <Autocomplete options={ditteOptions} getOptionLabel={(o) => o?.nome || ''} value={selectedDitta} onChange={handleDittaChange} renderInput={(p) => <TextField {...p} label="Ditta" />} loading={ditteLoading} isOptionEqualToValue={(o, v) => o.id === v.id}/>
+                        <Autocomplete options={categorieOptions} getOptionLabel={(o) => o?.nome || ''} value={selectedCategoria} onChange={handleCategoriaChange} renderInput={(p) => <TextField {...p} label="Categoria" />} loading={categorieLoading} isOptionEqualToValue={(o, v) => o.id === v.id}/>
                         <DatePicker views={['month', 'year']} label="Mese Report" value={selectedMonth} onChange={(v) => { if (v) {setSelectedMonth(v); setReportData(null);}}} />
                     </Box>
-
-                     <Autocomplete
-                        multiple
-                        options={naviOptions}
-                        disableCloseOnSelect
-                        getOptionLabel={(option) => option?.nome || ''}
-                        value={selectedNavi}
-                        onChange={handleNaviChange}
-                        renderOption={(props, option, { selected }) => (
-                            <li {...props} key={option.id}>
-                                <Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />
-                                {option?.nome || 'Nome mancante'}
-                            </li>
-                        )}
-                        renderInput={(params) => <TextField {...params} label="Filtra per Navi (opzionale)" />}
-                        loading={naviLoading}
-                        isOptionEqualToValue={(option, value) => option.id === value.id}
-                        sx={{ mb: 2 }}
-                    />
-
-                    <Autocomplete
-                        multiple
-                        options={filteredTecnici}
-                        disableCloseOnSelect
-                        getOptionLabel={(option) => `${option?.cognome || ''} ${option?.nome || ''}`.trim()}
-                        value={selectedTecnici}
-                        onChange={handleTecniciChange}
-                        renderOption={(props, option, { selected }) => (
-                             <li {...props} key={option.id}>
-                                <Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />
-                                {`${option?.cognome || ''} ${option?.nome || ''}`.trim()}
-                            </li>
-                        )}
-                        renderInput={(params) => <TextField {...params} label="Seleziona Tecnici" />}
-                        loading={tecniciLoading}
-                        isOptionEqualToValue={(option, value) => option.id === value.id}
-                    />
-
+                     <Autocomplete multiple options={naviOptions} disableCloseOnSelect getOptionLabel={(o) => o?.nome || ''} value={selectedNavi} onChange={handleNaviChange} renderOption={(props, o, { selected }) => (<li {...props} key={o.id}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{o?.nome || 'Nome mancante'}</li>)} renderInput={(p) => <TextField {...p} label="Filtra per Navi (opzionale)" />} loading={naviLoading} isOptionEqualToValue={(o, v) => o.id === v.id} sx={{ mb: 2 }}/>
+                    <Autocomplete multiple options={filteredTecnici} disableCloseOnSelect getOptionLabel={(o) => `${o?.cognome || ''} ${o?.nome || ''}`.trim()} value={selectedTecnici} onChange={handleTecniciChange} renderOption={(props, o, { selected }) => (<li {...props} key={o.id}><Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />{`${o?.cognome || ''} ${o?.nome || ''}`.trim()}</li>)} renderInput={(p) => <TextField {...p} label="Seleziona Tecnici" />} loading={tecniciLoading} isOptionEqualToValue={(o, v) => o.id === v.id}/>
                      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', alignItems: 'center', mt: 2 }}>
                          <Button onClick={() => setSelectedTecnici(filteredTecnici)} variant="text" disabled={filteredTecnici.length === 0}>Seleziona Tutti</Button>
                          <Button onClick={() => setSelectedTecnici([])} variant="text">Deseleziona Tutti</Button>
-                        <Button variant="contained" onClick={handleGenerateReport} disabled={isGenerating || selectedTecnici.length === 0 || reportPrereqsLoading} startIcon={isGenerating ? <CircularProgress size={20} /> : null}>
-                            {isGenerating ? 'Generando...' : 'Genera Report'}
-                        </Button>
+                        <Button variant="contained" onClick={handleGenerateReport} disabled={isGenerating || selectedTecnici.length === 0 || reportPrereqsLoading} startIcon={isGenerating ? <CircularProgress size={20} /> : null}>{isGenerating ? 'Generando...' : 'Genera Report'}</Button>
                     </Box>
                 </Paper>
 
@@ -235,50 +159,71 @@ const MensileTecnici: React.FC = () => {
                          </Box>
                         <Box ref={printRef} sx={{
                             '@media print': {
-                                'table, tr, td, th': {
-                                    border: '1px solid black !important',
-                                    borderColor: 'black !important',
-                                    fontSize: '9pt',
-                                    padding: '2px 4px'
-                                },
-                                'th': {
-                                    backgroundColor: '#f2f2f2',
-                                }
+                                'table, tr, td, th': { border: '1px solid black !important', borderColor: 'black !important', color: 'black !important', fontSize: '9pt', padding: '2px 4px' },
+                                'th': { backgroundColor: '#f2f2f2' },
+                                '.highlight': { backgroundColor: `${PRINT_HIGHLIGHT_COLOR} !important`, printColorAdjust: 'exact' },
+                                'body': { backgroundColor: 'white' }, 
                             }
                         }}>
                         {Object.entries(reportData).map(([naveId, naveData]) => (
                             <Box key={naveId} sx={{ mb: 4 }}>
-                                <Typography variant="h5" gutterBottom component="div">{naveData.naveNome}</Typography>
+                                <Typography variant="h5" gutterBottom component="div" sx={{ '@media print': { color: 'black' } }}>{naveData.naveNome}</Typography>
                                 <TableContainer component={Paper}>
                                     <Table size="small" stickyHeader>
                                         <TableHead>
                                             <TableRow>
-                                                <TableCell sx={{position: 'sticky', left: 0, zIndex: 1, backgroundColor: 'background.paper' }}>Tecnico</TableCell>
-                                                {giorniDelMese.map(giorno => <TableCell key={giorno} align="center">{giorno}</TableCell>)}
+                                                <TableCell sx={{position: 'sticky', left: 0, zIndex: 1, backgroundColor: theme.palette.background.paper, textTransform: 'capitalize' }}>
+                                                    {selectedMonth.format('MMMM YYYY')}
+                                                </TableCell>
+                                                {giorniDelMese.map(giorno => {
+                                                    const date = selectedMonth.date(giorno);
+                                                    const isWeekend = date.day() === 0 || date.day() === 6;
+                                                    return (
+                                                        <TableCell 
+                                                            key={giorno} 
+                                                            align="center" 
+                                                            sx={{ backgroundColor: isWeekend ? UI_HIGHLIGHT_COLOR : 'inherit'}} 
+                                                            className={isWeekend ? 'highlight' : ''}
+                                                        >
+                                                            {giorno}
+                                                        </TableCell>
+                                                    );
+                                                })}
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {naveData.tecnici
                                                 .sort((a, b) => (ditteMap.get(a.dittaId!)?.nome || '').localeCompare(ditteMap.get(b.dittaId!)?.nome || '') || (a.cognome + a.nome).localeCompare(b.cognome + b.nome))
-                                                .map(tecnico => (
-                                                    <TableRow key={tecnico.id} sx={getDittaStyle(tecnico.dittaId)}>
-                                                        <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, ...getDittaStyle(tecnico.dittaId) }}>
-                                                            <Chip size="small" label={ditteMap.get(tecnico.dittaId!)?.sigla || ''} sx={{mr: 1}}/>
-                                                            {tecnico.cognome} {tecnico.nome}
-                                                        </TableCell>
-                                                        {giorniDelMese.map(giorno => (
-                                                            <TableCell key={`${tecnico.id}-${giorno}`} align="center">
-                                                                {naveData.reportData[tecnico.id]?.[giorno] || ''}
+                                                .map(tecnico => {
+                                                    const isGtech = tecnico.dittaId === gtechId;
+                                                    const rowSx = isGtech ? { backgroundColor: UI_HIGHLIGHT_COLOR } : {};
+                                                    return (
+                                                        <TableRow key={tecnico.id} sx={rowSx} className={isGtech ? 'highlight' : ''}>
+                                                            <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, ...rowSx }}>
+                                                                <Chip size="small" label={ditteMap.get(tecnico.dittaId!)?.sigla || ''} sx={{mr: 1}}/>
+                                                                {tecnico.cognome} {tecnico.nome}
                                                             </TableCell>
-                                                        ))}
-                                                    </TableRow>
-                                            ))}
+                                                            {giorniDelMese.map(giorno => {
+                                                                const date = selectedMonth.date(giorno);
+                                                                const isWeekend = date.day() === 0 || date.day() === 6;
+                                                                const cellSx = isWeekend && !isGtech ? { backgroundColor: UI_HIGHLIGHT_COLOR } : {};
+                                                                return (
+                                                                    <TableCell key={`${tecnico.id}-${giorno}`} align="center" sx={cellSx} className={(isWeekend && !isGtech) ? 'highlight' : ''}>
+                                                                        {naveData.reportData[tecnico.id]?.[giorno] || ''}
+                                                                    </TableCell>
+                                                                )
+                                                            })}
+                                                        </TableRow>
+                                                    )
+                                                })}
                                         </TableBody>
                                     </Table>
                                 </TableContainer>
                             </Box>
                         ))}
-                        <LegendaReport />
+                        <Paper elevation={0} sx={{ mt: 2, p: 1, backgroundColor: 'transparent' }}>
+                           <Typography variant="caption" component="p" sx={{ '@media print': { color: 'black' } }}>{fullLegendaString}</Typography>
+                        </Paper>
                         </Box>
                     </Paper>
                 )}

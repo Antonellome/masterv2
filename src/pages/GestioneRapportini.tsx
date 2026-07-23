@@ -3,11 +3,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
 import { collection, onSnapshot, doc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { useData } from '@/hooks/useData';
 import type { Rapportino, Tecnico, Nave, Luogo } from '@/models/definitions';
 import RapportiniList from '@/components/Rapportini/RapportiniList';
 import RapportinoFormController from '@/components/Rapportini/RapportinoFormController';
 import { useAlert } from '@/contexts/AlertContext';
+import { useAnagraficaData } from '@/contexts/DataContext'; // Corretto l'import
 
 const GestioneRapportini = () => {
     const { showAlert } = useAlert();
@@ -16,15 +16,12 @@ const GestioneRapportini = () => {
         navi, 
         luoghi, 
         loading: loadingData,
-    } = useData();
+    } = useAnagraficaData(); // Corretto l'hook
 
     const [rapportini, setRapportini] = useState<Rapportino[]>([]);
     const [loadingRapportini, setLoadingRapportini] = useState(true);
 
     useEffect(() => {
-        // --- CORREZIONE QUERY --- 
-        // Filtra i documenti dove il campo `deletedAt` non esiste o è null.
-        // Questo è il metodo corretto e robusto per il soft-delete.
         const q = query(collection(db, 'rapportini'), where('deletedAt', '==', null));
         
         const unsubscribe = onSnapshot(q, 
@@ -61,7 +58,6 @@ const GestioneRapportini = () => {
         setSelectedRapportino(null);
     };
 
-    // --- CORREZIONE LOGICA DI CANCELLAZIONE ---
     const handleDelete = async (reportId: string) => {
         if (!window.confirm("Sei sicuro di voler spostare questo rapportino nel cestino?")) {
             return;
@@ -69,9 +65,8 @@ const GestioneRapportini = () => {
 
         const reportRef = doc(db, "rapportini", reportId);
         try {
-            // Utilizza un campo `deletedAt` per marcare il documento come cancellato.
             await updateDoc(reportRef, {
-                deletedAt: serverTimestamp(), // Metodo robusto per il soft-delete
+                deletedAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             });
             showAlert(`Rapportino spostato nel cestino.`, 'success');
