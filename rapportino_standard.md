@@ -21,6 +21,7 @@ Ogni singolo rapportino deve essere un documento JSON con la seguente struttura:
   "data": "Timestamp",
   "idTipoGiornata": "string",
   "descrizioneTipoGiornata": "string",
+  "ordineLavoro": "string | null",
   "oreLavorate": "number",
   "sede": {
     "idLuogo": "string",
@@ -58,6 +59,7 @@ Ogni singolo rapportino deve essere un documento JSON con la seguente struttura:
 | **`data`** | **Sì** | `Timestamp` | Data di riferimento del lavoro, come Timestamp Firestore. |
 | **`idTipoGiornata`** | **Sì** | `string` | ID del documento dalla collezione `tipiGiornata`. Es: "LAVORO_ORD". |
 | **`descrizioneTipoGiornata`** | **Sì** | `string` | Descrizione denormalizzata. Es: "Lavoro Ordinario". |
+| **`ordineLavoro`** | Opzionale | `string \| null` | Riferimento alfanumerico dell'ordine di lavoro. Se non applicabile, `null`. |
 | **`oreLavorate`** | **Sì** | `number` | Ore lavorate. Se `idTipoGiornata` non prevede lavoro (es. `FERIE`), questo valore **deve** essere `0`. |
 | `sede.idLuogo` | Condizionale¹ | `string` | ID del documento dalla collezione `luoghi`. |
 | `sede.descrizioneLuogo` | Condizionale¹ | `string` | Descrizione denormalizzata del luogo. |

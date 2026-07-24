@@ -11,7 +11,15 @@ const addWrappedText = (doc: jsPDF, text: string, x: number, y: number, maxWidth
     return y + (lines.length * lineHeight);
 };
 
+// --- LOGICA DI FORMATTAZIONE ORARI: CORRETTA E DEFINITIVA ---
 const formatOrario = (d: DettaglioOreTecnico): string => {
+    if (!d.isManual && d.oraInizio && d.oraFine) {
+        let result = `Inizio: ${d.oraInizio}, Fine: ${d.oraFine}`;
+        if (typeof d.pausa === 'number' && d.pausa > 0) {
+            result += `, Pausa: ${d.pausa} min`;
+        }
+        return result;
+    }
     const ore = (d.ore || 0).toFixed(2).replace('.', ',');
     return `${ore} ore`;
 };
@@ -27,7 +35,7 @@ export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<st
     let currentY = 15;
     const blueColor = '#003366';
 
-    // 1. INTESTAZIONE
+    // 1. INTESTAZIONE (CORRETTA COME DA IMMAGINE)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
     doc.setTextColor(blueColor);
@@ -38,10 +46,10 @@ export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<st
     doc.setFontSize(8);
     doc.setTextColor('#000000');
     const companyDetails =
-        `Sede Legale: Via Gulli, 62/64 - cap. 98123 Messina\n` +
-        `Tel 0903384994 - cell. +39 3460249518 / +39 3460227234\n` +
-        `Cod. Fisc. e Part. I.V.A.: 03862480832 - e-mail: tin.srl@tinpec.it\n` +
-        `Impianti elettrici di bordo e di terra - Meccanica industriale e navale`;
+        `Sede Legale: Via Guicciardini, 52-54 - cap 98121 Messina\n` +
+        `Tel 090358694 - cell. +39 3401649518 / +39 3460227234\n` +
+        `Cod. Fisc. e Part. I.V.A.: 02962480832 - e-mail: tin.srl2008@alice.it\n` +
+        `Impianti elettrici di bordo e di terra - Meccanica industriale e navale.`;
     doc.text(companyDetails, pageWidth / 2, currentY, { align: 'center' });
     currentY += 12;
 
@@ -72,7 +80,6 @@ export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<st
     doc.text(dayjs(dataRapportino).isValid() ? dayjs(dataRapportino).format('DD MMMM YYYY') : 'Data non specificata', valueX, fieldY);
     fieldY += fieldGap;
 
-    // ORDINE DI LAVORO (se presente)
     if (rapportino.ordineLavoro) {
         doc.setFont('helvetica', 'bold');
         doc.text('Ordine Lavoro:', margin, fieldY);
@@ -108,12 +115,15 @@ export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<st
         theme: 'grid',
         headStyles: { fillColor: '#343a40', textColor: 255, fontStyle: 'bold', halign: 'center' },
         styles: { fontSize: 10, cellPadding: 2 },
-        columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 70, halign: 'right', fontStyle: 'italic' } },
+        columnStyles: { 
+            0: { cellWidth: 'auto' }, 
+            1: { cellWidth: 70, halign: 'right' } 
+        },
         didDrawPage: (data) => { currentY = data.cursor?.y || 0; }
     });
     currentY = (doc as any).lastAutoTable.finalY + 10;
 
-    // 5. LINEA BLU E SEZIONI DESCRITTIVE
+    // 5. SEZIONI DESCRITTIVE
     doc.setDrawColor(blueColor);
     doc.setLineWidth(0.5);
     doc.line(margin, currentY, pageWidth - margin, currentY);
@@ -133,8 +143,8 @@ export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<st
     addSection('Materiali Impiegati', rapportino.materialiImpiegati);
     addSection('Lavoro Eseguito', rapportino.lavoroEseguito);
 
-    // 6. SEZIONE FIRME (LAYOUT DEFINITIVO, SECONDO ORDINE)
-    let signatureY = pageHeight - 75; // Aumento spazio dal fondo
+    // 6. SEZIONE FIRME
+    let signatureY = pageHeight - 75;
     doc.setDrawColor(100);
     doc.setLineWidth(0.3);
     doc.line(margin, signatureY, pageWidth - margin, signatureY);
@@ -146,7 +156,6 @@ export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<st
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
 
-    // --- COLONNA SINISTRA: CLIENTE ---
     doc.text('Per accettazione (firma del responsabile)', leftColX, signatureY);
     signatureY += 6;
     doc.text(`Nome Firmatario: ${rapportino.firmaFirmatarioNome || ''}`, leftColX, signatureY);
@@ -160,10 +169,9 @@ export const generateRapportinoPdf = (rapportino: Rapportino, tecniciMap: Map<st
         } catch (e) { console.error("Errore immagine firma:", e); }
     }
 
-    // --- COLONNA DESTRA: TECNICO ---
-    let signatureYRight = pageHeight - 75 + 8; // Riallinea la Y per la colonna dx
+    let signatureYRight = pageHeight - 75 + 8;
     doc.text('Firma Tecnico Responsabile', rightColX, signatureYRight);
-    signatureYRight += 15; // Spazio per la firma testuale
+    signatureYRight += 15;
 
     const mainTecnico = tecniciMap.get(rapportino.tecnicoId as string);
     const mainTecnicoName = mainTecnico ? `${mainTecnico.cognome} ${mainTecnico.nome}`.trim() : 'N/D';
