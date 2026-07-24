@@ -19,17 +19,22 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as ExcelJS from 'exceljs';
+// MODIFICA: Importo il dialogo corretto che ora è lo standard nell'applicazione
 import PdfPreviewDialog from '@/components/common/PdfPreviewDialog';
 
 dayjs.locale('it');
 dayjs.extend(isBetween);
 
 // --- CONFIGURAZIONE STILI ---
-const UI_HIGHLIGHT_COLOR = '#555555';
-const EXPORT_HIGHLIGHT_COLOR_BG_PDF = 'E0E0E0';
+// NB: I colori ARGB (con alpha) sono per ExcelJS. Per il PDF si usano formati standard (es. #RRGGBB).
+const UI_HIGHLIGHT_COLOR = '#E0E0E0';
+const EXPORT_HIGHLIGHT_COLOR_BG_PDF = '#E0E0E0'; 
 const EXPORT_HIGHLIGHT_COLOR_BG_EXCEL = 'FFE0E0E0';
-const EXPORT_HIGHLIGHT_COLOR_TEXT = 'FF000000';
+const EXPORT_HIGHLIGHT_COLOR_TEXT_PDF = '#000000';
+const EXPORT_HIGHLIGHT_COLOR_TEXT_EXCEL = 'FF000000';
 const HEADER_EXCEL_GREEN_BG = 'FF16A085';
+const HEADER_PDF_GREEN_BG = '#16A085';
+const HEADER_WHITE_TEXT = '#FFFFFF';
 const HEADER_EXCEL_WHITE_TEXT = 'FFFFFFFF';
 
 
@@ -117,9 +122,11 @@ const CumulativiTecnici: React.FC = () => {
     const [cols, setCols] = useState<GridColDef[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerated, setIsGenerated] = useState(false);
+
+    // MODIFICA: Aggiornamento degli state per allinearsi al nuovo PdfPreviewDialog
     const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
-    const [pdfDataUri, setPdfDataUri] = useState('');
     const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
     const allAnagrafiche = useLiveQuery(() => Promise.all([
         db.ditte.toArray(),
@@ -374,7 +381,7 @@ const CumulativiTecnici: React.FC = () => {
                 cell.font = { 
                     name: 'Calibri',
                     bold: true, 
-                    color: { argb: isWeekend ? EXPORT_HIGHLIGHT_COLOR_TEXT : HEADER_EXCEL_WHITE_TEXT }
+                    color: { argb: isWeekend ? EXPORT_HIGHLIGHT_COLOR_TEXT_EXCEL : HEADER_EXCEL_WHITE_TEXT }
                 };
                 cell.fill = {
                     type: 'pattern',
@@ -459,140 +466,121 @@ const CumulativiTecnici: React.FC = () => {
     }, [rows, selectedDate, fullLegendaString, gtechId]);
     
 
+    // MODIFICA: La funzione ora è asincrona per attendere la generazione del blob
     const handleGeneratePdf = useCallback(() => {
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-        const monthName = selectedDate.format('MMMM YYYY');
-        const giorniDelMese = selectedDate.daysInMonth();
-        const month = selectedDate.startOf('month');
-    
-        doc.text(`Report Cumulativo: ${monthName}`, 40, 35);
-    
-        const headerRowDays = [{ content: 'Tecnico', rowSpan: 2, styles: { valign: 'middle' } }];
-        const headerRowNumbers = [];
-    
-        for (let i = 1; i <= giorniDelMese; i++) {
-            headerRowDays.push(month.date(i).format('dd').charAt(0).toUpperCase());
-            headerRowNumbers.push(String(i));
-        }
-        headerRowDays.push({ content: 'Totale Ore', rowSpan: 2, styles: { valign: 'middle' } });
-        
-        const head = [headerRowDays, headerRowNumbers];
-    
-        const body = rows.map(row => {
-            const rowData: (string | number)[] = [row.tecnico as string];
-            for (let i = 1; i <= giorniDelMese; i++) {
-                rowData.push(formatCellData(row[String(i)] as DailyHours));
-            }
-            rowData.push(String((row.totaleOre as number)).replace('.', ','));
-            return rowData;
-        });
-    
-        const weekendColIndexes: number[] = [];
-        for (let i = 1; i <= giorniDelMese; i++) {
-            const date = month.date(i);
-            if (date.day() === 0 || date.day() === 6) {
-                weekendColIndexes.push(i);
-            }
-        }
-    
-        autoTable(doc, {
-            head: head,
-            body: body,
-            startY: 50,
-            theme: 'grid',
-            styles: { fontSize: 6.5, cellPadding: 2, textColor: '#000000' },
-            headStyles: {
-                fontStyle: 'bold',
-                halign: 'center',
-                valign: 'middle',
-            },
-            didParseCell: function (data) {
-                const colIdx = data.column.index;
-    
-                if (data.cell.section === 'head') {
-                    data.cell.styles.fillColor = [22, 160, 133];
-                    data.cell.styles.textColor = 255;
-    
-                    if (weekendColIndexes.includes(colIdx)) {
-                        data.cell.styles.fillColor = `#${EXPORT_HIGHLIGHT_COLOR_BG_PDF}`;
-                        data.cell.styles.textColor = `#${EXPORT_HIGHLIGHT_COLOR_TEXT}`;
-                    }
-                } else if (data.cell.section === 'body') {
-                    const isWeekend = weekendColIndexes.includes(colIdx);
-                    const isGtechRow = gtechId && rows[data.row.index]?.dittaId === gtechId;
-    
-                    data.cell.styles.fillColor = '#FFFFFF';
-                    
-                    if (isGtechRow || isWeekend) {
-                        data.cell.styles.fillColor = `#${EXPORT_HIGHLIGHT_COLOR_BG_PDF}`;
-                    }
-                    
-                    if (colIdx === 0 || colIdx === giorniDelMese + 1) {
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-                     if (colIdx > 0 && colIdx <= giorniDelMese) {
-                        data.cell.styles.halign = 'center';
-                     }
-                     if (colIdx === giorniDelMese + 1) {
-                         data.cell.styles.halign = 'right';
-                     }
-                }
-            },
-        });
-    
-        const legendStartY = (doc as any).lastAutoTable.finalY + 20;
-        const margin = 40;
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const maxWidth = pageWidth - margin * 2;
-        
-        doc.setFontSize(8);
-        doc.setTextColor(0,0,0);
-        doc.text(fullLegendaString, margin, legendStartY, { maxWidth: maxWidth });
-        
-        const blob = doc.output('blob');
-        setPdfBlob(blob);
-        setPdfDataUri(doc.output('datauristring'));
+        if (rows.length === 0) return;
+
+        // Mostra il dialogo con il loader
+        setIsGeneratingPdf(true);
+        setPdfBlob(null); // Resetta il blob precedente
         setIsPdfModalOpen(true);
+
+        // Avvia la generazione del PDF in un timeout per non bloccare il rendering del dialogo
+        setTimeout(() => {
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+            const monthName = selectedDate.format('MMMM YYYY');
+            const giorniDelMese = selectedDate.daysInMonth();
+            const month = selectedDate.startOf('month');
+        
+            doc.text(`Report Cumulativo: ${monthName}`, 40, 35);
+        
+            const headerRowDays = [{ content: 'Tecnico', rowSpan: 2, styles: { valign: 'middle' } }];
+            const headerRowNumbers = [];
+        
+            for (let i = 1; i <= giorniDelMese; i++) {
+                headerRowDays.push(month.date(i).format('dd').charAt(0).toUpperCase());
+                headerRowNumbers.push(String(i));
+            }
+            headerRowDays.push({ content: 'Totale Ore', rowSpan: 2, styles: { valign: 'middle' } });
+            
+            const head = [headerRowDays, headerRowNumbers];
+        
+            const body = rows.map(row => {
+                const rowData: (string | number)[] = [row.tecnico as string];
+                for (let i = 1; i <= giorniDelMese; i++) {
+                    rowData.push(formatCellData(row[String(i)] as DailyHours));
+                }
+                rowData.push(String((row.totaleOre as number)).replace('.', ','));
+                return rowData;
+            });
+        
+            const weekendColIndexes: number[] = [];
+            for (let i = 1; i <= giorniDelMese; i++) {
+                const date = month.date(i);
+                if (date.day() === 0 || date.day() === 6) {
+                    weekendColIndexes.push(i);
+                }
+            }
+        
+            autoTable(doc, {
+                head: head,
+                body: body,
+                startY: 50,
+                theme: 'grid',
+                styles: { fontSize: 6.5, cellPadding: 2, textColor: '#000000' },
+                headStyles: {
+                    fontStyle: 'bold',
+                    halign: 'center',
+                    valign: 'middle',
+                },
+                didParseCell: function (data) {
+                    const colIdx = data.column.index;
+        
+                    if (data.cell.section === 'head') {
+                        data.cell.styles.fillColor = HEADER_PDF_GREEN_BG;
+                        data.cell.styles.textColor = HEADER_WHITE_TEXT;
+        
+                        if (weekendColIndexes.includes(colIdx)) {
+                            data.cell.styles.fillColor = EXPORT_HIGHLIGHT_COLOR_BG_PDF;
+                            data.cell.styles.textColor = EXPORT_HIGHLIGHT_COLOR_TEXT_PDF;
+                        }
+                    } else if (data.cell.section === 'body') {
+                        const isWeekend = weekendColIndexes.includes(colIdx);
+                        const isGtechRow = gtechId && rows[data.row.index]?.dittaId === gtechId;
+                        
+                        if (isGtechRow || isWeekend) {
+                            data.cell.styles.fillColor = EXPORT_HIGHLIGHT_COLOR_BG_PDF;
+                        }
+                        
+                        if (colIdx === 0 || colIdx === giorniDelMese + 1) {
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                         if (colIdx > 0 && colIdx <= giorniDelMese) {
+                            data.cell.styles.halign = 'center';
+                         }
+                         if (colIdx === giorniDelMese + 1) {
+                             data.cell.styles.halign = 'right';
+                         }
+                    }
+                },
+            });
+        
+            const legendStartY = (doc as any).lastAutoTable.finalY + 20;
+            const margin = 40;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const maxWidth = pageWidth - margin * 2;
+            
+            doc.setFontSize(8);
+            doc.setTextColor(0,0,0);
+            doc.text(fullLegendaString, margin, legendStartY, { maxWidth: maxWidth });
+            
+            // MODIFICA: Genera il blob e lo passa allo state, non più la data-uri
+            const blob = doc.output('blob');
+            setPdfBlob(blob);
+            setIsGeneratingPdf(false);
+        }, 100); // Timeout per UI non bloccante
+
     }, [rows, selectedDate, fullLegendaString, gtechId]);
 
-
-    const handleDownloadPdf = () => {
-        if (!pdfBlob) return;
-        const url = URL.createObjectURL(pdfBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Report_Cumulativo_Tecnici_${selectedDate.format('MMMM_YYYY')}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
-    
-    const handleSharePdf = async () => {
-        if (!pdfBlob) return;
-        const fileName = `Report_Cumulativo_Tecnici_${selectedDate.format('MMMM_YYYY')}.pdf`;
-        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            try {
-                await navigator.share({
-                    files: [file],
-                    title: `Report Cumulativo Tecnici - ${selectedDate.format('MMMM YYYY')}`,
-                    text: `In allegato il report cumulativo di ${selectedDate.format('MMMM YYYY')}.`,
-                });
-            } catch (error) {
-                console.error('Errore during la condivisione:', error);
-            }
-        } else {
-            alert('La condivisione di file non è supportata su questo browser.');
-        }
-    };
+    // RIMOSSO: Le funzioni handleDownloadPdf e handleSharePdf non sono più necessarie
+    // perché la logica è ora centralizzata nel componente PdfPreviewDialog.
 
     const CustomToolbar = () => (
         <GridToolbarContainer>
             <Button color="primary" startIcon={<FileDownloadIcon />} onClick={handleExportToExcel} disabled={rows.length === 0}>Esporta Excel</Button>
             <Tooltip title="Genera Anteprima PDF e Condividi">
                 <span>
-                    <IconButton onClick={handleGeneratePdf} disabled={rows.length === 0}>
+                    <IconButton onClick={handleGeneratePdf} disabled={rows.length === 0 || isGeneratingPdf}>
                         <PictureAsPdfIcon />
                     </IconButton>
                 </span>
@@ -648,13 +636,14 @@ const CumulativiTecnici: React.FC = () => {
                     </Paper>
                 )}
             </Box>
+            
+            {/* MODIFICA: Chiamata al dialogo aggiornata con le prop corrette */}
             <PdfPreviewDialog
                 open={isPdfModalOpen}
                 onClose={() => setIsPdfModalOpen(false)}
-                pdfDataUri={pdfDataUri}
-                onDownload={handleDownloadPdf}
-                onShare={handleSharePdf}
-                canShare={!!navigator.share && !!pdfBlob}
+                pdfBlob={pdfBlob}
+                isGenerating={isGeneratingPdf}
+                fileName={`Report_Cumulativo_Tecnici_${selectedDate.format('MMMM_YYYY')}.pdf`}
             />
         </LocalizationProvider>
     );
