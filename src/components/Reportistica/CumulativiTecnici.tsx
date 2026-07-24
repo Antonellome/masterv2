@@ -27,7 +27,7 @@ dayjs.extend(isBetween);
 
 // --- CONFIGURAZIONE STILI ---
 // NB: I colori ARGB (con alpha) sono per ExcelJS. Per il PDF si usano formati standard (es. #RRGGBB).
-const UI_HIGHLIGHT_COLOR = '#E0E0E0';
+const UI_HIGHLIGHT_COLOR = '#424242';
 const EXPORT_HIGHLIGHT_COLOR_BG_PDF = '#E0E0E0'; 
 const EXPORT_HIGHLIGHT_COLOR_BG_EXCEL = 'FFE0E0E0';
 const EXPORT_HIGHLIGHT_COLOR_TEXT_PDF = '#000000';
@@ -52,7 +52,7 @@ const legendaCodici: Record<string, string> = {
 const formatoOreLegenda: Record<string, string> = {
     "'8'": "Ore Ordinarie",
     "'+'3": "Ore Straordinarie",
-    "'8+'3": "8 Ordinarie + 3 Straordinarie",
+    "'8+'+'3": "8 Ordinarie + 3 Straordinarie",
 };
 
 const getTipoGiornataCodice = (tipoGiornata: TipoGiornata | undefined): string | null => {
