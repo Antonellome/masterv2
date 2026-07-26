@@ -4,11 +4,10 @@ import { useAuth } from '@/contexts/AuthProvider';
 import { auth, db, functions } from '@/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { sendPasswordResetEmail } from "firebase/auth";
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import {
-  Box, Typography, CircularProgress, Alert, Button, Dialog,
-  DialogActions, DialogContent, DialogTitle, DialogContentText,
-  Switch, Tooltip, IconButton, Snackbar, Chip, TextField
+  Box, Typography, CircularProgress, Alert, Button,
+  Switch, Tooltip, IconButton, Snackbar, Chip
 } from '@mui/material';
 import {
   DataGrid, GridColDef,
@@ -18,109 +17,21 @@ import { itIT } from '@mui/x-data-grid/locales';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
-import PhoneIcon from '@mui/icons-material/Phone';
-import EditIcon from '@mui/icons-material/Edit'; // AGGIUNTA MATITA
+import EditIcon from '@mui/icons-material/Edit';
 
+// Import dei dialoghi dal nuovo file separato
+import { NuovoUtenteDialog, ModificaUtenteDialog, ConfermaEliminazioneDialog } from './AmministratoriDialogs';
+
+// Callable function per la gestione centralizzata
 const gestisciUtenti = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 
+// Interfaccia per l'utente
 interface User {
   id: string;
   nome: string;
   email: string;
-  telefono: string; 
   ruolo: 'admin' | 'user';
 }
-
-// --- Dialog Creazione Utente (INVARIATO) ---
-const NuovoUtenteDialog = ({ open, onClose, onSave, isSaving }: { open: boolean, onClose: () => void, onSave: (nome: string, email: string, telefono: string) => void, isSaving: boolean }) => {
-    const [nome, setNome] = useState('');
-    const [email, setEmail] = useState('');
-    const [telefono, setTelefono] = useState(''); 
-
-    const handleSave = () => {
-        if (nome && email && telefono) { 
-            onSave(nome, email, telefono);
-            setNome('');
-            setEmail('');
-            setTelefono('');
-        }
-    };
-
-    return (
-        <Dialog open={open} onClose={onClose}>
-            <DialogTitle>Aggiungi Nuovo Utente</DialogTitle>
-            <DialogContent>
-                 <DialogContentText sx={{ mb: 2 }}>
-                    Verrà creato un nuovo utente e riceverà un'email per impostare la password. Inserisci un numero di telefono valido per l'accesso via SMS.
-                </DialogContentText>
-                <TextField autoFocus margin="dense" id="name" label="Nome e Cognome" type="text" fullWidth variant="standard" value={nome} onChange={(e) => setNome(e.target.value)} />
-                <TextField margin="dense" id="email" label="Indirizzo Email" type="email" fullWidth variant="standard" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <TextField margin="dense" id="telefono" label="Numero di Telefono (es. +393331234567)" type="tel" fullWidth variant="standard" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
-                <Button onClick={handleSave} disabled={isSaving || !nome || !email || !telefono}>
-                    {isSaving ? <CircularProgress size={24} /> : 'Salva'}
-                </Button>
-            </DialogActions>
-        </Dialog>
-    );
-};
-
-// --- AGGIUNTO DIALOGO PER LA MODIFICA ---
-const ModificaUtenteDialog = ({ open, onClose, onSave, isSaving, user }: { open: boolean, onClose: () => void, onSave: (id: string, nome: string, telefono: string) => void, isSaving: boolean, user: User | null }) => {
-    const [nome, setNome] = useState('');
-    const [telefono, setTelefono] = useState('');
-
-    useEffect(() => {
-        if (user) {
-            setNome(user.nome || '');
-            setTelefono(user.telefono || '');
-        }
-    }, [user]);
-
-    const handleSave = () => {
-        if (user && nome && telefono) {
-            onSave(user.id, nome, telefono);
-        }
-    };
-
-    return (
-        <Dialog open={open} onClose={onClose}>
-            <DialogTitle>Modifica Utente</DialogTitle>
-            <DialogContent>
-                 <DialogContentText sx={{ mb: 2 }}>
-                    Modifica il nome o il numero di telefono dell'utente. L'email non può essere modificata.
-                </DialogContentText>
-                <TextField autoFocus margin="dense" id="edit-name" label="Nome e Cognome" type="text" fullWidth variant="standard" value={nome} onChange={(e) => setNome(e.target.value)} />
-                <TextField margin="dense" id="edit-email" label="Indirizzo Email" type="email" fullWidth variant="standard" value={user?.email || ''} disabled />
-                <TextField margin="dense" id="edit-telefono" label="Numero di Telefono" type="tel" fullWidth variant="standard" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
-                <Button onClick={handleSave} disabled={isSaving || !nome || !telefono}>
-                    {isSaving ? <CircularProgress size={24} /> : 'Salva Modifiche'}
-                </Button>
-            </DialogActions>
-        </Dialog>
-    );
-};
-
-const ConfermaEliminazioneDialog = ({ open, onClose, onConfirm, isSaving, user }: { open: boolean, onClose: () => void, onConfirm: () => void, isSaving: boolean, user: User | null }) => (
-    <Dialog open={open} onClose={onClose}>
-        <DialogTitle>Conferma Eliminazione</DialogTitle>
-        <DialogContent>
-            <DialogContentText dangerouslySetInnerHTML={{ __html: `Sei sicuro di voler eliminare definitivamente l'utente <strong>${user?.nome}</strong> (${user?.email})? L'azione è irreversibile.` }} />
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
-            <Button onClick={onConfirm} color="error" disabled={isSaving}>
-                {isSaving ? <CircularProgress size={24} /> : 'Elimina'}
-            </Button>
-        </DialogActions>
-    </Dialog>
-);
-
 
 const GestioneAmministratori = () => {
   const { user: currentUser } = useAuth();
@@ -132,24 +43,17 @@ const GestioneAmministratori = () => {
   
   const [openNewUserDialog, setOpenNewUserDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null); 
-  const [userToEdit, setUserToEdit] = useState<User | null>(null); // AGGIUNTO stato per modifica
+  const [userToEdit, setUserToEdit] = useState<User | null>(null);
 
+  // Caricamento e ascolto dei dati in tempo reale
   useEffect(() => {
     setLoading(true);
     const unsubUtentiMaster = onSnapshot(collection(db, 'utenti_master'), (snapshotMaster) => {
-        const masterUsers = snapshotMaster.docs.map(doc => ({ 
-            id: doc.id, 
-            ...doc.data(),
-            telefono: doc.data().telefono || 'N/D'
-        } as Omit<User, 'ruolo'>));
+        const masterUsers = snapshotMaster.docs.map(doc => ({ id: doc.id, ...doc.data() } as Omit<User, 'ruolo'>));
         
         const unsubAdmins = onSnapshot(collection(db, 'admins'), (snapshotAdmins) => {
             const adminIds = new Set(snapshotAdmins.docs.map(doc => doc.id));
-            
-            const combinedUsers = masterUsers.map(user => ({
-                ...user,
-                ruolo: adminIds.has(user.id) ? 'admin' : 'user'
-            } as User));
+            const combinedUsers = masterUsers.map(user => ({ ...user, ruolo: adminIds.has(user.id) ? 'admin' : 'user' } as User));
 
             setUtenti(combinedUsers);
             setLoading(false);
@@ -167,6 +71,8 @@ const GestioneAmministratori = () => {
     return () => unsubUtentiMaster();
   }, []);
 
+  // --- Handler delle Azioni (chiamano la Cloud Function) ---
+
   const handleSendPasswordReset = async (email: string) => {
     if(isSaving) return;
     setIsSaving(true);
@@ -174,7 +80,7 @@ const GestioneAmministratori = () => {
       await sendPasswordResetEmail(auth, email);
       setFeedback({ type: 'success', message: `Email di reset inviata con successo a ${email}.` });
     } catch (err: any) {
-      setFeedback({ type: 'error', message: "Impossibile inviare l'email di reset." });
+      setFeedback({ type: 'error', message: err.message || "Impossibile inviare l'email di reset." });
     } finally {
       setIsSaving(false);
     }
@@ -187,32 +93,22 @@ const GestioneAmministratori = () => {
     }
     if (isSaving) return;
     setIsSaving(true);
-
-    const originalUtenti = utenti;
-    setUtenti(prev => prev.map(u => u.id === user.id ? { ...u, ruolo: nuovoRuolo } : u));
-
     try {
-      const adminDocRef = doc(db, 'admins', user.id);
-      if (nuovoRuolo === 'admin') {
-        await setDoc(adminDocRef, { email: user.email, nome: user.nome, telefono: user.telefono || 'N/D' });
-      } else {
-        await deleteDoc(adminDocRef);
-      }
-      setFeedback({ type: 'success', message: `Ruolo di ${user.nome} aggiornato.` });
-    } catch (err: any) {
-      setUtenti(originalUtenti); 
-      setFeedback({ type: 'error', message: "Modifica ruolo fallita." });
+      await gestisciUtenti({ action: 'toggleRole', uid: user.id, role: nuovoRuolo });
+      setFeedback({ type: 'success', message: `Ruolo di ${user.nome} aggiornato con successo.` });
+    } catch (err: any) { 
+      setFeedback({ type: 'error', message: err.message || "Modifica ruolo fallita." });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleCreaNuovoUtente = async (nome: string, email: string, telefono: string) => {
+  const handleCreaNuovoUtente = async (nome: string, email: string, password: string) => {
     if (isSaving) return;
     setIsSaving(true);
     try {
-        await gestisciUtenti({ action: 'createUser', email, nome, telefono });
-        setFeedback({ type: 'success', message: `Utente ${nome} creato.` });
+        await gestisciUtenti({ action: 'createUser', email, nome, password }); 
+        setFeedback({ type: 'success', message: `Utente ${nome} creato. Verrà inviata un'email per il cambio password.` });
         setOpenNewUserDialog(false);
     } catch (err: any) {
         setFeedback({ type: 'error', message: err.message || 'Creazione utente fallita.' });
@@ -221,14 +117,13 @@ const GestioneAmministratori = () => {
     }
   };
 
-  // --- AGGIUNTA FUNZIONE DI UPDATE ---
-  const handleUpdateUtente = async (id: string, nome: string, telefono: string) => {
+  const handleUpdateUtente = async (id: string, nome: string) => {
     if (isSaving) return;
     setIsSaving(true);
     try {
-        await gestisciUtenti({ action: 'updateUser', uid: id, nome, telefono });
+        await gestisciUtenti({ action: 'updateUser', uid: id, nome });
         setFeedback({ type: 'success', message: `Utente ${nome} aggiornato con successo.` });
-        setUserToEdit(null); // Chiudi il dialog
+        setUserToEdit(null);
     } catch (err: any) {
         setFeedback({ type: 'error', message: err.message || 'Aggiornamento fallito.' });
     } finally {
@@ -267,23 +162,13 @@ const GestioneAmministratori = () => {
   }
 
   const columns: GridColDef<User>[] = [
-    { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 180 },
-    { field: 'email', headerName: 'Email', flex: 1, minWidth: 200 },
-    {
-        field: 'telefono',
-        headerName: 'Telefono',
-        width: 150,
-        renderCell: (params) => (
-            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                <PhoneIcon sx={{ mr: 1, color: 'text.secondary', fontSize: '1.2rem' }} />
-                {params.value || 'N/D'}
-            </Box>
-        )
-    },
+    { field: 'nome', headerName: 'Nome', flex: 1.5, minWidth: 200 },
+    { field: 'email', headerName: 'Email', flex: 1.5, minWidth: 220 },
     {
       field: 'ruolo',
       headerName: 'Ruolo',
-      width: 150,
+      flex: 1,
+      minWidth: 130,
       renderCell: (params) => (
         <Chip label={params.value === 'admin' ? 'Amministratore' : 'Utente'} color={params.value === 'admin' ? 'primary' : 'default'} size="small"/>
       )
@@ -291,7 +176,8 @@ const GestioneAmministratori = () => {
     {
       field: 'is_admin',
       headerName: 'Admin',
-      width: 100,
+      flex: 0.8,
+      minWidth: 100,
       align: 'center',
       headerAlign: 'center',
       renderCell: (params) => {
@@ -313,7 +199,8 @@ const GestioneAmministratori = () => {
     {
       field: 'actions',
       headerName: 'Azioni',
-      width: 150,
+      flex: 1,
+      minWidth: 150,
       align: 'center',
       headerAlign: 'center',
       sortable: false,
@@ -321,7 +208,6 @@ const GestioneAmministratori = () => {
         const isCurrentUser = params.row.id === currentUser?.uid;
         return (
           <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-             {/* --- AGGIUNTA MATITA --*/}
             <Tooltip title="Modifica utente">
               <span>
                 <IconButton color="secondary" onClick={() => setUserToEdit(params.row)} disabled={isSaving}>
@@ -368,6 +254,7 @@ const GestioneAmministratori = () => {
         />
       </Box>
 
+      {/* I dialoghi vengono ora renderizzati qui, ma sono definiti altrove */}
       <NuovoUtenteDialog open={openNewUserDialog} onClose={() => setOpenNewUserDialog(false)} onSave={handleCreaNuovoUtente} isSaving={isSaving} />
       <ModificaUtenteDialog open={!!userToEdit} onClose={() => setUserToEdit(null)} onSave={handleUpdateUtente} isSaving={isSaving} user={userToEdit} />
       <ConfermaEliminazioneDialog open={!!userToDelete} onClose={() => setUserToDelete(null)} onConfirm={handleEliminaUtente} isSaving={isSaving} user={userToDelete} />

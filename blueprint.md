@@ -114,3 +114,32 @@ Rendere la tabella pivot più leggibile e informativa, introducendo un sistema d
     *   Rispecchiare esattamente la nuova visualizzazione, inclusi i codici.
     *   Formattare le colonne dei sabati e delle domeniche con uno sfondo grigio chiaro.
     *   Aggiungere, in calce al foglio di calcolo, la legenda dei codici per garantirne la leggibilità.
+---
+## **Piano di Adeguamento: Gestione Amministratori (24/07/2024)**
+
+### **Contesto**
+
+L'attuale pagina di gestione degli amministratori è stata creata per risolvere i problemi di affidabilità dell'invio delle email da parte di Firebase, che ritardava o impediva la creazione di nuovi utenti.
+
+### **Obiettivo**
+
+Implementare un flusso di creazione utenti che consenta l'operatività immediata, bypassando l'attesa dell'email di conferma, pur mantenendo un alto livello di sicurezza.
+
+### **Piano d'Azione**
+
+1.  **Analisi Iniziale (Fallita):** La mia prima ipotesi di modificare la logica di accesso per usare il numero di telefono è stata scartata dall'utente, che ha richiesto di mantenere un sistema basato su email e password, ma con un meccanismo di accesso immediato.
+
+2.  **Implementazione del Flusso Ibrido:** Verrà implementata una soluzione pragmatica:
+    *   **Creazione con Password Temporanea:** Il form di creazione di un nuovo amministratore richiederà `nome`, `email` e una `password temporanea`.
+    *   **Accesso Immediato:** L'amministratore appena creato potrà usare l'email e la password temporanea per accedere subito alla piattaforma.
+    *   **Invio Email di Cambio Password:** Contestualmente alla creazione, una Cloud Function invierà all'utente un'email (usando il sistema standard di Firebase) contenente un link per impostare una **password personale e definitiva**. Questo disattiverà la password temporanea.
+
+3.  **Semplificazione del Form:** Su indicazione dell'utente, il campo "telefono" verrà **rimosso** dal form di creazione, in quanto non essenziale per questo nuovo flusso. Sarà comunque possibile aggiungerlo in seguito tramite la modifica dei dati utente.
+
+4.  **Modifiche Tecniche:**
+    *   **Frontend (`GestioneAmministratori.tsx`):** Il dialogo di creazione verrà modificato per richiedere solo nome, email e password temporanea (con un generatore automatico).
+    *   **Backend (`amministrazione-gestisciUtenti.ts`):** La Cloud Function verrà potenziata per:
+        *   Ricevere la richiesta `createUser` con i nuovi dati.
+        *   Creare l'utente in Firebase Authentication usando la password temporanea.
+        *   Creare il documento utente in Firestore.
+        *   Innescare l'invio dell'email per il cambio password.
