@@ -15,8 +15,9 @@ import {
     TipoGiornata,
     Veicolo
 } from '@/models/definitions';
-// AGGIORNAMENTO: Importiamo il nostro hook per i dati locali
-import { useCollectionData } from '@/hooks/useCollectionData';
+// CORREZIONE: Importiamo gli strumenti corretti per leggere dal DB locale
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/db';
 
 // Funzione helper per creare le mappe, rimane invariata
 const createMap = <T extends { id: string }>(items: T[] | undefined): { [id: string]: T } => {
@@ -27,7 +28,7 @@ const createMap = <T extends { id: string }>(items: T[] | undefined): { [id: str
     }, {} as { [id: string]: T });
 };
 
-// Le interfacce rimangono per lo più le stesse, ma rimuoviamo le funzioni di scrittura
+// Interfaccia del Context
 interface DataContextType {
     tecnici: Tecnico[];
     clienti: Cliente[];
@@ -42,8 +43,8 @@ interface DataContextType {
     naviMap: { [id: string]: Nave };
     luoghiMap: { [id: string]: Luogo };
     tipiGiornataMap: { [id: string]: TipoGiornata };
-    loading: boolean; // Un unico stato di caricamento aggregato
-    error: any; // Gestirà gli errori aggregati
+    loading: boolean;
+    error: any; // Mantenuto per compatibilità, ma meno rilevante con useLiveQuery
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -51,29 +52,28 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     // --- SOSTITUZIONE LOGICA DI FETCH ---
-    // Usiamo il nostro hook offline-first per ogni anagrafica
-    const { data: tecnici, loading: loadingTecnici, error: errorTecnici } = useCollectionData<Tecnico>('tecnici');
-    const { data: clienti, loading: loadingClienti, error: errorClienti } = useCollectionData<Cliente>('clienti');
-    const { data: ditte, loading: loadingDitte, error: errorDitte } = useCollectionData<Ditta>('ditte');
-    const { data: navi, loading: loadingNavi, error: errorNavi } = useCollectionData<Nave>('navi');
-    const { data: luoghi, loading: loadingLuoghi, error: errorLuoghi } = useCollectionData<Luogo>('luoghi');
-    const { data: categorie, loading: loadingCategorie, error: errorCategorie } = useCollectionData<Categoria>('categorie');
-    const { data: tipiGiornata, loading: loadingTipiGiornata, error: errorTipiGiornata } = useCollectionData<TipoGiornata>('tipiGiornata');
-    const { data: veicoli, loading: loadingVeicoli, error: errorVeicoli } = useCollectionData<Veicolo>('veicoli');
+    // Usiamo useLiveQuery per leggere in tempo reale dal database locale Dexie.
+    const tecnici = useLiveQuery(() => db.tecnici.toArray());
+    const clienti = useLiveQuery(() => db.clienti.toArray());
+    const ditte = useLiveQuery(() => db.ditte.toArray());
+    const navi = useLiveQuery(() => db.navi.toArray());
+    const luoghi = useLiveQuery(() => db.luoghi.toArray());
+    const categorie = useLiveQuery(() => db.categorie.toArray());
+    const tipiGiornata = useLiveQuery(() => db.tipiGiornata.toArray());
+    const veicoli = useLiveQuery(() => db.veicoli.toArray());
 
-    // Aggreghiamo gli stati di loading e error
-    const loading = loadingTecnici || loadingClienti || loadingDitte || loadingNavi || loadingLuoghi || loadingCategorie || loadingTipiGiornata || loadingVeicoli;
-    const error = errorTecnici || errorClienti || errorDitte || errorNavi || errorLuoghi || errorCategorie || errorTipiGiornata || errorVeicoli;
+    // Con useLiveQuery, 'undefined' indica che la query iniziale è in corso.
+    const loading = [tecnici, clienti, ditte, navi, luoghi, categorie, tipiGiornata, veicoli].some(data => data === undefined);
     // --- FINE SOSTITUZIONE ---
 
-    // La creazione delle mappe rimane identica, sfruttando i dati locali
+    // La creazione delle mappe non cambia, ora usa i dati reattivi di useLiveQuery
     const tecniciMap = useMemo(() => createMap(tecnici), [tecnici]);
     const clientiMap = useMemo(() => createMap(clienti), [clienti]);
     const naviMap = useMemo(() => createMap(navi), [navi]);
     const luoghiMap = useMemo(() => createMap(luoghi), [luoghi]);
     const tipiGiornataMap = useMemo(() => createMap(tipiGiornata), [tipiGiornata]);
 
-    // Il valore fornito dal context ora è più semplice e pulito
+    // Il valore fornito dal context
     const value = useMemo(() => ({
         tecnici: tecnici || [],
         clienti: clienti || [],
@@ -89,11 +89,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         luoghiMap,
         tipiGiornataMap,
         loading,
-        error,
+        error: null, // useLiveQuery non espone un errore in questo modo, quindi lo impostiamo a null.
     }), [
         tecnici, clienti, ditte, navi, luoghi, categorie, tipiGiornata, veicoli, 
         tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, 
-        loading, error
+        loading
     ]);
 
     return (
@@ -103,7 +103,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     );
 };
 
-// L'hook per consumare il context viene rinominato per chiarezza
+// Hook per consumare il context, rinominato per chiarezza
 export const useAnagraficaData = () => {
     const context = useContext(DataContext);
     if (context === undefined) {

@@ -1,8 +1,7 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, getDocs, query, where, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase';
 import {
   Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert, Divider
@@ -14,7 +13,8 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 
 interface Tecnico {
-  id: string;
+  id: string; 
+  docId: string; 
   nome: string;
   cognome: string;
   email: string;
@@ -29,9 +29,7 @@ interface DialogState {
   onConfirm: () => void;
 }
 
-// --- NUOVA LOGICA CON FUNZIONE PULITA ---
 const functions = getFunctions(undefined, 'europe-west1');
-// Puntiamo alla nuova funzione, robusta e gestita
 const gestisciAccessoTecnico = httpsCallable(functions, 'risorseUmane_gestisciAccessoTecnico');
 
 const GestioneAccessi = () => {
@@ -47,7 +45,6 @@ const GestioneAccessi = () => {
 
   const handleDetailedError = (err: any, context: string) => {
     console.error(`ERRORE [${context}]:`, err);
-    // Estrarre il messaggio di errore specifico dalla HttpsError
     const message = err.message || 'Errore sconosciuto.';
     showSnackbar(`[${context}] ${message}`, 'error');
   };
@@ -63,7 +60,8 @@ const GestioneAccessi = () => {
       );
       const anagraficaSnapshot = await getDocs(q);
       const tecniciList = anagraficaSnapshot.docs.map(doc => ({
-        id: doc.id,
+        id: doc.data().uid, 
+        docId: doc.id,    
         nome: doc.data().nome || '',
         cognome: doc.data().cognome || '',
         email: doc.data().email || '',
@@ -84,7 +82,7 @@ const GestioneAccessi = () => {
 
   const handleToggleAccess = async (tecnico: Tecnico) => {
     if (!tecnico.id) {
-      showSnackbar('ID del tecnico non disponibile. Impossibile procedere.', 'error');
+      showSnackbar('UID di autenticazione mancante per questo tecnico. Impossibile procedere.', 'error');
       return;
     }
 
@@ -92,21 +90,16 @@ const GestioneAccessi = () => {
     const newState = !tecnico.appAccess;
 
     try {
-      // Chiamiamo la nuova funzione passando UID e azione
       await gestisciAccessoTecnico({ 
         uid: tecnico.id, 
         action: newState ? 'enable' : 'disable' 
       });
       
-      // Aggiorniamo lo stato UI *solo dopo* la conferma dal backend
-      // La nuova funzione si occupa già di aggiornare Firestore, quindi questa parte potrebbe anche essere rimossa
-      // per affidarsi a un listener in tempo reale, ma per ora la lasciamo per un feedback immediato.
-      setTecnici(prevTecnici => prevTecnici.map(t => t.id === tecnico.id ? { ...t, appAccess: newState } : t));
+      setTecnici(prevTecnici => prevTecnici.map(t => t.docId === tecnico.docId ? { ...t, appAccess: newState } : t));
       showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
 
     } catch (err: any) {
-      // L'errore viene gestito in modo più granulare grazie alla nuova funzione
-      handleDetailedError(err, "Operazione Fallita");
+        handleDetailedError(err, "Operazione Fallita");
     } finally {
       setOperating(false);
     }
@@ -133,7 +126,7 @@ const GestioneAccessi = () => {
     setDialog({
       open: true,
       title: 'Conferma Invio Email',
-      content: `Stai per inviare un'email di ripristino password all'indirizzo ${email}. Vuoi procedere?`,
+      content: `Stai per inviare un'email di ripristino password all\'indirizzo ${email}. Vuoi procedere?`,
       onConfirm: () => executeResetPassword(email),
     });
   };
@@ -164,7 +157,7 @@ const GestioneAccessi = () => {
       headerName: 'Accesso App',
       width: 130, align: 'center', headerAlign: 'center',
       renderCell: (params: GridRowParams<Tecnico>) => (
-        <Tooltip title={params.row.appAccess ? 'Revoca accesso' : 'Abilita accesso'}>
+        <Tooltip title={!params.row.id ? "UID di autenticazione mancante!" : (params.row.appAccess ? 'Revoca accesso' : 'Abilita accesso')}>
           <span>
             <Switch
               checked={params.row.appAccess}
@@ -186,7 +179,7 @@ const GestioneAccessi = () => {
                 <IconButton
                     onClick={() => handleResetPassword(params.row.email)}
                     color="primary"
-                    disabled={operating || !params.row.appAccess || !params.row.email}
+                    disabled={operating || !params.row.appAccess || !params.row.email || !params.row.id}
                 >
                     <VpnKeyIcon />
                 </IconButton>
@@ -212,18 +205,19 @@ const GestioneAccessi = () => {
         Da questa sezione puoi abilitare o revocare l'accesso all'app mobile per ogni tecnico e inviare l'email per il reset della password.
       </Typography>
       <Divider sx={{ mb: 3 }} />
-
-      <Box sx={{ height: 500, width: '100%' }}>
+      {/* --- CORREZIONE DEL CAZZO DI LAYOUT --- */}
+      <Box sx={{ width: '100%' }}> 
         {loading ? (
           <CircularProgress sx={{ display: 'block', margin: 'auto' }} />
         ) : (
           <DataGrid
               rows={tecnici}
+              getRowId={(row) => row.docId}
               columns={columns}
               localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
               slots={{ toolbar: GridToolbar }}
               disableRowSelectionOnClick
-              autoHeight={false}
+              autoHeight // LA CAZZO DI SOLUZIONE
           />
         )}
       </Box>

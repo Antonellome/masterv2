@@ -1,7 +1,6 @@
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { db } from '@/db/db';
-import { useLiveQuery } from 'dexie-react-hooks';
 import {
     Paper, Typography, Button, Box, TextField, Autocomplete, Grid,
     Snackbar, Alert, Tooltip, CircularProgress
@@ -18,17 +17,18 @@ import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Veicolo, Rapportino } from '@/models/definitions';
-import { useCollectionData } from '@/hooks/useCollectionData';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import { db as firestoreDb } from '@/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { generateRapportinoPdf } from '@/utils/pdfGenerator';
 import PdfPreviewDialog from '@/components/common/PdfPreviewDialog';
+import { useAnagraficaData } from '@/contexts/DataContext';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 dayjs.locale('it');
 
-// --- INTERFACES & HELPERS ---
+// --- INTERFACES & HELPERS (invariati) ---
 interface FlatRapportino {
     id: string;
     dataFormatted: string;
@@ -80,22 +80,20 @@ const getCleanId = (id: any): string | undefined => {
 const RicercaAvanzata: React.FC = () => {
     const navigate = useNavigate();
     
-    const rapportini = useLiveQuery(() => db.rapportini.toArray(), []) as Rapportino[] | undefined;
-    const { data: anagraficaTecnici = [] } = useCollectionData<Tecnico>('tecnici');
-    const { data: anagraficaNavi = [] } = useCollectionData<Nave>('navi');
-    const { data: anagraficaClienti = [] } = useCollectionData<Cliente>('clienti');
-    const { data: anagraficaLuoghi = [] } = useCollectionData<Luogo>('luoghi');
-    const { data: anagraficaTipiGiornata = [] } = useCollectionData<TipoGiornata>('tipiGiornata');
-    const { data: anagraficaVeicoli = [] } = useCollectionData<Veicolo>('veicoli');
-    
-    const anagraficheLoading = !anagraficaTecnici || !anagraficaNavi || !anagraficaClienti || !anagraficaLuoghi || !anagraficaTipiGiornata || !anagraficaVeicoli;
+    const { 
+        tecnici: anagraficaTecnici, navi: anagraficaNavi, clienti: anagraficaClienti, 
+        luoghi: anagraficaLuoghi, tipiGiornata: anagraficaTipiGiornata, veicoli: anagraficaVeicoli,
+        tecniciMap, naviMap, clientiMap, luoghiMap, tipiGiornataMap, veicoliMap,
+        loading: anagraficheLoading 
+    } = useAnagraficaData();
+
+    const rapportini = useLiveQuery(() => db.rapportini.toArray());
     const rapportiniLoading = rapportini === undefined;
 
     const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' });
     const [rowToDelete, setRowToDelete] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
 
-    // State for PDF Preview
     const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
     const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
     const [pdfGenerating, setPdfGenerating] = useState(false);
@@ -103,18 +101,7 @@ const RicercaAvanzata: React.FC = () => {
 
     const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
 
-    const { tecniciMap, naviMap, clientiMap, tipiGiornataMap, luoghiMap, veicoliMap } = useMemo(() => {
-        if (anagraficheLoading) return { tecniciMap: new Map(), naviMap: new Map(), clientiMap: new Map(), tipiGiornataMap: new Map(), luoghiMap: new Map(), veicoliMap: new Map() };
-        return {
-            tecniciMap: new Map(anagraficaTecnici.map((t) => [t.id, t])),
-            naviMap: new Map(anagraficaNavi.map((n) => [n.id, n])),
-            clientiMap: new Map(anagraficaClienti.map((c) => [c.id, c])),
-            tipiGiornataMap: new Map(anagraficaTipiGiornata.map((tg) => [tg.id, tg])),
-            luoghiMap: new Map(anagraficaLuoghi.map((l) => [l.id, l])),
-            veicoliMap: new Map(anagraficaVeicoli.map((v) => [v.id, v]))
-        };
-    }, [anagraficaTecnici, anagraficaNavi, anagraficaClienti, anagraficaTipiGiornata, anagraficaLuoghi, anagraficaVeicoli, anagraficheLoading]);
-
+    // --- FUNZIONE DI STAMPA BLINDATA ---
     const handlePrintShareClick = useCallback(async (id: string) => {
         const rapportino = rapportini?.find(r => r.id === id);
         if (!rapportino) {
@@ -126,27 +113,32 @@ const RicercaAvanzata: React.FC = () => {
         setActiveRapportinoId(id);
 
         try {
-            // STEP 1: Ricostruire l'oggetto completo come facevamo prima
-            const nave = naviMap.get(getCleanId(rapportino.naveId) || '');
+            // **ATTENTO**: Creiamo copie sicure delle mappe per evitare crash se sono undefined
+            const safeTecniciMap = tecniciMap || {};
+            const safeNaviMap = naviMap || {};
+            const safeLuoghiMap = luoghiMap || {};
+            const safeVeicoliMap = veicoliMap || {};
+
+            const nave = safeNaviMap[getCleanId(rapportino.naveId) || ''];
             const fullRapportino: Rapportino = {
                 ...rapportino,
                 data: normalizeDate(rapportino.data),
                 nave: nave || undefined,
-                luogo: luoghiMap.get(getCleanId(rapportino.luogoId) || '') || undefined,
-                veicolo: veicoliMap.get(getCleanId(rapportino.veicoloId) || '') || undefined,
+                luogo: safeLuoghiMap[getCleanId(rapportino.luogoId) || ''] || undefined,
+                veicolo: safeVeicoliMap[getCleanId(rapportino.veicoloId) || ''] || undefined,
                 dettaglioOreTecnici: (rapportino.dettaglioOreTecnici || []).map(d => ({
                     ...d,
-                    nome: tecniciMap.get(getCleanId(d.tecnicoId) || '')?.nome || 'N/D'
+                    nome: safeTecniciMap[getCleanId(d.tecnicoId) || '']?.nome || 'N/D'
                 }))
             };
 
-            // STEP 2: Generare il PDF con l'oggetto completo
-            const blob = generateRapportinoPdf(fullRapportino, tecniciMap);
+            const blob = generateRapportinoPdf(fullRapportino, new Map(Object.entries(safeTecniciMap)));
             setPdfBlob(blob);
             setPdfPreviewOpen(true);
         } catch (error) {
             console.error("Errore generazione PDF:", error);
-            setSnackbar({ open: true, message: 'Errore durante la creazione del PDF.', severity: 'error' });
+            const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+            setSnackbar({ open: true, message: `Errore durante la creazione del PDF: ${errorMessage}`, severity: 'error' });
         } finally {
             setPdfGenerating(false);
         }
@@ -156,13 +148,20 @@ const RicercaAvanzata: React.FC = () => {
         if (!activeRapportinoId) return 'Rapportino.pdf';
         const rapportino = rapportini?.find(r => r.id === activeRapportinoId);
         if (!rapportino) return 'Rapportino.pdf';
-        const mainTecnico = tecniciMap.get(getCleanId(rapportino.tecnicoId) || '');
+        const mainTecnico = (tecniciMap || {})[getCleanId(rapportino.tecnicoId) || ''];
         const dateStr = dayjs(normalizeDate(rapportino.data)).format('YYYY-MM-DD');
         return `Rapportino_${mainTecnico?.cognome || 'TEC'}_${dateStr}.pdf`;
     };
     
     const flatRapportini = useMemo((): FlatRapportino[] => {
         if (!rapportini || anagraficheLoading) return [];
+        
+        const safeNaviMap = naviMap || {};
+        const safeClientiMap = clientiMap || {};
+        const safeLuoghiMap = luoghiMap || {};
+        const safeTecniciMap = tecniciMap || {};
+        const safeTipiGiornataMap = tipiGiornataMap || {};
+
         return rapportini.map((rapportino) => {
             const dataDaNormalizzare = (rapportino as any).dataInizio || rapportino.data;
             const dataNormalizzata = normalizeDate(dataDaNormalizzare);
@@ -170,11 +169,11 @@ const RicercaAvanzata: React.FC = () => {
             let finalClienteId: string | undefined = undefined;
             const naveId = getCleanId(rapportino.naveId);
             if (naveId) {
-                const nave = naviMap.get(naveId);
+                const nave = safeNaviMap[naveId];
                 if (nave) {
                     const clienteId = getCleanId(nave.clienteId);
                     if (clienteId) {
-                        const cliente = clientiMap.get(clienteId);
+                        const cliente = safeClientiMap[clienteId];
                         if (cliente) { clienteNome = cliente.nome; finalClienteId = cliente.id; }
                     }
                 }
@@ -182,11 +181,11 @@ const RicercaAvanzata: React.FC = () => {
             if (clienteNome === "N/D") {
                 const luogoId = getCleanId(rapportino.luogoId);
                 if (luogoId) {
-                    const luogo = luoghiMap.get(luogoId);
+                    const luogo = safeLuoghiMap[luogoId];
                     if (luogo) {
                         const clienteId = getCleanId(luogo.clienteId);
                         if (clienteId) {
-                            const cliente = clientiMap.get(clienteId);
+                            const cliente = safeClientiMap[clienteId];
                             if (cliente) { clienteNome = cliente.nome; finalClienteId = cliente.id; }
                         }
                     }
@@ -195,17 +194,17 @@ const RicercaAvanzata: React.FC = () => {
             const mainTecnicoId = getCleanId(rapportino.tecnicoId);
             const allTecnicoIdsInPresenze = (Array.isArray(rapportino.presenze) ? rapportino.presenze.map(getCleanId) : []).filter(Boolean) as string[];
             const getName = (id: string) => {
-                const t = tecniciMap.get(id);
+                const t = safeTecniciMap[id];
                 return t ? `${t.cognome} ${t.nome}`.trim() : `ID: ${id}`;
             };
             const mainTecnicoNome = mainTecnicoId ? getName(mainTecnicoId) : "N/D";
             const altriTecniciNomi = allTecnicoIdsInPresenze.filter(id => id !== mainTecnicoId).map(getName);
             const tecnicoIds = [...new Set([mainTecnicoId, ...allTecnicoIdsInPresenze].filter(Boolean) as string[])];
             const tipoGiornataId = getCleanId(rapportino.tipoGiornataId);
-            const tipoGiornataObj = tipoGiornataId ? tipiGiornataMap.get(tipoGiornataId) : undefined;
-            const naveObj = naveId ? naviMap.get(naveId) : undefined;
+            const tipoGiornataObj = tipoGiornataId ? safeTipiGiornataMap[tipoGiornataId] : undefined;
+            const naveObj = naveId ? safeNaviMap[naveId] : undefined;
             const luogoId = getCleanId(rapportino.luogoId);
-            const luogoObj = luogoId ? luoghiMap.get(luogoId) : undefined;
+            const luogoObj = luogoId ? safeLuoghiMap[luogoId] : undefined;
             let oreTotaliRapporto = rapportino.dettaglioOreTecnici?.reduce((sum, d) => sum + (d.ore || 0), 0) ?? Number(rapportino.oreLavoro) ?? 0;
             const dettaglioResponsabile = rapportino.dettaglioOreTecnici?.find(d => getCleanId(d.tecnicoId) === getCleanId(rapportino.tecnicoId));
             let oreResponsabile = dettaglioResponsabile?.ore ?? (rapportino.dettaglioOreTecnici ? 0 : oreTotaliRapporto);
@@ -232,29 +231,6 @@ const RicercaAvanzata: React.FC = () => {
         });
     }, [rapportini, anagraficheLoading, naviMap, clientiMap, luoghiMap, tecniciMap, tipiGiornataMap]);
 
-    // DEBUGGING LOGIC
-    useEffect(() => {
-        if (flatRapportini.length > 0 && rapportini) {
-            const debugData = dayjs('2026-07-17');
-            const targetDataString = debugData.format('DD/MM/YYYY');
-
-            const targetRapportino = flatRapportini.find(r => 
-                r.dataFormatted === targetDataString && 
-                r.naveNome.toLowerCase() === 'iginia' && 
-                r.mainTecnicoNome.toLowerCase().includes('scuderi')
-            );
-
-            if (targetRapportino) {
-                console.log("--- DEBUG: RAPPORTO SPECIFICO TROVATO ---");
-                console.log("DATI ELABORATI (per la tabella):", JSON.stringify(targetRapportino, null, 2));
-                
-                const originalRawRapportino = rapportini.find(r => r.id === targetRapportino.id);
-                console.log("DATI GREZZI (dal database):", JSON.stringify(originalRawRapportino, null, 2));
-                console.log("--- FINE DEBUG ---");
-            }
-        }
-    }, [flatRapportini, rapportini]);
-    
     const filteredRapportini = useMemo(() => {
         return flatRapportini.filter(r => {
            const r_data = dayjs(r.data);
@@ -350,11 +326,11 @@ const RicercaAvanzata: React.FC = () => {
                      <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`.trim()} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaNavi} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaLuoghi} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaClienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaTipiGiornata} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaTecnici || []} getOptionLabel={(o) => `${o.cognome} ${o.nome}`.trim()} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaNavi || []} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaLuoghi || []} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaClienti || []} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaTipiGiornata || []} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><TextField label="Ordine di Lavoro" value={filters.ordineLavoro} onChange={e => handleFilterChange('ordineLavoro', e.target.value)} fullWidth size="small" /></Grid>
                         <Grid item xs={12}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
                     </Grid>

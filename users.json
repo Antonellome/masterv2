@@ -1,0 +1,9 @@
+{
+  "users": [
+    {
+      "localId": "some_local_id",
+      "email": "antonellome20@gmail.com",
+      "displayName": "Tecnico Test"
+    }
+  ]
+}

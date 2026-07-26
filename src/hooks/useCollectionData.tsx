@@ -1,29 +1,69 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, AnagraficaTable } from '@/db/db';
+import { db } from '@/db/db';
+import { useState, useCallback } from 'react';
 
 /**
- * Hook reattivo e robusto per recuperare dati da una tabella anagrafica di Dexie.
- * Accetta il NOME della tabella come stringa per evitare errori di tipo.
+ * Hook reattivo e ultra-robusto per recuperare dati da una tabella di Dexie.
+ * Accetta il NOME della tabella e logga errori specifici se l'input non è valido.
  *
  * @param tableName Il nome della tabella da cui recuperare i dati (es. 'clienti').
- * @returns Un oggetto con `data`, `loading`, `error`.
+ * @returns Un oggetto con `data`, `loading`, `error`, e una funzione `forceRefresh`.
  */
-export function useCollectionData<T>(tableName: AnagraficaTable) {
-  
-  const data = useLiveQuery(() => {
-    // Seleziona la tabella dinamicamente dal nome
-    const table = db[tableName];
-    if (table) {
-      return table.toArray();
+export function useCollectionData<T>(tableName: any) {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Cattura lo stack di chiamata per il debugging.
+  // Questo ci dirà QUALE componente sta chiamando l'hook in modo errato.
+  const callStack = new Error().stack;
+
+  const result = useLiveQuery(async () => {
+    // --- CONTROLLO DI ROBUSTEZZA DEFINITIVO ---
+
+    // 1. L'input è una stringa valida e non vuota? Se no, logga l'errore e fermati.
+    if (typeof tableName !== 'string' || !tableName.trim()) {
+      console.error(
+        'ERRORE CRITICO in useCollectionData: `tableName` non è una stringa valida.',
+        {
+          receivedValue: tableName,
+          type: typeof tableName,
+          callStack: callStack?.split('\n')[2]?.trim() || 'Stack non disponibile'
+        }
+      );
+      // Restituisce un errore chiaro per segnalare il problema a monte.
+      return { data: [], error: new Error(`Input non valido per useCollectionData: ricevuto ${typeof tableName}`) };
     }
-    return []; // Ritorna un array vuoto se il nome tabella non è valido
-  }, [tableName]); // La query si riesegue se il nome della tabella cambia
 
-  const loading = data === undefined;
-  
-  // Semplifichiamo la gestione dell'errore. useLiveQuery è già robusto.
-  const error = data === undefined && !loading ? new Error(`Tabella non trovata: ${tableName}`) : null;
+    // 2. La tabella con questo nome esiste nello schema del DB? Se no, fermati.
+    const tableExists = db.tables.some(t => t.name === tableName);
+    if (!tableExists) {
+        const err = new Error(`La tabella "${tableName}" non esiste nel database locale.`);
+        console.warn(err.message); 
+        return { data: [], error: err };
+    }
 
-  return { data: data || [], loading, error };
+    // 3. Se tutti i controlli sono superati, procedi con la query in sicurezza.
+    try {
+      const table = db.table(tableName);
+      const items = await table.toArray();
+      return { data: items as T[], error: null };
+    } catch (e: any) {
+      console.error(`Errore imprevisto durante la lettura dalla tabella Dexie "${tableName}":`, e);
+      return { data: [], error: e };
+    }
+    
+  }, [tableName, refreshKey]);
+
+  const loading = result === undefined;
+
+  const forceRefresh = useCallback(() => {
+    setRefreshKey(prev => prev + 1);
+  }, []);
+
+  return {
+    data: result?.data,
+    loading,
+    error: result?.error,
+    forceRefresh
+  };
 }

@@ -1,11 +1,11 @@
 
-import { lazy, Suspense, useEffect, useState, useRef } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthProvider';
 import { DataProvider } from '@/contexts/DataContext';
 import { NotificationProvider } from '@/contexts/NotificationProvider';
-import { RefreshProvider } from '@/contexts/RefreshContext';
+import { RefreshProvider, useRefresh } from '@/contexts/RefreshContext'; // 1. IMPORTIAMO useRefresh
 import { AlertProvider } from '@/contexts/AlertContext';
 import { GlobalStyles, Box, CircularProgress, Typography } from '@mui/material';
 
@@ -13,7 +13,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
 import { syncStandard } from '@/services/SyncService';
 
-// ... (lazy imports invariati)
+// --- Lazy Imports (invariati) ---
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const SignupPage = lazy(() => import('@/pages/SignupPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
@@ -31,36 +31,39 @@ const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 
-
+// --- Componente AppContent con Logica di Sincronizzazione CORRETTA ---
 const AppContent = () => {
   const { loading: authLoading, user } = useAuth();
-  const [syncing, setSyncing] = useState(true);
-  const initialSyncDone = useRef(false); // Flag per tracciare la prima sincronizzazione
+  const { refreshKey } = useRefresh(); // 2. USIAMO l'hook per ascoltare i cambiamenti
+  const [isSyncing, setIsSyncing] = useState(true);
 
   useEffect(() => {
     const runSync = async () => {
-      // Esegui solo se c'è un utente e la sincronizzazione iniziale non è ancora avvenuta
-      if (user && !initialSyncDone.current) {
-        initialSyncDone.current = true; // Imposta il flag per prevenire esecuzioni future
-        setSyncing(true);
-        console.log("Utente autenticato, avvio sincronizzazione standard UNA TANTUM.");
-        await syncStandard();
-        console.log("Sincronizzazione standard completata.");
-        setSyncing(false);
-      } else if (!user) {
-        // Se l'utente fa logout, resetta il flag
-        initialSyncDone.current = false;
-        setSyncing(false); 
+      if (user) {
+        setIsSyncing(true);
+        console.log(`Sincronizzazione avviata. Trigger: ${refreshKey > 0 ? 'Manuale' : 'Login'}`);
+        try {
+          await syncStandard();
+          console.log("Sincronizzazione completata con successo.");
+        } catch (error) {
+          console.error("Errore critico durante la sincronizzazione:", error);
+        } finally {
+          setIsSyncing(false);
+        }
+      } else {
+        setIsSyncing(false);
       }
     };
 
+    // Eseguiamo la sincro solo quando l'autenticazione è terminata
     if (!authLoading) {
-       runSync();
+      runSync();
     }
-  }, [user, authLoading]); // Dipende da user e authLoading per gestire login/logout
+  // 3. L'effetto si ri-esegue quando l'utente cambia (login/logout) O quando la refreshKey cambia (click manuale)
+  }, [user, authLoading, refreshKey]);
 
-  // Mostra il loader durante l'autenticazione iniziale o la primissima sincronizzazione
-  if (authLoading || (user && syncing && !initialSyncDone.current)) {
+  // Loader durante auth o sync
+  if (authLoading || isSyncing) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -112,7 +115,7 @@ function App() {
       <GlobalStyles styles={{ a: { color: 'inherit', textDecoration: 'none' } }} />
       <AuthProvider>
         <NotificationProvider>
-          <RefreshProvider>
+          <RefreshProvider> 
             <AlertProvider>
               <DataProvider>
                 <AppContent />

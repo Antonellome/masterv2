@@ -1,47 +1,111 @@
-
-import { collection, getDocs, query, where, Timestamp, doc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { db as firestore } from '../firebase';
 import { db, bulkPutAnagrafiche } from '@/db/db';
-import type { Rapportino, Tecnico, Nave, Luogo, TipoGiornata, AdminUser, Cliente, Ditta, Categoria } from '@/models/definitions';
-import { rapportinoConverter } from '@/firebase/converters';
+import type { Rapportino } from '@/models/definitions';
 import dayjs from 'dayjs';
 
-// --- HELPERS (invariati) ---
-
+// --- HELPERS ---
 const getLastSyncTimestamp = async (): Promise<Date | null> => {
-    const lastSync = await db.sync_status.get('lastSyncTimestamp');
-    return lastSync ? new Date(lastSync.value) : null;
+    try {
+        const lastSync = await db.sync_status.get('lastSyncTimestamp');
+        return lastSync ? new Date(lastSync.value) : null;
+    } catch (e) {
+        console.error("Errore nel recuperare l'ultimo timestamp di sincronizzazione:", e);
+        return null; // Ritorna null per forzare una sincronizzazione completa in caso di errore
+    }
 };
 
 const setLastSyncTimestamp = async (timestamp: Date) => {
     await db.sync_status.put({ id: 'lastSyncTimestamp', value: timestamp.getTime() });
 };
 
-const fetchCollection = async <T>(collectionName: string): Promise<any[]> => {
-    const querySnapshot = await getDocs(collection(firestore, collectionName));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-};
-
-const fetchModifiedCollection = async <T>(collectionName: string, startDate: Date): Promise<any[]> => {
-    // Aggiunto controllo: se la data è troppo vecchia, Firestore potrebbe rifiutare la query.
-    // Per sicurezza, non andiamo più indietro di 30 giorni, che è il default per la prima sync.
-    const effectiveStartDate = dayjs().diff(dayjs(startDate), 'day') > 30 ? dayjs().subtract(30, 'days').toDate() : startDate;
-
-    const q = query(
-        collection(firestore, collectionName),
-        where("updatedAt", ">", Timestamp.fromDate(effectiveStartDate))
-    );
+// NUOVA FUNZIONE INCREMENTALE GENERICA
+const fetchModifiedCollection = async (collectionName: string, startDate: Date | null): Promise<any[]> => {
+    let q;
+    // Se non c'è una data di inizio (prima sync), scarica tutto.
+    // Altrimenti, scarica solo i documenti modificati dopo quella data.
+    if (startDate) {
+        q = query(
+            collection(firestore, collectionName),
+            where("updatedAt", ">", Timestamp.fromDate(startDate))
+        );
+    } else {
+        q = query(collection(firestore, collectionName));
+    }
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // LA CORREZIONE FONDAMENTALE È QUI
+    return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        // Se la collezione è 'tecnici', usiamo il campo 'uid' come ID principale.
+        // Per tutte le altre, usiamo l'ID del documento.
+        const id = collectionName === 'tecnici' ? data.uid : doc.id;
+        return { id, ...data };
+    });
 };
 
-const normalizeId = (id: any): string | undefined => {
-    if (typeof id === 'string') return id;
-    if (id && typeof id === 'object' && id.id) return id.id;
-    return undefined;
-};
+// --- LOGICA DI SINCRONIZZAZIONE CORRETTA E INCREMENTALE ---
+export async function syncStandard() {
+    console.log('Inizio Sincronizzazione Standard...');
+    try {
+        const lastSync = await getLastSyncTimestamp();
+        const now = new Date();
 
-const convertFirestoreTimestamps = (data: any): any => {
+        if (lastSync) {
+            console.log(`Sincronizzazione incrementale avviata da: ${lastSync.toISOString()}`);
+        } else {
+            console.log('Prima sincronizzazione o database vuoto. Scarico tutti i dati e pulisco la cache dei tecnici.');
+            // Pulisce la tabella tecnici solo alla prima sincronizzazione per forzare il refresh
+            await db.table('tecnici').clear();
+        }
+
+        const anagraficheMap: { [key: string]: (item: any) => any } = {
+            tecnici: item => item, // La mappatura ora è corretta a monte
+            navi: item => ({ ...item, clienteId: item.clienteId?.id || item.clienteId }),
+            luoghi: item => ({ ...item, clienteId: item.clienteId?.id || item.clienteId }),
+            tipiGiornata: item => item,
+            clienti: item => item,
+            ditte: item => item,
+            categorie: item => item,
+            qualifiche: item => item,
+            veicoli: item => item,
+        };
+
+        const anagraficheToSync = Object.keys(anagraficheMap);
+
+        // Eseguiamo il fetch INCREMENTALE per ogni anagrafica
+        for (const name of anagraficheToSync) {
+            console.log(`... sincronizzo ${name}...`);
+            const data = await fetchModifiedCollection(name, lastSync);
+            if (data.length > 0) {
+                const processedData = data.map(item => convertFirestoreTimestamps(anagraficheMap[name](item)));
+                await bulkPutAnagrafiche(name, processedData);
+                console.log(`Trovati e aggiornati ${data.length} record in ${name}.`);
+            } else {
+                 console.log(`Nessun dato da aggiornare per ${name}.`);
+            }
+        }
+        console.log('Tutte le anagrafiche sono state sincronizzate.');
+
+        // Sincronizzazione rapportini (già incrementale, ma usiamo la nuova funzione per coerenza)
+        const rapportiniRecenti = await fetchModifiedCollection('rapportini', lastSync);
+        if (rapportiniRecenti.length > 0) {
+            await saveSafeRapportini(rapportiniRecenti);
+            console.log(`Sincronizzati ${rapportiniRecenti.length} rapportini modificati di recente.`);
+        } else {
+            console.log('Nessun rapportino recente da aggiornare.');
+        }
+        
+        await setLastSyncTimestamp(now);
+        console.log('Sincronizzazione Standard completata con successo.');
+    } catch (error) {
+        console.error('ERRORE CRITICO in Sincronizzazione Standard:', error);
+        // Non rilanciamo l'errore per non far crashare l'app, ma lo logghiamo.
+        // L'app continuerà a funzionare con i dati offline.
+    }
+}
+
+// --- FUNZIONI DI SUPPORTO (INVARIATE MA IMPORTANTI) ---
+function convertFirestoreTimestamps(data: any): any {
     if (data && typeof data.toDate === 'function') {
         return data.toDate();
     }
@@ -56,156 +120,27 @@ const convertFirestoreTimestamps = (data: any): any => {
         return res;
     }
     return data;
-};
-
-
-// --- LOGICA DI SINCRONIZZAZIONE (CORRETTA) ---
-
-export async function syncStandard() {
-    console.log('Inizio Sincronizzazione Standard...');
-    try {
-        const lastSync = await getLastSyncTimestamp();
-        const now = new Date();
-
-        // Determina la funzione di fetch da usare: completa se è la prima sync, altrimenti incrementale
-        const fetcher = lastSync ? fetchModifiedCollection : fetchCollection;
-        const syncStartDate = lastSync || dayjs().subtract(30, 'days').toDate();
-        
-        if(lastSync){
-            console.log(`Sincronizzazione incrementale. Ultima sync: ${lastSync.toISOString()}`);
-        } else {
-            console.log('Prima sincronizzazione. Scarico tutti i dati anagrafici e i rapportini degli ultimi 30 giorni.');
-        }
-
-        const anagraficheCollections = ['tecnici', 'navi', 'luoghi', 'tipiGiornata', 'admins', 'clienti', 'ditte', 'categorie'];
-        
-        // Esegue il fetch delle anagrafiche in parallelo usando il fetcher corretto
-        const anagraficheData = await Promise.all(
-            anagraficheCollections.map(name => fetcher(name, syncStartDate))
-        );
-
-        // Mappatura per chiarezza
-        const [tecniciData, naviData, luoghiData, tipiGiornataData, adminsData, clientiData, ditteData, categorieData] = anagraficheData;
-
-        // Esegue il bulk put nel database locale solo se ci sono dati da aggiornare
-        if (anagraficheData.some(data => data.length > 0)) {
-            await bulkPutAnagrafiche({ 
-                tecnici: convertFirestoreTimestamps(tecniciData),
-                navi: convertFirestoreTimestamps(naviData).map((n: any) => ({...n, clienteId: normalizeId(n.clienteId)})),
-                luoghi: convertFirestoreTimestamps(luoghiData).map((l: any) => ({...l, clienteId: normalizeId(l.clienteId)})),
-                tipiGiornata: convertFirestoreTimestamps(tipiGiornataData),
-                admins: convertFirestoreTimestamps(adminsData),
-                clienti: convertFirestoreTimestamps(clientiData),
-                ditte: convertFirestoreTimestamps(ditteData),
-                categorie: convertFirestoreTimestamps(categorieData),
-            });
-            console.log('Anagrafiche sincronizzate.');
-        } else {
-            console.log('Nessuna anagrafica da aggiornare.');
-        }
-
-        // Sincronizzazione rapportini (logica invariata, era già corretta)
-        const rapportiniRecenti = await fetchModifiedCollection<Rapportino>('rapportini', syncStartDate);
-        
-        if (rapportiniRecenti.length > 0) {
-            await saveSafeRapportini(rapportiniRecenti);
-            console.log(`Sincronizzati ${rapportiniRecenti.length} rapportini modificati di recente.`);
-        } else {
-            console.log('Nessun rapportino recente da aggiornare.');
-        }
-        
-        // Aggiorna il timestamp solo alla fine di un'operazione completata con successo
-        await setLastSyncTimestamp(now);
-        console.log('Sincronizzazione Standard completata con successo.');
-
-    } catch (error) {
-        console.error('ERRORE CRITICO in Sincronizzazione Standard:', error);
-    }
-}
-
-// ... (resto del file invariato) ...
-
-export async function syncCompleta() {
-    console.warn('Esecuzione Sincronizzazione Completa (Deprecata)...');
-    await syncStandard();
 }
 
 async function saveSafeRapportini(rapportiniFromFirestore: any[]) {
+    // Escludi dalla sovrascrittura i rapportini che sono stati modificati localmente
     const dirtyIds = await db.rapportini.where('isDirty').equals(1).primaryKeys();
     const rapportiniToSave = rapportiniFromFirestore.filter(r => !dirtyIds.includes(r.id));
-
+    
     if (rapportiniToSave.length > 0) {
         const rapportiniPuliti = rapportiniToSave.map(r => {
             const rapportinoConDate = convertFirestoreTimestamps(r);
-            
-            if (rapportinoConDate.data && !rapportinoConDate.dataInizio) {
-                rapportinoConDate.dataInizio = rapportinoConDate.data;
-            }
-            delete rapportinoConDate.data;
-
             return {
                 ...rapportinoConDate,
-                naveId: normalizeId(r.naveId),
-                luogoId: normalizeId(r.luogoId),
-                tipoGiornataId: normalizeId(r.tipoGiornataId),
-                tecnicoId: normalizeId(r.tecnicoId),
-                presenze: Array.isArray(r.presenze) ? r.presenze.map(normalizeId).filter(Boolean) as string[] : [],
-                isDirty: 0,
+                // Appiattisci eventuali reference di Firestore
+                naveId: r.naveId?.id || r.naveId,
+                luogoId: r.luogoId?.id || r.luogoId,
+                tipoGiornataId: r.tipoGiornataId?.id || r.tipoGiornataId,
+                tecnicoId: r.tecnicoId?.id || r.tecnicoId,
+                presenze: Array.isArray(r.presenze) ? r.presenze.map(p => p.id || p).filter(Boolean) as string[] : [],
+                isDirty: 0, // Imposta come 'pulito'
             };
         });
-
         await db.rapportini.bulkPut(rapportiniPuliti);
-    }
-}
-
-export async function pushRapportinoToQueue(rapportinoId: string) {
-    await db.sync_queue.add({
-        entityId: rapportinoId,
-        entityType: 'rapportino',
-        timestamp: Date.now(),
-        status: 'pending',
-        attempts: 0,
-    });
-    processSyncQueue(); 
-}
-
-let isSyncing = false;
-export async function processSyncQueue() {
-    if (isSyncing) return;
-    isSyncing = true;
-
-    try {
-        const tasks = await db.sync_queue.where('status').equals('pending').sortBy('timestamp');
-        if (tasks.length === 0) {
-            isSyncing = false;
-            return;
-        }
-
-        const batch = writeBatch(firestore);
-        let processedTaskIds: number[] = [];
-
-        for (const task of tasks) {
-            if (task.entityType === 'rapportino') {
-                const rapportino = await db.rapportini.get(task.entityId);
-                if (rapportino) {
-                    const docRef = doc(firestore, 'rapportini', rapportino.id).withConverter(rapportinoConverter);
-                    batch.set(docRef, rapportino);
-                    await db.rapportini.update(rapportino.id, { isDirty: 0 });
-                    processedTaskIds.push(task.id!);
-                }
-            }
-        }
-
-        await batch.commit();
-        await db.sync_queue.bulkDelete(processedTaskIds);
-
-    } catch (error) {
-        console.error('ERRORE durante il processo della coda di sincronizzazione:', error);
-    } finally {
-        isSyncing = false;
-        const remainingTasks = await db.sync_queue.where('status').equals('pending').count();
-        if (remainingTasks > 0) {
-            setTimeout(processSyncQueue, 1000); 
-        }
     }
 }
