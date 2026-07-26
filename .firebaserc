@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "riso-project-app"
+  },
+  "targets": {
+    "riso-project-app": {
+      "hosting": {
+        "prod": [
+          "riso-master-office-prod"
+        ]
+      }
+    }
   }
 }
