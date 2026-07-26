@@ -35,7 +35,7 @@ const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: ra
     
     const standardData = useMemo(() => convertToRapportinoStandard(rapportinoGrezzzo), [rapportinoGrezzzo]);
 
-    const { data: tecnici, loading: loadingTecnici } = useCollectionData<Tecnico>('tecnici';
+    const { data: tecnici, loading: loadingTecnici } = useCollectionData<Tecnico>('tecnici');
     const { data: navi, loading: loadingNavi } = useCollectionData<Nave>('navi');
     const { data: luoghi, loading: loadingLuoghi } = useCollectionData<Luogo>('luoghi');
     const { data: veicoli, loading: loadingVeicoli } = useCollectionData<Veicolo>('veicoli');
