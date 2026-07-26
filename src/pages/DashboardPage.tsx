@@ -11,7 +11,7 @@ import {
 import Grid from '@mui/material/Unstable_Grid2';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/db'; // Importa il DB locale
-import type { Rapportino, Tecnico, Nave, Luogo, Checkin, Cliente } from '../models/definitions';
+import type { Rapportino, Tecnico, Nave, Luogo, Checkin, Cliente, TipoGiornata } from '../models/definitions';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';
 import isBetween from 'dayjs/plugin/isBetween';
@@ -22,13 +22,36 @@ import ShipIcon from '@mui/icons-material/DirectionsBoat';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useCheckinData } from '@/hooks/useCheckinData';
-import { useAnagrafiche } from '@/hooks/useAnagrafiche'; // Il nostro hook centrale per le anagrafiche
+import { useAnagrafiche } from '@/hooks/useAnagrafiche';
 
 dayjs.extend(isBetween);
 dayjs.extend(isSameOrBefore);
 dayjs.locale('it');
 
-// --- Componenti UI stateless (invariati) ---
+// Funzione di utilità per calcolare le ore totali di un rapportino
+const calculateRapportinoHours = (rapportino: Rapportino): number => {
+    let totalHours = 0;
+    const processedTechs = new Set<string>();
+
+    if (rapportino.dettaglioOre && rapportino.dettaglioOre.length > 0) {
+        rapportino.dettaglioOre.forEach(detail => {
+            totalHours += detail.ore || 0;
+            processedTechs.add(detail.tecnicoId);
+        });
+    }
+
+    if (!processedTechs.has(rapportino.tecnicoId)) {
+        totalHours += rapportino.oreLavoro || 0;
+    }
+    
+    if (totalHours === 0 && (rapportino.oreLavoro || 0) > 0) {
+        return rapportino.oreLavoro || 0;
+    }
+
+    return totalHours;
+};
+
+// --- Componenti UI stateless ---
 const CalendarDayCard: React.FC<{ day: number; missingReports: number; isFuture: boolean; }> = ({ day, missingReports, isFuture }) => {
     const cardColor = isFuture ? 'grey.600' : (missingReports > 0 ? 'error.light' : 'success.light');
     const textColor = isFuture || missingReports > 0 ? 'white' : 'inherit';
@@ -68,20 +91,30 @@ const LocationAccordion: React.FC<{ locations: { id: string; name: string; type:
     ))}</Box>
 );
 
-// --- Logica e Caricamento Dati (RIFATTORIZZATO PER OFFLINE) ---
+// Componente personalizzato per il tooltip del grafico
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <Card sx={{ p: 1, boxShadow: 3, backgroundColor: 'rgba(255, 255, 255, 0.9)' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>{label}</Typography>
+                <Typography variant="body2" color="primary">{`Ore lavorate: ${payload[0].value}`}</Typography>
+            </Card>
+        );
+    }
+    return null;
+};
+
+
+// --- Componente Principale della Dashboard ---
 const DashboardContent = () => {
     const [tabValue, setTabValue] = useState(0);
     const [selectedDate, setSelectedDate] = useState(dayjs());
     const today = dayjs();
 
-    // 1. Usa l'hook centrale per TUTTE le anagrafiche
     const { tecnici, navi, luoghi, clienti, tipiGiornata, loading: lAnagrafiche, error: eAnagrafiche } = useAnagrafiche();
-    
-    // 2. Carica i rapportini e i checkin dal DB locale in modo reattivo
     const rapportini = useLiveQuery(() => db.rapportini.toArray(), []);
     const { filteredCheckins, loading: lCheckins, error: eCheckins } = useCheckinData(today.format('YYYY-MM-DD'));
 
-    // 3. Unifica gli stati di caricamento ed errore
     const isLoading = lAnagrafiche || rapportini === undefined || lCheckins;
     const error = eAnagrafiche || eCheckins;
 
@@ -94,16 +127,14 @@ const DashboardContent = () => {
     const selectedMonth = selectedDate.month();
     const selectedYear = selectedDate.year();
 
-    // 4. Crea le mappe una volta che i dati sono disponibili (logica invariata)
     const tecniciMap = useMemo(() => new Map(tecnici?.map(t => [t.id, t]) || []), [tecnici]);
     const naviMap = useMemo(() => new Map(navi?.map(n => [n.id, {nome: n.nome, clienteId: n.clienteId}]) || []), [navi]);
     const luoghiMap = useMemo(() => new Map(luoghi?.map(l => [l.id, l.nome]) || []), [luoghi]);
     const clientiMap = useMemo(() => new Map(clienti?.map(c => [c.id, c.nome]) || []), [clienti]);
+    const simpleTecniciMap = useMemo(() => new Map(tecnici.map(t => [t.id, `${t.nome} ${t.cognome}`])), [tecnici]);
 
-    // 5. Calcola le statistiche e i dati derivati usando i dati locali
     const { checkinsByClient, luoghiCheckins } = useMemo(() => {
         if (!filteredCheckins || !navi) return { checkinsByClient: {}, luoghiCheckins: [] };
-        // Logica interna invariata...
         const locations: Record<string, { id: string; name: string; type: 'nave' | 'luogo'; technicians: Checkin[], clienteId?: string }> = {};
         for (const checkin of filteredCheckins) {
             const locationId = checkin.anagraficaId;
@@ -137,45 +168,40 @@ const DashboardContent = () => {
     }, [filteredCheckins, navi, naviMap, luoghiMap, tecniciMap]);
 
     const memoizedStats = useMemo(() => {
-        // La guardia ora controlla tutti i dati provenienti dagli hook locali
         if (!rapportini || !tecnici || !tipiGiornata || !navi || !luoghi) return null;
     
-        const tipiGiornataMap = new Map(tipiGiornata.map(tg => [tg.id, tg]));
-        const simpleTecniciMap = new Map(tecnici.map(t => [t.id, `${t.nome} ${t.cognome}`]));
-        
-        // CORREZIONE: Usa `dataInizio` che è sempre una data valida nel DB locale
         const rapportiniWithDate = rapportini.map(r => ({ ...r, date: dayjs(r.dataInizio) })).filter(r => r.date.isValid());
-    
         const rapportiniNelRange = rapportiniWithDate.filter(r => r.date.isSame(selectedDate, 'month'));
     
-        const oreTotaliRange = rapportiniNelRange.reduce((sum, r) => sum + (r.oreLavorate || 0), 0);
+        let oreTotaliRange = 0;
+        const orePerNaveMap = new Map<string, number>();
 
-        const costoTotaleRange = rapportiniNelRange.reduce((sum, r) => {
-            const costoOrario = tipiGiornataMap.get(r.tipoGiornataId)?.costoOrario || 0;
-            return sum + ((r.oreLavorate || 0) * costoOrario);
-        }, 0);
-    
-        const sevenDaysAgo = today.subtract(7, 'day');
-        const activityLast7Days = Array.from({ length: 7 }, (_, i) => ({ date: today.subtract(6 - i, 'day').format('DD/MM'), ore: 0 }));
-        
-        rapportiniWithDate
-            .filter(r => r.date.isAfter(sevenDaysAgo))
-            .forEach(r => {
-                const dayData = activityLast7Days.find(d => d.date === r.date!.format('DD/MM'));
-                if (dayData) {
-                    dayData.ore += (r.oreLavorate || 0);
-                }
-            });
-    
+        rapportiniNelRange.forEach(r => {
+            const oreRapportino = calculateRapportinoHours(r);
+            oreTotaliRange += oreRapportino;
+
+            if (r.naveId) {
+                const currentHours = orePerNaveMap.get(r.naveId) || 0;
+                orePerNaveMap.set(r.naveId, currentHours + oreRapportino);
+            }
+        });
+
+        const orePerNaveChartData = Array.from(orePerNaveMap.entries())
+            .map(([naveId, ore]) => ({ 
+                name: naviMap.get(naveId)?.nome || 'Nave non trovata', 
+                ore: ore
+            }))
+            .sort((a, b) => b.ore - a.ore); // Ordina dal più grande al più piccolo
+
         const attivitaRecenti = [...rapportiniWithDate]
             .sort((a, b) => b.date.valueOf() - a.date.valueOf())
             .slice(0, 5)
             .map(r => ({
                 id: r.id,
-                tecnico: r.presenze?.map(id => simpleTecniciMap.get(id)).filter(Boolean).join(', ') || 'N/A',
+                tecnico: simpleTecniciMap.get(r.tecnicoId) || 'N/A',
                 data: r.date.format('DD/MM/YYYY'),
                 destinazione: r.naveId ? naviMap.get(r.naveId)?.nome : (r.luogoId ? luoghiMap.get(r.luogoId) : 'Nessuna'),
-                descrizione: r.note
+                descrizione: r.lavoroEseguito || r.descrizioneBreve || r.note || 'Nessuna descrizione'
             }));
             
         const activeTechnicians = tecnici.filter(t => t.attivo).length;
@@ -187,9 +213,16 @@ const DashboardContent = () => {
             const isFuture = currentDate.isAfter(today, 'day');
             let missingReports = 0;
             if (!isFuture && currentDate.day() !== 0 && currentDate.day() !== 6 && currentDate.isSameOrBefore(today, 'day')) {
-                const uniqueTechnicians = new Set(rapportiniWithDate
-                    .filter(r => r.date.isSame(currentDate, 'day'))
-                    .flatMap(r => r.presenze || [])
+                const uniqueTechnicians = new Set(
+                    rapportiniWithDate
+                        .filter(r => r.date.isSame(currentDate, 'day'))
+                        .flatMap(r => {
+                            const techs = new Set<string>();
+                            if (r.tecnicoId) techs.add(r.tecnicoId);
+                            if (r.dettaglioOre) r.dettaglioOre.forEach(d => techs.add(d.tecnicoId));
+                            if (r.presenze) r.presenze.forEach(p => techs.add(p));
+                            return Array.from(techs);
+                        })
                 );
                 missingReports = activeTechnicians - uniqueTechnicians.size;
             }
@@ -198,20 +231,18 @@ const DashboardContent = () => {
     
         return {
             oreTotaliRange: oreTotaliRange.toFixed(1),
-            costoTotaleRange: `€ ${costoTotaleRange.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
             rapportiniCreatiRange: rapportiniNelRange.length,
-            activityLast7Days,
+            orePerNaveChartData,
             attivitaRecenti,
             calendarData: { days: calendarDays, offset: (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1) },
         };
-    }, [rapportini, tipiGiornata, tecnici, navi, luoghi, selectedDate, naviMap, luoghiMap, today]);
+    }, [rapportini, tipiGiornata, tecnici, navi, luoghi, selectedDate, naviMap, luoghiMap, today, simpleTecniciMap]);
     
-    // 6. Gestione degli stati di caricamento ed errore
     if (isLoading) return <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}><CircularProgress /></Box>;
     if (error) return <Box sx={{ p: 3 }}><Alert severity="error">{`Errore nel caricamento dei dati: ${error.toString()}`}</Alert></Box>;
     if (!memoizedStats) return <Box sx={{ p: 3 }}><Alert severity="info">Dati in caricamento o non sufficienti per la dashboard...</Alert></Box>;
 
-    const { oreTotaliRange, costoTotaleRange, rapportiniCreatiRange, activityLast7Days, attivitaRecenti, calendarData } = memoizedStats;
+    const { oreTotaliRange, rapportiniCreatiRange, orePerNaveChartData, attivitaRecenti, calendarData } = memoizedStats;
     const clientKeys = Object.keys(checkinsByClient).sort((a,b) => (clientiMap.get(a) || 'zzz').localeCompare(clientiMap.get(b) || 'zzz'));
     const timeRangeValue = selectedDate.isSame(dayjs(), 'month') ? 'current' : (selectedDate.isSame(dayjs().subtract(1, 'month'), 'month') ? 'previous' : null);
     const titleSuffix = timeRangeValue === 'current' ? '(Mese Corrente)' : timeRangeValue === 'previous' ? '(Mese Precedente)' : `(${selectedDate.format('MMMM YYYY')})`;
@@ -228,19 +259,27 @@ const DashboardContent = () => {
                         </ToggleButtonGroup>
                     </Box>
                     <Grid container spacing={3}>
-                        <Grid xs={12} sm={4}><StatCard title={`Ore Lavorate ${titleSuffix}`} value={oreTotaliRange} /></Grid>
-                        <Grid xs={12} sm={4}><StatCard title={`Costo Personale ${titleSuffix}`} value={costoTotaleRange} /></Grid>
-                        <Grid xs={12} sm={4}><StatCard title={`Rapportini Creati ${titleSuffix}`} value={rapportiniCreatiRange} /></Grid>
+                        <Grid xs={12} sm={6}><StatCard title={`Ore Lavorate ${titleSuffix}`} value={oreTotaliRange} /></Grid>
+                        <Grid xs={12} sm={6}><StatCard title={`Rapportini Creati ${titleSuffix}`} value={rapportiniCreatiRange} /></Grid>
                         <Grid xs={12}><Card><CardContent>
-                            <Typography variant="subtitle1" gutterBottom>Attività ultima settimana (ore)</Typography>
-                            <ResponsiveContainer width="100%" height={300}><BarChart data={activityLast7Days} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend /><Bar dataKey="ore" fill="#8884d8" name="Ore lavorate" /></BarChart></ResponsiveContainer>
+                            <Typography variant="subtitle1" gutterBottom>Ore Lavorate per Nave {titleSuffix}</Typography>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={orePerNaveChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} angle={-45} textAnchor="end" height={80} />
+                                    <YAxis />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(136, 132, 216, 0.2)' }} />
+                                    <Legend verticalAlign="top" />
+                                    <Bar dataKey="ore" fill="#8884d8" name="Ore lavorate" />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </CardContent></Card></Grid>
                     </Grid>
                 </Stack>
             </CustomTabPanel>
             <CustomTabPanel value={tabValue} index={1}><Card><CardContent>
                 <Typography variant="subtitle1" gutterBottom>Ultime 5 Attività</Typography>
-                <List>{attivitaRecenti.length > 0 ? attivitaRecenti.map(item => <ListItem key={item.id}><ListItemAvatar><Avatar><WorkIcon /></Avatar></ListItemAvatar><ListItemText primary={`${item.tecnico} - ${item.destinazione}`} secondary={`${item.data} - ${item.descrizione || 'Nessuna descrizione'}`} /></ListItem>) : <Typography sx={{ p: 2 }}>Nessuna attività recente.</Typography>}</List>
+                <List>{attivitaRecenti.length > 0 ? attivitaRecenti.map(item => <ListItem key={item.id}><ListItemAvatar><Avatar><WorkIcon /></Avatar></ListItemAvatar><ListItemText primary={`${item.tecnico} - ${item.destinazione}`} secondary={`${item.data} - ${item.descrizione}`} /></ListItem>) : <Typography sx={{ p: 2 }}>Nessuna attività recente.</Typography>}</List>
             </CardContent></Card></CustomTabPanel>
             <CustomTabPanel value={tabValue} index={2}>{(Object.keys(checkinsByClient).length > 0 || luoghiCheckins.length > 0) ? <Grid container spacing={4}>
                 <Grid xs={12} md={6}><Typography variant="h6" component="div" gutterBottom>Navi per Cliente</Typography>{Object.keys(checkinsByClient).length > 0 ? clientKeys.map(clienteId => <Box key={clienteId} sx={{ mb: 3 }}><Typography variant="subtitle1" component="div" sx={{ mb: 1, pl: 1, fontWeight: 'bold' }}>{clientiMap.get(clienteId) || 'Nessun Cliente Associato'}</Typography><LocationAccordion locations={checkinsByClient[clienteId]} tecniciMap={tecniciMap} /></Box>) : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico imbarcato oggi.</Typography>}</Grid>
@@ -258,7 +297,6 @@ const DashboardContent = () => {
 };
 
 
-// --- Componente "Guardiano" (Invariato) ---
 const DashboardPage = () => {
     const [dayKey, setDayKey] = useState(dayjs().format('YYYY-MM-DD'));
     useEffect(() => {
