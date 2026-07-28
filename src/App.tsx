@@ -5,7 +5,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthProvider';
 import { DataProvider } from '@/contexts/DataContext';
 import { NotificationProvider } from '@/contexts/NotificationProvider';
-import { RefreshProvider, useRefresh } from '@/contexts/RefreshContext'; // 1. IMPORTIAMO useRefresh
+import { RefreshProvider, useRefresh } from '@/contexts/RefreshContext';
 import { AlertProvider } from '@/contexts/AlertContext';
 import { GlobalStyles, Box, CircularProgress, Typography } from '@mui/material';
 
@@ -34,13 +34,15 @@ const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 // --- Componente AppContent con Logica di Sincronizzazione CORRETTA ---
 const AppContent = () => {
   const { loading: authLoading, user } = useAuth();
-  const { refreshKey } = useRefresh(); // 2. USIAMO l'hook per ascoltare i cambiamenti
-  const [isSyncing, setIsSyncing] = useState(true);
+  const { refreshKey } = useRefresh();
+  // *** FIX: Lo stato iniziale di isSyncing deve essere false. ***
+  // La sincronizzazione è un'azione che inizia *dopo* l'autenticazione, non uno stato di default.
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const runSync = async () => {
       if (user) {
-        setIsSyncing(true);
+        setIsSyncing(true); // Imposta a true solo quando la sincro inizia davvero.
         console.log(`Sincronizzazione avviata. Trigger: ${refreshKey > 0 ? 'Manuale' : 'Login'}`);
         try {
           await syncStandard();
@@ -51,6 +53,7 @@ const AppContent = () => {
           setIsSyncing(false);
         }
       } else {
+        // Se non c'è utente, non c'è nulla da sincronizzare. Assicuriamoci che lo stato sia `false`.
         setIsSyncing(false);
       }
     };
@@ -59,7 +62,6 @@ const AppContent = () => {
     if (!authLoading) {
       runSync();
     }
-  // 3. L'effetto si ri-esegue quando l'utente cambia (login/logout) O quando la refreshKey cambia (click manuale)
   }, [user, authLoading, refreshKey]);
 
   // Loader durante auth o sync
