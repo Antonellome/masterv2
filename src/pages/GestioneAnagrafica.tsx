@@ -18,30 +18,26 @@ import { Anagrafica, Cliente } from '@/models/definitions';
 const GestioneAnagrafica: React.FC = () => {
     const { anagraficaId } = useParams<{ anagraficaId: string }>();
 
-    // 1. CONFIGURAZIONE E HOOK DATI LOCALI
     const config = useMemo(() => anagraficaId ? anagraficheConfig[anagraficaId] : null, [anagraficaId]);
     const { data, loading, error, forceRefresh } = useCollectionData<any>(config?.collectionName || '');
     const { clienti, navi, luoghi, clientiMap } = useAnagraficaData();
 
-    // STATO INTERNO
     const [formOpen, setFormOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
     
-    // GESTIONE AZIONI UI
     const handleOpenForm = (item: any | null = null) => { setSelectedItem(item); setFormOpen(true); };
     const handleCloseForm = () => { setSelectedItem(null); setFormOpen(false); forceRefresh(); };
     const handleOpenConfirm = (item: any) => { setSelectedItem(item); setConfirmOpen(true); };
     const handleCloseConfirm = () => { setSelectedItem(null); setConfirmOpen(false); };
     
-    // 2. LOGICA DI SALVATAGGIO (Create/Update) OFFLINE-FIRST
     const handleSave = async (itemData: any) => {
         if (!config) return;
         try {
             const { id, ...dataToSave } = itemData;
-            if (id) { // Modifica
+            if (id) {
                 await updateAnagraficaWithVersion(config.collectionName, id, dataToSave);
-            } else { // Creazione
+            } else {
                 await addAnagraficaWithVersion(config.collectionName, dataToSave);
             }
         } catch (error) {
@@ -51,7 +47,6 @@ const GestioneAnagrafica: React.FC = () => {
         }
     };
     
-    // 3. LOGICA DI ELIMINAZIONE OFFLINE-FIRST
     const handleDelete = async () => {
         if (selectedItem?.id && config) {
             try {
@@ -65,7 +60,6 @@ const GestioneAnagrafica: React.FC = () => {
         }
     };
 
-    // 4. COSTRUZIONE COLONNE CON DATI CORRELATI DAL CONTEXT
     const columns = useMemo<GridColDef[]>(() => {
         if (!config) return [];
 
@@ -96,7 +90,7 @@ const GestioneAnagrafica: React.FC = () => {
         if (anagraficaId === 'navi' || anagraficaId === 'luoghi') {
             finalColumns = finalColumns.map(col => {
                 if (col.field === 'clienteId') {
-                    return { ...col, renderCell: (params: GridRenderCellParams) => clientiMap[params.value] || 'N/D' };
+                    return { ...col, renderCell: (params: GridRenderCellParams) => clientiMap[params.value]?.nome || 'N/D' };
                 }
                 return col;
             });
@@ -114,7 +108,6 @@ const GestioneAnagrafica: React.FC = () => {
         ];
     }, [config, data, navi, luoghi, clientiMap, anagraficaId]);
 
-    // RENDER LOGIC
     if (!anagraficaId) return <Typography>Seleziona un'anagrafica dal menu.</Typography>;
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
     if (error) return <Typography color="error">Errore nel caricamento: {error.message}</Typography>;

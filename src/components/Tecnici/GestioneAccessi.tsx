@@ -1,13 +1,12 @@
-import { useState, useMemo, useCallback } from 'react';
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
-import { Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert, Divider } from '@mui/material';
+import { useState, useCallback } from 'react';
+import { Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert } from '@mui/material';
 import { DataGrid, GridColDef, GridRowParams, GridToolbar } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import { Tecnico } from '@/models/definitions'; 
+import { Tecnico } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 
 interface DialogState {
@@ -18,9 +17,8 @@ interface DialogState {
 }
 
 const GestioneAccessi = () => {
-  // Dati letti in tempo reale dal database locale (Dexie), solo tecnici attivi
   const tecnici = useLiveQuery(() => 
-    db.tecnici.where('attivo').equals(1).sortBy(['cognome', 'nome'])
+    db.tecnici.orderBy('cognome').toArray()
   , []);
 
   const [operating, setOperating] = useState(false);
@@ -31,10 +29,22 @@ const GestioneAccessi = () => {
     setSnackbar({ open: true, message, severity });
   };
 
-  const handleToggleAccess = async (tecnico: Tecnico) => {
-    console.warn("Gestione accesso non ancora implementata in modalità offline.", tecnico);
-    showSnackbar('Funzionalità non ancora disponibile in modalità offline.', 'error');
-  };
+  const handleToggleAccess = useCallback(async (tecnico: Tecnico) => {
+    setOperating(true);
+    try {
+      const newAccessStatus = !tecnico.appAccess;
+      await db.tecnici.update(tecnico.id, { 
+        appAccess: newAccessStatus,
+        isDirty: true, 
+      });
+      showSnackbar(`Accesso per ${tecnico.cognome} ${tecnico.nome} ${newAccessStatus ? 'abilitato' : 'revocato'}. La modifica sarà inviata alla prossima sincronizzazione.`, 'success');
+    } catch (error) {
+      console.error("Errore durante l'aggiornamento dell'accesso:", error);
+      showSnackbar(error instanceof Error ? error.message : 'Errore sconosciuto', 'error');
+    } finally {
+      setOperating(false);
+    }
+  }, []);
 
   const executeResetPassword = async (email: string) => {
       console.warn("Reset password non ancora implementato in modalità offline.", email);
@@ -127,13 +137,7 @@ const GestioneAccessi = () => {
   }
 
   return (
-    <Box sx={{ mt: 4 }}>
-      <Typography variant="h5" gutterBottom>Gestione Accesso App Tecnici</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Da questa sezione puoi abilitare o revocare l'accesso all'app mobile per ogni tecnico e inviare l'email per il reset della password.
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-      
+    <Box>
       <Box sx={{ width: '100%' }}> 
         <DataGrid
             rows={tecnici}

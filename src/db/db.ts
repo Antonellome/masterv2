@@ -29,11 +29,27 @@ export class MySubClassedDexie extends Dexie {
   qualifiche!: Table<Qualifica>;
   veicoli!: Table<Veicolo>;
   checkins!: Table<Checkin>;
-  sync_status!: Table<SyncStatus>; // CORREZIONE: Tabella aggiunta e tipizzata
+  sync_status!: Table<SyncStatus>;
 
   constructor() {
     super('gestionaleLavoro');
-    // AGGIORNAMENTO: Versione 6 per la modifica dello schema (impostazioni -> sync_status)
+    // AGGIORNAMENTO: Versione 7 per aggiungere l'indice 'isDirty' a tutte le anagrafiche.
+    this.version(7).stores({
+      rapportini: 'id, data, tecnicoId, naveId, luogoId, clienteId, isDirty',
+      tecnici: 'id, nome, cognome, categoriaId, attivo, isDirty', // INDICE AGGIUNTO
+      navi: 'id, nome, clienteId, isDirty', // INDICE AGGIUNTO
+      luoghi: 'id, nome, isDirty', // INDICE AGGIUNTO
+      clienti: 'id, nome, isDirty', // INDICE AGGIUNTO
+      categorie: 'id, nome, isDirty', // INDICE AGGIUNTO
+      ditte: 'id, nome, isDirty', // INDICE AGGIUNTO
+      tipiGiornata: 'id, nome, isDirty', // INDICE AGGIUNTO
+      qualifiche: 'id, nome, isDirty', // INDICE AGGIUNTO
+      veicoli: 'id, nome, isDirty', // INDICE AGGIUNTO
+      checkins: 'id, tecnicoId, anagraficaId, data, tipo',
+      sync_status: 'id'
+    });
+    
+    // Manteniamo la versione precedente per la migrazione
     this.version(6).stores({
       rapportini: 'id, data, tecnicoId, naveId, luogoId, clienteId, isDirty',
       tecnici: 'id, nome, cognome, categoriaId, attivo',
@@ -46,7 +62,7 @@ export class MySubClassedDexie extends Dexie {
       qualifiche: 'id, nome',
       veicoli: 'id, nome',
       checkins: 'id, tecnicoId, anagraficaId, data, tipo',
-      sync_status: 'id' // CORREZIONE: rinominata da 'impostazioni' a 'sync_status'
+      sync_status: 'id'
     });
   }
 }

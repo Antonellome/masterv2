@@ -6,14 +6,13 @@ import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
 import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
 import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
+import { v4 as uuidv4 } from 'uuid';
 
 const GestioneTecnici = () => {
-    // Dati letti in tempo reale dal database locale (Dexie)
     const tecnici = useLiveQuery(() => db.tecnici.orderBy('cognome').toArray());
     const ditte = useLiveQuery(() => db.ditte.orderBy('nome').toArray());
     const categorie = useLiveQuery(() => db.categorie.orderBy('nome').toArray());
 
-    // Stati di controllo UI
     const [error, setError] = useState<string | null>(null);
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
@@ -23,11 +22,8 @@ const GestioneTecnici = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-    const handleError = (e: unknown, context: string) => {
-        console.error(`${context}:`, e);
-        const firebaseError = e as { code?: string; message?: string };
-        const message = firebaseError.message || 'Si è verificato un errore sconosciuto.';
-        setSnackbar({ open: true, message: `${context}: ${message}`, severity: 'error' });
+    const showSnackbar = (message: string, severity: 'success' | 'error') => {
+        setSnackbar({ open: true, message, severity });
     };
 
     const handleAdd = () => {
@@ -40,13 +36,40 @@ const GestioneTecnici = () => {
         setFormOpen(true);
     };
 
-    // --- FUNZIONI DI SCRITTURA TEMPORANEAMENTE DISATTIVATE ---
-    const handleSave = useCallback(async (formData: Partial<Tecnico> & { password?: string }) => {
+    const handleSave = useCallback(async (formData: Partial<Tecnico>) => {
         setIsSaving(true);
-        console.warn("Salvataggio non ancora implementato in modalità offline.", formData);
-        setSnackbar({ open: true, message: 'Salvataggio non ancora implementato in modalità offline.', severity: 'error' });
-        setIsSaving(false);
-        setFormOpen(false);
+        try {
+            const now = new Date();
+            if (formData.id) { // Modifica
+                await db.tecnici.update(formData.id, {
+                    ...formData,
+                    isDirty: true,
+                    updatedAt: now,
+                });
+                showSnackbar('Tecnico aggiornato con successo. La modifica sarà sincronizzata.', 'success');
+            } else { // Creazione
+                const newId = uuidv4();
+                const newTecnico: Tecnico = {
+                    ...formData,
+                    id: newId,
+                    uid: newId, // L'UID Firebase verrà assegnato dal backend, per ora usiamo un ID locale
+                    attivo: true,
+                    appAccess: false,
+                    createdAt: now,
+                    updatedAt: now,
+                    isDirty: true,
+                } as Tecnico;
+                await db.tecnici.add(newTecnico);
+                showSnackbar('Tecnico creato con successo. Sarà sincronizzato con il server.', 'success');
+            }
+            setFormOpen(false);
+            setSelectedTecnico(null);
+        } catch (e) {
+            console.error("Errore durante il salvataggio:", e);
+            showSnackbar(e instanceof Error ? e.message : 'Errore sconosciuto durante il salvataggio', 'error');
+        } finally {
+            setIsSaving(false);
+        }
     }, []);
 
     const handleDelete = (id: string) => {
@@ -56,29 +79,46 @@ const GestioneTecnici = () => {
 
     const confirmDelete = useCallback(async () => {
         if (!tecnicoToDelete) return;
-        setIsSaving(true);
-        console.warn("Eliminazione non ancora implementata in modalità offline.", tecnicoToDelete);
-        setSnackbar({ open: true, message: 'Eliminazione non ancora implementata in modalità offline.', severity: 'error' });
-        setTecnicoToDelete(null);
-        setDeleteDialogOpen(false);
-        setIsSaving(false);
+        setUpdatingId(tecnicoToDelete);
+        try {
+            await db.tecnici.update(tecnicoToDelete, { 
+                attivo: false, 
+                isDirty: true, 
+                updatedAt: new Date(),
+            });
+            showSnackbar('Tecnico disattivato. La modifica sarà sincronizzata.', 'success');
+        } catch (e) {
+            console.error("Errore durante la disattivazione del tecnico:", e);
+            showSnackbar(e instanceof Error ? e.message : 'Errore sconosciuto', 'error');
+        } finally {
+            setTecnicoToDelete(null);
+            setDeleteDialogOpen(false);
+            setUpdatingId(null);
+        }
     }, [tecnicoToDelete]);
     
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
         setUpdatingId(id);
-        console.warn("Cambio stato non ancora implementato in modalità offline.", id, newStatus);
-        setSnackbar({ open: true, message: 'Cambio stato non ancora implementato in modalità offline.', severity: 'error' });
-        setUpdatingId(null);
+        try {
+            await db.tecnici.update(id, { 
+                attivo: newStatus, 
+                isDirty: true, 
+                updatedAt: new Date(),
+            });
+            showSnackbar(`Stato del tecnico aggiornato. La modifica sarà sincronizzata.`, 'success');
+        } catch (e) {
+            console.error("Errore durante il cambio di stato:", e);
+            showSnackbar(e instanceof Error ? e.message : 'Errore sconosciuto', 'error');
+        } finally {
+            setUpdatingId(null);
+        }
     }, []);
-    // --- FINE BLOCCO FUNZIONI DISATTIVATE ---
 
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
     
-    // Memoizzazione per ottimizzare le performance
     const ditteMap = useMemo(() => new Map(ditte?.map(d => [d.id, d.nome])), [ditte]);
     const categorieMap = useMemo(() => new Map(categorie?.map(c => [c.id, c.nome])), [categorie]);
 
-    // Se i dati non sono ancora stati caricati da Dexie, mostra un loader
     if (!tecnici || !ditte || !categorie) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
     }
@@ -114,8 +154,8 @@ const GestioneTecnici = () => {
                 open={deleteDialogOpen}
                 onClose={() => setDeleteDialogOpen(false)}
                 onConfirm={confirmDelete}
-                title="Conferma Eliminazione"
-                message="Sei sicuro di voler eliminare questo record? Questa azione verrà sincronizzata con il server."
+                title="Conferma Disattivazione"
+                message="Sei sicuro di voler disattivare questo tecnico? Il record non verrà eliminato ma solo contrassegnato come inattivo."
             />
             <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                 <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
