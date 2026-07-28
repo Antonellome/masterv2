@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Tab, Tabs, Paper, IconButton, Tooltip } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RicercaAvanzata from '@/components/Reportistica/RicercaAvanzata';
-import AnalisiOre from '@/components/Reportistica/AnalisiOre';
 import ReportMensili from '@/components/Reportistica/ReportMensili';
-import CumulativiTecnici from '@/components/Reportistica/CumulativiTecnici'; // <-- IMPORTAZIONE NUOVO COMPONENTE
+import CumulativiTecnici from '@/components/Reportistica/CumulativiTecnici';
 
 // Pannello semplificato: un semplice contenitore condizionale
 function CustomTabPanel(props: { children?: React.ReactNode; index: number; value: number; }) {
@@ -29,8 +28,7 @@ const ReportisticaPage = () => {
         <Tabs value={value} onChange={handleChange} variant="scrollable" scrollButtons="auto" sx={{ flexGrow: 1 }}>
           <Tab label="Ricerca Avanzata" />
           <Tab label="Report Mensili" />
-          <Tab label="Cumulativi Tecnici" /> {/* <-- NUOVA SCHEDA */}
-          <Tab label="Analisi Ore Lavorate" />
+          <Tab label="Cumulativi Tecnici" />
         </Tabs>
         <Tooltip title="Nuovo Rapportino">
           {/* CORREZIONE DEFINITIVA: Il percorso corretto è /rapportino/edit/new */}
@@ -50,10 +48,7 @@ const ReportisticaPage = () => {
                 <ReportMensili />
             </CustomTabPanel>
             <CustomTabPanel value={value} index={2}>
-                <CumulativiTecnici /> {/* <-- NUOVO PANNELLO */}
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={3}>
-                <AnalisiOre />
+                <CumulativiTecnici />
             </CustomTabPanel>
         </Paper>
       </Box>
