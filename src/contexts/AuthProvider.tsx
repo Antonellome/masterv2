@@ -6,8 +6,8 @@ import {
   signOut,
   User
 } from 'firebase/auth';
-import { auth } from '@/firebase';
-import { UserRole } from '@/models/definitions';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/firebase';
 import type { IAuthContext } from './AuthContext.types';
 
 const AuthContext = createContext<IAuthContext | undefined>(undefined);
@@ -30,12 +30,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             setLoading(true);
             if (firebaseUser) {
-                // CORREZIONE: Leggiamo i permessi REALI dal token dell'utente.
-                const idTokenResult = await firebaseUser.getIdTokenResult(true); // Forza l'aggiornamento del token
-                const userIsAdmin = !!idTokenResult.claims.role && idTokenResult.claims.role === 'admin';
+                // --- LOGICA DI AUTORIZZAZIONE CORRETTA BASATA SU FIRESTORE ---
+                const adminDocRef = doc(db, "admins", firebaseUser.uid);
+                const adminDocSnap = await getDoc(adminDocRef);
                 
                 setUser(firebaseUser);
-                setIsAdmin(userIsAdmin); // Imposta lo stato REALE.
+                setIsAdmin(adminDocSnap.exists()); // L'utente è admin se il suo doc esiste nella collezione 'admins'
                 setError(null);
             } else {
                 setUser(null);
@@ -82,16 +82,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }, []);
 
-    // Funzione per forzare il refresh del token e dello stato admin
-    const forceRefreshUserToken = useCallback(async () => {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-            const idTokenResult = await currentUser.getIdTokenResult(true); // Forza il refresh
-            const userIsAdmin = !!idTokenResult.claims.role && idTokenResult.claims.role === 'admin';
-            setIsAdmin(userIsAdmin);
-        }
-    }, []);
-
     const value = useMemo(() => ({
         user,
         isAdmin,
@@ -100,8 +90,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         logout,
         setError,
-        forceRefreshUserToken // Esponiamo la funzione di refresh
-    }), [user, isAdmin, loading, error, login, logout, forceRefreshUserToken]);
+    }), [user, isAdmin, loading, error, login, logout]);
 
     return (
         <AuthContext.Provider value={value}>

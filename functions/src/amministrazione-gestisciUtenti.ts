@@ -9,17 +9,23 @@ interface GestisciUtentiData {
     email?: string;
     nome?: string;
     password?: string;
-    role?: 'admin' | 'user'; // Nuovo campo per toggleRole
+    role?: 'admin' | 'user';
 }
 
 export const amministrazione_gestisciUtenti = functions.region("europe-west1").https.onCall(async (data: GestisciUtentiData, context: functions.https.CallableContext) => {
-    if (context.auth?.token.role !== 'admin') {
-        logger.error(`Tentativo non autorizzato da UID: ${context.auth?.uid || 'Nessuno'}`);
+    // --- CONTROLLO AUTORIZZAZIONE BASATO SU FIRESTORE ---
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "L'utente non è autenticato.");
+    }
+    const adminUid = context.auth.uid;
+    const adminDoc = await admin.firestore().collection('admins').doc(adminUid).get();
+    if (!adminDoc.exists) {
+        logger.error(`Tentativo non autorizzato da UID: ${adminUid}`);
         throw new functions.https.HttpsError("permission-denied", "Solo un amministratore può eseguire questa operazione.");
     }
+    // --- FINE CONTROLLO AUTORIZZAZIONE ---
 
     const { action } = data;
-    const adminUid = context.auth.uid;
     logger.info(`Azione '${action}' richiesta da admin: ${context.auth.token.email}`);
 
     try {
@@ -66,7 +72,6 @@ export const amministrazione_gestisciUtenti = functions.region("europe-west1").h
                 logger.info(`Utente ${data.uid} eliminato.`);
                 return { status: "success", message: "Utente eliminato." };
 
-            // --- NUOVA AZIONE CENTRALIZZATA PER GESTIRE I RUOLI ---
             case 'toggleRole':
                 if (!data.uid || !data.role) {
                     throw new functions.https.HttpsError("invalid-argument", "UID e ruolo sono richiesti.");
@@ -98,7 +103,6 @@ export const amministrazione_gestisciUtenti = functions.region("europe-west1").h
         }
     } catch (error: any) {
         logger.error(`Errore durante l'azione '${action}' per UID ${data.uid || 'N/D'}:`, error);
-        // Rilancia errori specifici per una gestione più chiara nel frontend
         if (error.code?.startsWith('auth/')) {
              throw new functions.https.HttpsError("already-exists", error.message);
         }
