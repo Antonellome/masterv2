@@ -1,26 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase';
-import {
-  Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert, Divider
-} from '@mui/material';
+import { Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert, Divider } from '@mui/material';
 import { DataGrid, GridColDef, GridRowParams, GridToolbar } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db/db';
+import { Tecnico } from '@/models/definitions'; 
 import ConfirmationDialog from '@/components/ConfirmationDialog';
-
-interface Tecnico {
-  id: string; 
-  docId: string; 
-  nome: string;
-  cognome: string;
-  email: string;
-  appAccess: boolean;
-  attivo: boolean;
-}
 
 interface DialogState {
   open: boolean;
@@ -29,12 +17,12 @@ interface DialogState {
   onConfirm: () => void;
 }
 
-const functions = getFunctions(undefined, 'europe-west1');
-const gestisciAccessoTecnico = httpsCallable(functions, 'risorseUmane_gestisciAccessoTecnico');
-
 const GestioneAccessi = () => {
-  const [tecnici, setTecnici] = useState<Tecnico[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Dati letti in tempo reale dal database locale (Dexie), solo tecnici attivi
+  const tecnici = useLiveQuery(() => 
+    db.tecnici.where('attivo').equals(1).sortBy(['cognome', 'nome'])
+  , []);
+
   const [operating, setOperating] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [dialog, setDialog] = useState<DialogState>({ open: false, title: '', content: '', onConfirm: () => {} });
@@ -43,79 +31,15 @@ const GestioneAccessi = () => {
     setSnackbar({ open: true, message, severity });
   };
 
-  const handleDetailedError = (err: any, context: string) => {
-    console.error(`ERRORE [${context}]:`, err);
-    const message = err.message || 'Errore sconosciuto.';
-    showSnackbar(`[${context}] ${message}`, 'error');
-  };
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, 'tecnici'),
-        where('attivo', '==', true),
-        orderBy('cognome'),
-        orderBy('nome')
-      );
-      const anagraficaSnapshot = await getDocs(q);
-      const tecniciList = anagraficaSnapshot.docs.map(doc => ({
-        id: doc.data().uid, 
-        docId: doc.id,    
-        nome: doc.data().nome || '',
-        cognome: doc.data().cognome || '',
-        email: doc.data().email || '',
-        attivo: doc.data().attivo === true,
-        appAccess: doc.data().appAccess === true,
-      } as Tecnico));
-      setTecnici(tecniciList);
-    } catch (err) {
-      handleDetailedError(err, 'Caricamento Tecnici');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const handleToggleAccess = async (tecnico: Tecnico) => {
-    if (!tecnico.id) {
-      showSnackbar('UID di autenticazione mancante per questo tecnico. Impossibile procedere.', 'error');
-      return;
-    }
-
-    setOperating(true);
-    const newState = !tecnico.appAccess;
-
-    try {
-      await gestisciAccessoTecnico({ 
-        uid: tecnico.id, 
-        action: newState ? 'enable' : 'disable' 
-      });
-      
-      setTecnici(prevTecnici => prevTecnici.map(t => t.docId === tecnico.docId ? { ...t, appAccess: newState } : t));
-      showSnackbar(`Accesso ${newState ? 'abilitato' : 'revocato'} per ${tecnico.nome} ${tecnico.cognome}.`, 'success');
-
-    } catch (err: any) {
-        handleDetailedError(err, "Operazione Fallita");
-    } finally {
-      setOperating(false);
-    }
+    console.warn("Gestione accesso non ancora implementata in modalità offline.", tecnico);
+    showSnackbar('Funzionalità non ancora disponibile in modalità offline.', 'error');
   };
 
   const executeResetPassword = async (email: string) => {
-    setOperating(true);
-    try {
-        await sendPasswordResetEmail(getAuth(), email);
-        showSnackbar(`Email di ripristino inviata a ${email}.`, 'success');
-    } catch (error) {
-        handleDetailedError(error, "Reset Password Fallito");
-    } finally {
-        setOperating(false);
-        setDialog({ open: false, title: '', content: '', onConfirm: () => {} });
-    }
+      console.warn("Reset password non ancora implementato in modalità offline.", email);
+      showSnackbar('Funzionalità non ancora disponibile in modalità offline.', 'error');
+      setDialog({ open: false, title: '', content: '', onConfirm: () => {} });
   };
 
   const handleResetPassword = (email: string | null | undefined) => {
@@ -126,7 +50,7 @@ const GestioneAccessi = () => {
     setDialog({
       open: true,
       title: 'Conferma Invio Email',
-      content: `Stai per inviare un'email di ripristino password all\'indirizzo ${email}. Vuoi procedere?`,
+      content: `La funzione di invio email non è ancora attiva in questa modalità.`,
       onConfirm: () => executeResetPassword(email),
     });
   };
@@ -157,12 +81,12 @@ const GestioneAccessi = () => {
       headerName: 'Accesso App',
       width: 130, align: 'center', headerAlign: 'center',
       renderCell: (params: GridRowParams<Tecnico>) => (
-        <Tooltip title={!params.row.id ? "UID di autenticazione mancante!" : (params.row.appAccess ? 'Revoca accesso' : 'Abilita accesso')}>
+        <Tooltip title={!params.row.uid ? "UID di autenticazione mancante!" : (params.row.appAccess ? 'Revoca accesso' : 'Abilita accesso')}>
           <span>
             <Switch
-              checked={params.row.appAccess}
+              checked={params.row.appAccess || false}
               onChange={() => handleToggleAccess(params.row)}
-              disabled={operating || !params.row.id}
+              disabled={operating || !params.row.uid}
               color="success"
             />
           </span>
@@ -179,7 +103,7 @@ const GestioneAccessi = () => {
                 <IconButton
                     onClick={() => handleResetPassword(params.row.email)}
                     color="primary"
-                    disabled={operating || !params.row.appAccess || !params.row.email || !params.row.id}
+                    disabled={operating || !params.row.appAccess || !params.row.email || !params.row.uid}
                 >
                     <VpnKeyIcon />
                 </IconButton>
@@ -198,6 +122,10 @@ const GestioneAccessi = () => {
     setDialog({ ...dialog, open: false });
   };
 
+  if (!tecnici) {
+    return <CircularProgress sx={{ display: 'block', margin: 'auto' }} />;
+  }
+
   return (
     <Box sx={{ mt: 4 }}>
       <Typography variant="h5" gutterBottom>Gestione Accesso App Tecnici</Typography>
@@ -205,21 +133,17 @@ const GestioneAccessi = () => {
         Da questa sezione puoi abilitare o revocare l'accesso all'app mobile per ogni tecnico e inviare l'email per il reset della password.
       </Typography>
       <Divider sx={{ mb: 3 }} />
-      {/* --- CORREZIONE DEL CAZZO DI LAYOUT --- */}
+      
       <Box sx={{ width: '100%' }}> 
-        {loading ? (
-          <CircularProgress sx={{ display: 'block', margin: 'auto' }} />
-        ) : (
-          <DataGrid
-              rows={tecnici}
-              getRowId={(row) => row.docId}
-              columns={columns}
-              localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-              slots={{ toolbar: GridToolbar }}
-              disableRowSelectionOnClick
-              autoHeight // LA CAZZO DI SOLUZIONE
-          />
-        )}
+        <DataGrid
+            rows={tecnici}
+            getRowId={(row) => row.id}
+            columns={columns}
+            localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
+            slots={{ toolbar: GridToolbar }}
+            disableRowSelectionOnClick
+            autoHeight
+        />
       </Box>
 
       <ConfirmationDialog 
