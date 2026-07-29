@@ -1,17 +1,13 @@
 
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider } from '@/contexts/ThemeContext';
-import { AuthProvider, useAuth } from '@/contexts/AuthProvider';
-import { DataProvider } from '@/contexts/DataContext';
-import { NotificationProvider } from '@/contexts/NotificationProvider';
-import { RefreshProvider, useRefresh } from '@/contexts/RefreshContext';
-import { AlertProvider } from '@/contexts/AlertContext';
-import { GlobalStyles, Box, CircularProgress, Typography } from '@mui/material';
+import { useAuth } from '@/contexts/AuthProvider';
+import { useRefresh } from '@/contexts/RefreshContext';
+import { Box, CircularProgress, Typography } from '@mui/material';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
-import { syncStandard } from '@/services/SyncService';
+import { syncAnagrafiche, syncRapportini } from '@/services/SyncService';
 
 // --- Lazy Imports (invariati) ---
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -31,46 +27,46 @@ const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 
-// --- Componente AppContent con Logica di Sincronizzazione CORRETTA ---
 const AppContent = () => {
   const { loading: authLoading, user } = useAuth();
   const { refreshKey } = useRefresh();
-  // *** FIX: Lo stato iniziale di isSyncing deve essere false. ***
-  // La sincronizzazione è un'azione che inizia *dopo* l'autenticazione, non uno stato di default.
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncState, setSyncState] = useState({ syncing: false, message: '' });
 
   useEffect(() => {
     const runSync = async () => {
       if (user) {
-        setIsSyncing(true); // Imposta a true solo quando la sincro inizia davvero.
         console.log(`Sincronizzazione avviata. Trigger: ${refreshKey > 0 ? 'Manuale' : 'Login'}`);
+        
+        setSyncState({ syncing: true, message: 'Sincronizzazione anagrafiche...' });
         try {
-          await syncStandard();
-          console.log("Sincronizzazione completata con successo.");
+          await syncAnagrafiche();
+          console.log("Sincronizzazione anagrafiche completata.");
+
+          setSyncState({ syncing: true, message: 'Sincronizzazione rapportini...' });
+          await syncRapportini();
+          console.log("Sincronizzazione rapportini completata.");
+
         } catch (error) {
           console.error("Errore critico durante la sincronizzazione:", error);
         } finally {
-          setIsSyncing(false);
+          setSyncState({ syncing: false, message: '' });
         }
       } else {
-        // Se non c'è utente, non c'è nulla da sincronizzare. Assicuriamoci che lo stato sia `false`.
-        setIsSyncing(false);
+        setSyncState({ syncing: false, message: '' });
       }
     };
 
-    // Eseguiamo la sincro solo quando l'autenticazione è terminata
     if (!authLoading) {
       runSync();
     }
   }, [user, authLoading, refreshKey]);
 
-  // Loader durante auth o sync
-  if (authLoading || isSyncing) {
+  if (authLoading || syncState.syncing) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
         <Typography sx={{ mt: 2 }}>
-          {authLoading ? 'Verifica autenticazione...' : 'Sincronizzazione dati in corso...'}
+          {authLoading ? 'Verifica autenticazione...' : syncState.message}
         </Typography>
       </Box>
     );
@@ -112,22 +108,7 @@ const AppContent = () => {
 };
 
 function App() {
-  return (
-    <ThemeProvider>
-      <GlobalStyles styles={{ a: { color: 'inherit', textDecoration: 'none' } }} />
-      <AuthProvider>
-        <NotificationProvider>
-          <RefreshProvider> 
-            <AlertProvider>
-              <DataProvider>
-                <AppContent />
-              </DataProvider>
-            </AlertProvider>
-          </RefreshProvider>
-        </NotificationProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  );
+  return <AppContent />;
 }
 
 export default App;

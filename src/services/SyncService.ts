@@ -1,152 +1,24 @@
-import { collection, getDocs, query, where, Timestamp, writeBatch, doc, getDoc, setDoc } from 'firebase/firestore';
+
+import { collection, getDocs, query, where, Timestamp, writeBatch, doc } from 'firebase/firestore';
 import { db as firestore } from '../firebase';
-import { db, bulkPutAnagrafiche } from '@/db/db';
-import type { Rapportino, Tecnico } from '@/models/definitions';
+import { db, bulkPutAnagrafiche, bulkPutRapportini } from '@/db/db';
 
-const ANAGRAFICHE_TABLES: (keyof typeof db)[] = [
-    'tecnici', 
-    'navi', 
-    'luoghi', 
-    'tipiGiornata', 
-    'clienti', 
-    'ditte', 
-    'categorie', 
-    'qualifiche', 
-    'veicoli'
-];
-
-const getLastSyncTimestamp = async (): Promise<Date | null> => {
+// --- Utility per Timestamp ---
+const getLastSyncTimestamp = async (key: string): Promise<Date | null> => {
     try {
-        const lastSync = await db.sync_status.get('lastSyncTimestamp');
-        return lastSync ? new Date(lastSync.value) : null;
+        const syncStatus = await db.sync_status.get(key);
+        return syncStatus ? new Date(syncStatus.value) : null;
     } catch (e) {
-        console.error("Errore nel recuperare l'ultimo timestamp di sincronizzazione:", e);
+        console.error(`Errore nel recuperare l'ultimo timestamp di sincronizzazione per ${key}:`, e);
         return null;
     }
 };
 
-const setLastSyncTimestamp = async (timestamp: Date) => {
-    await db.sync_status.put({ id: 'lastSyncTimestamp', value: timestamp.getTime() });
+const setLastSyncTimestamp = async (key: string, timestamp: Date) => {
+    await db.sync_status.put({ id: key, value: timestamp.getTime() });
 };
 
-async function pushDirtyData() {
-    console.log("Avvio del processo di PUSH dei dati 'sporchi'...");
-    const now = new Date();
-
-    for (const tableName of ANAGRAFICHE_TABLES) {
-        const table = db.table<any, string>(tableName);
-        const dirtyRecords = await table.where('isDirty').equals(1).toArray();
-
-        if (dirtyRecords.length === 0) {
-            continue;
-        }
-
-        console.log(`... Trovati ${dirtyRecords.length} record 'sporchi' in ${tableName}. Invio in corso...`);
-        
-        const batch = writeBatch(firestore);
-        const recordsToClean: any[] = [];
-
-        for (const record of dirtyRecords) {
-            const { isDirty, ...firestoreData } = record;
-            
-            if (!firestoreData.createdAt) {
-                firestoreData.createdAt = now;
-            }
-            firestoreData.updatedAt = now;
-
-            const docId = tableName === 'tecnici' ? record.uid : record.id;
-            const docRef = doc(firestore, tableName, docId);
-
-            batch.set(docRef, firestoreData, { merge: true });
-            recordsToClean.push(record);
-        }
-
-        try {
-            await batch.commit();
-            console.log(`... ${dirtyRecords.length} record di ${tableName} inviati con successo a Firestore.`);
-
-            const cleanRecords = recordsToClean.map(record => ({
-                ...record,
-                isDirty: 0,
-                updatedAt: now,
-            }));
-
-            await table.bulkPut(cleanRecords);
-            console.log(`... ${cleanRecords.length} record locali di ${tableName} sono stati 'ripuliti'.`);
-
-        } catch (error) {
-            console.error(`ERRORE CRITICO durante il PUSH di ${tableName}:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-            throw error;
-        }
-    }
-    console.log("Processo di PUSH completato.");
-}
-
-const fetchModifiedCollection = async (collectionName: string, startDate: Date | null): Promise<any[]> => {
-    let q;
-    if (startDate) {
-        q = query(collection(firestore, collectionName), where("updatedAt", ">", Timestamp.fromDate(startDate)));
-    } else {
-        q = query(collection(firestore, collectionName));
-    }
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        const id = collectionName === 'tecnici' ? data.uid : doc.id;
-        return { id, ...data };
-    });
-};
-
-export async function syncStandard() {
-    console.log('Inizio Sincronizzazione Standard...');
-    try {
-        await pushDirtyData();
-
-        console.log("Avvio del processo di PULL dei dati remoti...");
-        const lastSync = await getLastSyncTimestamp();
-        const now = new Date();
-
-        if (lastSync) {
-            console.log(`... Sincronizzazione incrementale avviata da: ${lastSync.toISOString()}`);
-        } else {
-            console.log('... Prima sincronizzazione o DB vuoto. Scarico tutti i dati.');
-            await db.table('tecnici').clear();
-        }
-
-        const anagraficheMap: { [key: string]: (item: any) => any } = {
-            tecnici: item => item,
-            navi: item => ({ ...item, clienteId: item.clienteId?.id || item.clienteId }),
-            luoghi: item => ({ ...item, clienteId: item.clienteId?.id || item.clienteId }),
-            tipiGiornata: item => item,
-            clienti: item => item,
-            ditte: item => item,
-            categorie: item => item,
-            qualifiche: item => item,
-            veicoli: item => item,
-        };
-
-        for (const name of ANAGRAFICHE_TABLES) {
-            console.log(`... Sincronizzo ${name}...`);
-            const data = await fetchModifiedCollection(name as string, lastSync);
-            if (data.length > 0) {
-                const processedData = data.map(item => convertFirestoreTimestamps(anagraficheMap[name as string](item)));
-                await bulkPutAnagrafiche(name as string, processedData);
-                console.log(`... Trovati e aggiornati ${data.length} record in ${name}.`);
-            } else {
-                 console.log(`... Nessun dato da aggiornare per ${name}.`);
-            }
-        }
-        console.log('... PULL di tutte le anagrafiche completato.');
-        
-        await setLastSyncTimestamp(now);
-        console.log('Sincronizzazione Standard completata con successo.');
-
-    } catch (error) {
-        console.error('ERRORE CRITICO in Sincronizzazione Standard:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    }
-}
-
-function convertFirestoreTimestamps(data: any): any {
+const convertFirestoreTimestamps = (data: any): any => {
     if (data && typeof data.toDate === 'function') {
         return data.toDate();
     }
@@ -161,4 +33,125 @@ function convertFirestoreTimestamps(data: any): any {
         return res;
     }
     return data;
+};
+
+// --- Sincronizzazione Anagrafiche ---
+
+const ANAGRAFICHE_TABLES: string[] = [
+    'tecnici', 'navi', 'luoghi', 'tipiGiornata', 'clienti',
+    'ditte', 'categorie', 'qualifiche', 'veicoli'
+];
+
+async function pushDirtyAnagrafiche() {
+    console.log("Avvio PUSH Anagrafiche...");
+    const now = new Date();
+    for (const tableName of ANAGRAFICHE_TABLES) {
+        const table = db.table<any, string>(tableName);
+        const dirtyRecords = await table.where('isDirty').equals(1).toArray();
+        if (dirtyRecords.length === 0) continue;
+
+        console.log(`... Trovati ${dirtyRecords.length} record sporchi in ${tableName}.`);
+        const batch = writeBatch(firestore);
+        dirtyRecords.forEach(record => {
+            const { isDirty, ...firestoreData } = record;
+            if (!firestoreData.createdAt) firestoreData.createdAt = now;
+            firestoreData.updatedAt = now;
+            const docId = tableName === 'tecnici' ? record.uid : record.id;
+            batch.set(doc(firestore, tableName, docId), firestoreData, { merge: true });
+        });
+
+        await batch.commit();
+        await table.bulkPut(dirtyRecords.map(r => ({ ...r, isDirty: 0, updatedAt: now })));
+        console.log(`... PUSH completato per ${tableName}.`);
+    }
+}
+
+export async function syncAnagrafiche() {
+    console.log('INIZIO Sincronizzazione Anagrafiche');
+    try {
+        await pushDirtyAnagrafiche();
+        console.log("Avvio PULL Anagrafiche...");
+        const lastSync = await getLastSyncTimestamp('anagraficheLastSync');
+        const now = new Date();
+
+        if (lastSync) console.log(`... Sincronizzazione incrementale da: ${lastSync.toISOString()}`);
+        else console.log('... Prima sincronizzazione. Scarico tutto.');
+
+        for (const name of ANAGRAFICHE_TABLES) {
+            let q = query(collection(firestore, name));
+            if (lastSync) q = query(q, where("updatedAt", ">", Timestamp.fromDate(lastSync)));
+            
+            const snapshot = await getDocs(q);
+            const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            if (data.length > 0) {
+                const processedData = data.map(item => convertFirestoreTimestamps(item));
+                await bulkPutAnagrafiche(name, processedData);
+                console.log(`... Aggiornati ${data.length} record in ${name}.`);
+            } else {
+                console.log(`... Nessun dato nuovo per ${name}.`);
+            }
+        }
+        await setLastSyncTimestamp('anagraficheLastSync', now);
+        console.log('FINE Sincronizzazione Anagrafiche');
+    } catch (error) {
+        console.error('ERRORE CRITICO in syncAnagrafiche:', error);
+    }
+}
+
+// --- Sincronizzazione Rapportini ---
+
+async function pushDirtyRapportini() {
+    console.log("Avvio PUSH Rapportini...");
+    const now = new Date();
+    const dirtyRecords = await db.rapportini.where('isDirty').equals(1).toArray();
+    if (dirtyRecords.length === 0) {
+        console.log("... Nessun rapportino da inviare.");
+        return;
+    }
+
+    console.log(`... Trovati ${dirtyRecords.length} rapportini sporchi.`);
+    const batch = writeBatch(firestore);
+    dirtyRecords.forEach(record => {
+        const { isDirty, ...firestoreData } = record;
+        if (!firestoreData.createdAt) firestoreData.createdAt = now;
+        firestoreData.updatedAt = now;
+        batch.set(doc(firestore, 'rapportini', record.id), firestoreData, { merge: true });
+    });
+
+    await batch.commit();
+    await db.rapportini.bulkPut(dirtyRecords.map(r => ({ ...r, isDirty: 0, updatedAt: now })));
+    console.log(`... PUSH di ${dirtyRecords.length} rapportini completato.`);
+}
+
+export async function syncRapportini() {
+    console.log('INIZIO Sincronizzazione Rapportini');
+    try {
+        await pushDirtyRapportini();
+        console.log("Avvio PULL Rapportini...");
+        const lastSync = await getLastSyncTimestamp('rapportiniLastSync');
+        const now = new Date();
+
+        if (lastSync) console.log(`... Sincronizzazione incrementale da: ${lastSync.toISOString()}`);
+        else console.log('... Prima sincronizzazione. Scarico tutto.');
+
+        let q = query(collection(firestore, 'rapportini'));
+        if (lastSync) q = query(q, where("updatedAt", ">", Timestamp.fromDate(lastSync)));
+        
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        if (data.length > 0) {
+            const processedData = data.map(item => convertFirestoreTimestamps(item));
+            await bulkPutRapportini(processedData);
+            console.log(`... Aggiornati ${data.length} rapportini.`);
+        } else {
+            console.log("... Nessun rapportino nuovo.");
+        }
+
+        await setLastSyncTimestamp('rapportiniLastSync', now);
+        console.log('FINE Sincronizzazione Rapportini');
+    } catch (error) {
+        console.error('ERRORE CRITICO in syncRapportini:', error);
+    }
 }

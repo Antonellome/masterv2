@@ -16,7 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Veicolo, Rapportino } from '@/models/definitions';
+import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import { db as firestoreDb } from '@/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
@@ -28,7 +28,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 dayjs.locale('it');
 
-// --- INTERFACES & HELPERS (invariati) ---
+// --- INTERFACES & HELPERS ---
 interface FlatRapportino {
     id: string;
     dataFormatted: string;
@@ -82,10 +82,41 @@ const RicercaAvanzata: React.FC = () => {
     
     const { 
         tecnici: anagraficaTecnici, navi: anagraficaNavi, clienti: anagraficaClienti, 
-        luoghi: anagraficaLuoghi, tipiGiornata: anagraficaTipiGiornata, veicoli: anagraficaVeicoli,
+        luoghi: anagraficaLuoghi, tipiGiornata: anagraficaTipiGiornata,
         tecniciMap, naviMap, clientiMap, luoghiMap, tipiGiornataMap, veicoliMap,
         loading: anagraficheLoading 
     } = useAnagraficaData();
+
+    // =============== INIZIO CODICE CORRETTO PER ORDINAMENTO ===============
+    const sortedTecnici = useMemo(() => {
+        if (!anagraficaTecnici) return [];
+        return [...anagraficaTecnici].sort((a, b) => {
+            const cognomeCompare = (a.cognome || '').localeCompare(b.cognome || '');
+            if (cognomeCompare !== 0) return cognomeCompare;
+            return (a.nome || '').localeCompare(b.nome || '');
+        });
+    }, [anagraficaTecnici]);
+
+    const sortedNavi = useMemo(() => {
+        if (!anagraficaNavi) return [];
+        return [...anagraficaNavi].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    }, [anagraficaNavi]);
+
+    const sortedLuoghi = useMemo(() => {
+        if (!anagraficaLuoghi) return [];
+        return [...anagraficaLuoghi].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    }, [anagraficaLuoghi]);
+
+    const sortedClienti = useMemo(() => {
+        if (!anagraficaClienti) return [];
+        return [...anagraficaClienti].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    }, [anagraficaClienti]);
+
+    const sortedTipiGiornata = useMemo(() => {
+        if (!anagraficaTipiGiornata) return [];
+        return [...anagraficaTipiGiornata].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    }, [anagraficaTipiGiornata]);
+    // =============== FINE CODICE CORRETTO PER ORDINAMENTO ===============
 
     const rapportini = useLiveQuery(() => db.rapportini.toArray());
     const rapportiniLoading = rapportini === undefined;
@@ -101,7 +132,6 @@ const RicercaAvanzata: React.FC = () => {
 
     const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
 
-    // --- FUNZIONE DI STAMPA BLINDATA ---
     const handlePrintShareClick = useCallback(async (id: string) => {
         const rapportino = rapportini?.find(r => r.id === id);
         if (!rapportino) {
@@ -113,7 +143,6 @@ const RicercaAvanzata: React.FC = () => {
         setActiveRapportinoId(id);
 
         try {
-            // **ATTENTO**: Creiamo copie sicure delle mappe per evitare crash se sono undefined
             const safeTecniciMap = tecniciMap || {};
             const safeNaviMap = naviMap || {};
             const safeLuoghiMap = luoghiMap || {};
@@ -326,11 +355,11 @@ const RicercaAvanzata: React.FC = () => {
                      <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaTecnici || []} getOptionLabel={(o) => `${o.cognome} ${o.nome}`.trim()} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaNavi || []} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaLuoghi || []} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaClienti || []} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={anagraficaTipiGiornata || []} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`.trim()} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedNavi} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedLuoghi} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedClienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedTipiGiornata} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><TextField label="Ordine di Lavoro" value={filters.ordineLavoro} onChange={e => handleFilterChange('ordineLavoro', e.target.value)} fullWidth size="small" /></Grid>
                         <Grid item xs={12}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
                     </Grid>

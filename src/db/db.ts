@@ -68,3 +68,19 @@ export const bulkPutAnagrafiche = async (tableName: string, data: any[]) => {
     console.error(`Errore durante l'operazione di bulkPut sulla tabella '${tableName}':`, error);
   }
 };
+
+/**
+ * Funzione di utilità per inserire o aggiornare in blocco i rapportini.
+ * @param data L'array di rapportini da inserire/aggiornare.
+ */
+export const bulkPutRapportini = async (data: Rapportino[]) => {
+  if (!Array.isArray(data) || data.length === 0) {
+    return;
+  }
+  try {
+    await db.rapportini.bulkPut(data);
+  } catch (error) {
+    console.error(`Errore durante l'operazione di bulkPut sulla tabella 'rapportini':`, error);
+  }
+};
+
