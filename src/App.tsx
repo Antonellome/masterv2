@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useRefresh } from '@/contexts/RefreshContext';
+import { useAlert } from '@/contexts/AlertContext'; // <-- 1. IMPORTIAMO useAlert
 import { Box, CircularProgress, Typography } from '@mui/material';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -30,6 +31,7 @@ const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 const AppContent = () => {
   const { loading: authLoading, user } = useAuth();
   const { refreshKey } = useRefresh();
+  const { showAlert } = useAlert(); // <-- 2. INIZIALIZZIAMO L'HOOK
   const [syncState, setSyncState] = useState({ syncing: false, message: '' });
 
   useEffect(() => {
@@ -39,15 +41,23 @@ const AppContent = () => {
         
         setSyncState({ syncing: true, message: 'Sincronizzazione anagrafiche...' });
         try {
-          await syncAnagrafiche();
+          // 3. CATTURIAMO I CONFLITTI E MOSTRIAMO LE NOTIFICHE
+          const anagraficheConflicts = await syncAnagrafiche();
+          if (anagraficheConflicts.length > 0) {
+            anagraficheConflicts.forEach(msg => showAlert(msg, 'warning'));
+          }
           console.log("Sincronizzazione anagrafiche completata.");
 
           setSyncState({ syncing: true, message: 'Sincronizzazione rapportini...' });
-          await syncRapportini();
+          const rapportiniConflicts = await syncRapportini();
+          if (rapportiniConflicts.length > 0) {
+            rapportiniConflicts.forEach(msg => showAlert(msg, 'warning'));
+          }
           console.log("Sincronizzazione rapportini completata.");
 
         } catch (error) {
           console.error("Errore critico durante la sincronizzazione:", error);
+          showAlert('Errore grave di sincronizzazione. Controlla la console.', 'error');
         } finally {
           setSyncState({ syncing: false, message: '' });
         }
@@ -59,7 +69,8 @@ const AppContent = () => {
     if (!authLoading) {
       runSync();
     }
-  }, [user, authLoading, refreshKey]);
+    // 4. AGGIUNGIAMO showAlert ALLE DIPENDENZE
+  }, [user, authLoading, refreshKey, showAlert]);
 
   if (authLoading || syncState.syncing) {
     return (
