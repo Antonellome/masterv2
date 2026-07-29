@@ -1,5 +1,4 @@
 
-// src/db/db.ts
 import Dexie, { Table } from 'dexie';
 import type { Rapportino, Tecnico, Nave, Luogo, Cliente, Categoria, Ditta, Impostazioni, TipoGiornata, Qualifica, Veicolo, Checkin } from '../models/definitions';
 
@@ -17,7 +16,6 @@ export interface SyncStatus {
 }
 
 export class MySubClassedDexie extends Dexie {
-  // Dichiarazione delle tabelle per l'autocompletamento e la type-safety.
   rapportini!: Table<Rapportino>;
   tecnici!: Table<Tecnico>;
   navi!: Table<Nave>;
@@ -33,34 +31,20 @@ export class MySubClassedDexie extends Dexie {
 
   constructor() {
     super('gestionaleLavoro');
-    // AGGIORNAMENTO: Versione 7 per aggiungere l'indice 'isDirty' a tutte le anagrafiche.
-    this.version(7).stores({
-      rapportini: 'id, data, tecnicoId, naveId, luogoId, clienteId, isDirty',
-      tecnici: 'id, nome, cognome, categoriaId, attivo, isDirty', // INDICE AGGIUNTO
-      navi: 'id, nome, clienteId, isDirty', // INDICE AGGIUNTO
-      luoghi: 'id, nome, isDirty', // INDICE AGGIUNTO
-      clienti: 'id, nome, isDirty', // INDICE AGGIUNTO
-      categorie: 'id, nome, isDirty', // INDICE AGGIUNTO
-      ditte: 'id, nome, isDirty', // INDICE AGGIUNTO
-      tipiGiornata: 'id, nome, isDirty', // INDICE AGGIUNTO
-      qualifiche: 'id, nome, isDirty', // INDICE AGGIUNTO
-      veicoli: 'id, nome, isDirty', // INDICE AGGIUNTO
-      checkins: 'id, tecnicoId, anagraficaId, data, tipo',
-      sync_status: 'id'
-    });
-    
-    // Manteniamo la versione precedente per la migrazione
-    this.version(6).stores({
-      rapportini: 'id, data, tecnicoId, naveId, luogoId, clienteId, isDirty',
-      tecnici: 'id, nome, cognome, categoriaId, attivo',
-      navi: 'id, nome, clienteId',
-      luoghi: 'id, nome',
-      clienti: 'id, nome',
-      categorie: 'id, nome',
-      ditte: 'id, nome',
-      tipiGiornata: 'id, nome',
-      qualifiche: 'id, nome',
-      veicoli: 'id, nome',
+    // HARD RESET DEL DATABASE: Definiamo una singola versione.
+    // Questo cancellerà il DB esistente se non corrisponde a questa struttura,
+    // risolvendo i problemi di corruzione dei dati precedenti.
+    this.version(1).stores({
+      rapportini: 'id, data, tecnicoId, naveId, clienteId, isDirty',
+      tecnici: 'id, nome, cognome, attivo, isDirty',
+      navi: 'id, nome, clienteId, isDirty',
+      luoghi: 'id, nome, isDirty',
+      clienti: 'id, nome, isDirty',
+      categorie: 'id, nome, isDirty',
+      ditte: 'id, nome, isDirty',
+      tipiGiornata: 'id, nome, isDirty',
+      qualifiche: 'id, nome, isDirty',
+      veicoli: 'id, nome, isDirty',
       checkins: 'id, tecnicoId, anagraficaId, data, tipo',
       sync_status: 'id'
     });
@@ -76,7 +60,7 @@ export const db = new MySubClassedDexie();
  */
 export const bulkPutAnagrafiche = async (tableName: string, data: any[]) => {
   if (!tableName || !Array.isArray(data) || data.length === 0) {
-    return; // Salta se non ci sono dati o il nome della tabella non è valido
+    return;
   }
   try {
     await db.table(tableName).bulkPut(data);

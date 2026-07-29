@@ -189,7 +189,7 @@ const CumulativiTecnici: React.FC = () => {
         // --- FASE 1: Preparazione dei Set di ID per il filtraggio ---
         const ditteIds = selectedDitte.length > 0 ? new Set(selectedDitte.map(d => getCleanId(d.id))) : null;
         const selectedTecniciIds = selectedTecnici.length > 0 ? new Set(selectedTecnici.map(t => getCleanId(t.id))) : null;
-        const categorieIds = selectedCategorie.length > 0 ? new Set(selectedCategorie.map(c => getCleanId(c.id))) : null;
+        const categorieIds = selectedCategorie.length > 0 ? new Set(selectedCategorie.map(c => getCleanId((c as any).id))) : null;
 
         const tecniciVisibiliIds = new Set(
             anagraficaTecnici.filter(t => 
@@ -256,9 +256,7 @@ const CumulativiTecnici: React.FC = () => {
                 const giorno = dayjs(dataRapportino).date().toString();
                 const tipoGiornata = tipiGiornataMap.get(getCleanId(r.tipoGiornataId));
                 let codice = getTipoGiornataCodice(tipoGiornata);
-                const isNotturnoSpeciale = getCleanId(r.naveId) === CARTOUR_ID && dayjs(dataRapportino).hour() >= 21;
-                if (isNotturnoSpeciale) codice = 'N';
-                const isStraordinarioNotturnoGenerico = !isNotturnoSpeciale && tipoGiornata?.nome.toLowerCase().includes('notturn');
+                const isStraordinarioNotturnoGenerico = tipoGiornata?.nome.toLowerCase().includes('notturn');
 
                 const processHoursForTecnico = (id: string, ore: number) => {
                     const cleanId = getCleanId(id);
@@ -277,7 +275,30 @@ const CumulativiTecnici: React.FC = () => {
                     r.dettaglioOreTecnici!.forEach(d => {
                         const cleanId = getCleanId(d.tecnicoId);
                         const oreNumeriche = d.ore ? parseFloat(String(d.ore).replace(',', '.')) : 0;
-                        if (cleanId && oreNumeriche > 0) { processHoursForTecnico(cleanId, oreNumeriche); techsWhoGotHours.add(cleanId); }
+                        if (cleanId && oreNumeriche > 0 && righeDaGenerare.has(cleanId)) {
+                            let codicePerQuestoTecnico = codice; 
+
+                            if (getCleanId(r.naveId) === CARTOUR_ID && d.oraInizio) {
+                                const ora = parseInt(d.oraInizio.split(':')[0], 10);
+                                if (!isNaN(ora) && ora >= 21) {
+                                    codicePerQuestoTecnico = 'N';
+                                }
+                            }
+                            
+                            const riga = righeDaGenerare.get(cleanId)!;
+                            const dayData = riga[giorno] as DailyHours;
+                            const isStraordinarioNotturnoGenerico = !codicePerQuestoTecnico && tipoGiornata?.nome.toLowerCase().includes('notturn');
+
+                            if (codicePerQuestoTecnico) {
+                                dayData.codice = codicePerQuestoTecnico;
+                                dayData.oreCodice += oreNumeriche;
+                            } else if (tipoGiornata?.nome.toLowerCase().includes('straordinar') || isStraordinarioNotturnoGenerico) {
+                                dayData.straordinarioPuro += oreNumeriche;
+                            } else {
+                                dayData.workable += oreNumeriche;
+                            }
+                            techsWhoGotHours.add(cleanId);
+                        }
                     });
                     const principaleId = getCleanId(r.tecnicoId);
                     if (principaleId && !techsWhoGotHours.has(principaleId)) {
