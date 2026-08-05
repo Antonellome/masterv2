@@ -19,32 +19,46 @@
 
 ---
 
-## **Stato Architetturale e Piano di Lavoro: CONCLUSO**
+## **Fase Attuale: Piano di Risanamento da Debito Tecnico (Ottobre 2026)**
 
-Questo documento archivia il completamento del piano di lavoro per l'analisi e la risoluzione delle criticità fondamentali dell'applicazione. Tutte le fasi sono state completate con successo.
+L'analisi approfondita dell'intera codebase è **conclusa**. È stata rilevata una serie di criticità significative che rendono l'applicazione lenta, fragile, insicura e difficile da mantenere. Questa sezione documenta in modo definitivo tutte le criticità identificate e servirà come traccia per il piano di risanamento.
 
-### **Fase 1 & 2: Analisi e Risoluzione Criticità Storiche - COMPLETATA**
+### **Report Finale Consolidato delle Criticità**
 
-Le analisi e le correzioni delle criticità storiche (gestione accessi, coerenza dati) e della sicurezza di Firestore sono state completate con successo.
-
-### **Fase 3: Mitigazione Rischio Perdita Dati - COMPLETATA**
-
-La vulnerabilità critica di sovrascrittura silenziosa dei dati è stata eliminata tramite l'implementazione di una strategia di **Blocco Ottimistico (Optimistic Locking)** in `src/services/SyncService.ts`. Il sistema ora previene la perdita di dati durante la sincronizzazione.
-
-### **Fase 4: Miglioramento Esperienza Utente (UX) - COMPLETATA**
-
-La criticità finale relativa all'esperienza utente è stata risolta, chiudendo il cerchio tra la logica di backend e l'interfaccia utente.
-
-#### **CRITICITÀ UX: Mancata Notifica dei Conflitti - RISOLTA**
-
-*   **Soluzione Implementata:** Il sistema di notifiche esistente (`AlertContext`) è stato collegato alla logica di sincronizzazione.
-*   **Comportamento Finale:** Quando viene rilevato un conflitto di dati, l'utente riceve una **notifica in-app** chiara e immediata (un "toast" di avvertimento). Il messaggio informa l'utente che la sua modifica non è stata salvata perché i dati erano obsoleti e che il sistema ha scaricato automaticamente la versione più recente. Questo previene la confusione e aumenta la fiducia nell'affidabilità dell'applicazione.
-*   **Impatto:** L'applicazione è ora non solo tecnicamente robusta, ma anche trasparente nel suo funzionamento verso l'utente finale.
+| ID | Sezione | Criticità | Impatto Primario | Priorità |
+| :--- | :--- | :--- | :--- | :--- |
+| **A-1** | Architettura | **Caos Architetturale Totale**: Coesistenza di 4 strategie di gestione dati/logica: Dexie (`useLiveQuery`), `getDocs` manuali, `react-firebase-hooks` e **Cloud Functions**. | Manutenibilità, Coerenza | **CRITICA** |
+| **A-2** | Architettura | **Stato Globale Frammentato**: Uso misto e incoerente di `Context API` e `Zustand` per lo stato globale. | Manutenibilità | **MASSIMA** |
+| **A-3** | Architettura | **Conflitto di Nomi Critico**: Esistenza di due hook diversi (`useAnagraficaData`) che creano confusione e rischio di bug. | Manutenibilità | **MASSIMA** |
+| **A-4** | Architettura | **Violazione Principio Offline-First**: Componenti chiave lavorano solo online, tradendo lo scopo di Dexie. | Coerenza, UX | **ALTA** |
+| **A-5** | Architettura | **"Provider Hell"**: Eccessivo annidamento di `Context Provider` che causa re-render a cascata. | Performance | **ALTA** |
+| **SEC-1**| Sicurezza | **Modello di Sicurezza Incoerente**: L'app usa un modello sicuro (Cloud Functions) solo in una sezione, lasciando il resto esposto a scritture dirette e non controllate dal client. | **Sicurezza Funzionale**| **CRITICA** |
+| **DI-1** | Integrità Dati | **Operazioni Non Atomiche**: Salvataggi, modifiche ed eliminazioni non garantiscono coerenza tra DB. | **Perdita/Inconsistenza Dati** | **CRITICA** | 
+| **DI-2** | Integrità Dati | **Fonte Ruoli Frammentata**: Il ruolo "admin" è calcolato incrociando due collezioni Firestore invece di usare una fonte atomica (es. Custom Claims). | Integrità Dati, Sicurezza | **ALTA** |
+| **DI-3** | Integrità Dati | **Feedback Utente Fuorviante**: Conferme di operazioni solo in locale, senza garanzia di successo sul server. | UX, Integrità Dati | **ALTA** |
+| **PERF-1**| Performance | **Elaborazione Dati Bloccante**: Elaborazione dell'intero dataset nel rendering, bloccando l'UI. | **Performance** | **ALTA** |
+| **PERF-2**| Performance | **Uso di Hook Obsoleti**: L'hook `useAnagraficaData()` (lento) è usato in componenti critici. | Performance | **ALTA** |
+| **MNT-1**| Manutenibilità | **"God Component"**: Componenti come `RapportinoEdit` accentrano troppa logica e stato. | Manutenibilità | **ALTA** |
+| **MNT-2**| Manutenibilità | **Logica Duplicata**: Calcoli, mappature e utility sono duplicati in più file. | Rischio Bug | **MEDIA** |
+| **MNT-3**| Manutenibilità | **Dipendenze Ridondanti**: Uso contemporaneo di librerie equivalenti. | Bundle Size | **MEDIA** |
+| **MNT-4**| Manutenibilità | **Logica Fragile ("Magic Strings")**: Logiche di business basate su stringhe di testo. | Rischio Bug Funzionale | **MEDIA** |
 
 ---
 
-## **Anatomia di un Disastro: La Corruzione dell'Ambiente (Agosto 2026)**
+## **STORIA DEL PROGETTO (ARCHIVIO)**
 
-*(Questa sezione rimane invariata come monito)*
+*Questa sezione archivia le fasi concluse e le lezioni apprese per fornire contesto storico ed evitare la ripetizione degli stessi errori.*
+
+### **Lezione Appresa: L'Errore Originale (Luglio 2026)**
+
+L'analisi dello storico Git ha rivelato un punto di svolta catastrofico in data **29 Luglio 2026**. Un precedente piano di risanamento, dettagliato e in corso d'opera, fu interrotto bruscamente. Il documento `app_master.md` dell'epoca, che conteneva la mappa delle criticità, fu cancellato e sostituito con un messaggio di "Lavoro Concluso".
+
+Questa azione, dichiarando vittoria prematuramente, ha **cancellato la memoria storica del progetto**. Le criticità non risolte sono state dimenticate e le successive modifiche al codice sono avvenute senza una guida, portando al caos architetturale attuale.
+
+**Monito:** Mai più dichiarare un lavoro "concluso" senza aver sistematicamente chiuso tutte le criticità documentate. La memoria del progetto deve essere preservata come bene primario.
+
+### **Anatomia di un Disastro: La Corruzione dell'Ambiente (Agosto 2026)**
+
+*(Questa sezione rimane come monito sull'importanza di una corretta diagnosi dei problemi a livello di infrastruttura)*
 
 (...)

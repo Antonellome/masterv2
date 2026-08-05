@@ -20,11 +20,20 @@ const BackupTab = () => {
     const handleExportAndSave = async () => {
         setLoadingExport(true);
         try {
-            const collectionsToExport = ["RISO", "ditte", "tipiGiornata", "configurazione", "categorie"];
+            // Lista DEFINITIVA basata sullo screenshot del database
+            const collectionsToExport = [
+                "admins", "amministratori", "categorie", "checkin_giornalieri", "clienti",
+                "config", "configurazione", "datiAzienda", "ditte", "documenti", "globals",
+                "luoghi", "mail", "meta", "navi", "notifications", "notifiche", "qualifiche",
+                "rapportini", "sync", "sync_manifest", "sync_queue_errors", "system", "tecnici",
+                "tecniciQualifiche", "tecnici_data", "tipiGiornata", "tipologiaGiornate",
+                "utenti", "utenti_master", "veicoli", "versioning"
+            ];
             const allData: { [key: string]: Record<string, unknown>[] } = {};
 
             const db = getFirestore();
             for (const coll of collectionsToExport) {
+                console.log(`Esportando la collezione: ${coll}...`);
                 const querySnapshot = await getDocs(collection(db, coll));
                 allData[coll] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             }
@@ -35,14 +44,14 @@ const BackupTab = () => {
             
             const a = document.createElement('a');
             a.href = url;
-            a.download = `backup_completo_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `backup_database_completo_${new Date().toISOString()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: 'Backup completo esportato con successo!', severity: 'success' });
+            setSnackbar({ open: true, message: 'Backup completo del database esportato con successo!', severity: 'success' });
 
         } catch (error: unknown) {
             console.error("Errore durante l'esportazione dei dati:", error);
@@ -61,7 +70,7 @@ const BackupTab = () => {
             const file = (event.target as HTMLInputElement).files?.[0];
             if (!file) return;
 
-            if (!window.confirm("ATTENZIONE: Stai per sovrascrivere TUTTI i dati (Report, Ditte, Tipi Giornata, Orari, Categorie) con quelli del file di backup. L'azione è irreversibile. Sei sicuro di voler procedere?")) {
+            if (!window.confirm("ATTENZIONE: Stai per sovrascrivere TUTTE le collezioni con i dati del file di backup. L'azione è irreversibile e potrebbe richiedere alcuni minuti. Sei sicuro di voler procedere?")) {
                 return;
             }
 
@@ -74,18 +83,27 @@ const BackupTab = () => {
                     const db = getFirestore();
                     const batch = writeBatch(db);
                     
-                    const collectionsToImport = ["RISO", "ditte", "tipiGiornata", "configurazione", "categorie"];
-                    for (const coll of collectionsToImport) {
-                        if (!allData[coll]) throw new Error(`Il file di backup è incompleto. Manca la collezione: ${coll}`);
-                    }
+                    // Lista DEFINITIVA per il ripristino
+                    const collectionsToImport = [
+                        "admins", "amministratori", "categorie", "checkin_giornalieri", "clienti",
+                        "config", "configurazione", "datiAzienda", "ditte", "documenti", "globals",
+                        "luoghi", "mail", "meta", "navi", "notifications", "notifiche", "qualifiche",
+                        "rapportini", "sync", "sync_manifest", "sync_queue_errors", "system", "tecnici",
+                        "tecniciQualifiche", "tecnici_data", "tipiGiornata", "tipologiaGiornate",
+                        "utenti", "utenti_master", "veicoli", "versioning"
+                    ];
 
+                    console.log("Inizio fase di cancellazione dati esistenti...");
                     for (const coll of collectionsToImport) {
-                        const querySnapshot = await getDocs(collection(db, coll));
-                        querySnapshot.forEach(doc => {
-                            batch.delete(doc.ref);
-                        });
+                        if(allData[coll]) { 
+                           const querySnapshot = await getDocs(collection(db, coll));
+                            querySnapshot.forEach(doc => {
+                                batch.delete(doc.ref);
+                            }); 
+                        }
                     }
                     await batch.commit();
+                    console.log("Cancellazione completata. Inizio scrittura nuovi dati...");
 
                     const secondBatch = writeBatch(db);
                     for (const collName in allData) {
@@ -146,7 +164,7 @@ const BackupTab = () => {
                     </Button>
                 </Stack>
                  <Typography variant="caption" display="block" sx={{ mt: 2, textAlign: 'center', color: 'text.secondary' }}>
-                    Attenzione: Il ripristino sovrascrive tutti i dati correnti (report, ditte, tipi giornata, orari, categorie).
+                    Attenzione: Il ripristino sovrascrive tutti i dati correnti con il contenuto del file di backup.
                 </Typography>
             </StyledCard>
 
