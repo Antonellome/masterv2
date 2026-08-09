@@ -228,3 +228,23 @@ export interface FormField {
   options?: { value: string; label: string }[];
   defaultValue?: any;
 }
+
+// --- TIPI RICHIESTI DAL PIANO DI RECUPERO ---
+
+/**
+ * Interfaccia per le notifiche ricevute dall'utente, da persistere in locale.
+ */
+export interface Notifica extends BaseEntity {
+  title: string;
+  body: string;
+  createdAt: Timestamp | Date;
+  read: boolean;
+  linkTo?: string; // Es. link a un rapportino specifico
+  fcmMessageId?: string; // Per deduplicazione
+}
+
+/**
+ * Alias per Rapportino, rappresenta l'evento giornaliero come da piano.
+ * In futuro potrebbe divergere se la struttura dati verrà raffinata.
+ */
+export type EventoGiornaliero = Rapportino;

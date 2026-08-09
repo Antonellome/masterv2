@@ -9,8 +9,6 @@ import {
     ToggleButtonGroup, ToggleButton
 } from '@mui/material';
 import Grid from '@mui/material/Unstable_Grid2';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/db'; // Importa il DB locale
 import type { Rapportino, Tecnico, Nave, Luogo, Checkin, Cliente, TipoGiornata } from '../models/definitions';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';
@@ -22,7 +20,7 @@ import ShipIcon from '@mui/icons-material/DirectionsBoat';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useCheckinData } from '@/hooks/useCheckinData';
-import { useAnagrafiche } from '@/hooks/useAnagrafiche';
+import { useData } from '@/hooks/useData';
 
 dayjs.extend(isBetween);
 dayjs.extend(isSameOrBefore);
@@ -111,12 +109,12 @@ const DashboardContent = () => {
     const [selectedDate, setSelectedDate] = useState(dayjs());
     const today = dayjs();
 
-    const { tecnici, navi, luoghi, clienti, tipiGiornata, loading: lAnagrafiche, error: eAnagrafiche } = useAnagrafiche();
-    const rapportini = useLiveQuery(() => db.rapportini.toArray(), []);
+    const { anagrafiche, rapportini, loading: lData, error: eData } = useData();
+    const { tecnici = [], navi = [], luoghi = [], clienti = [], tipiGiornata = [] } = anagrafiche || {};
     const { filteredCheckins, loading: lCheckins, error: eCheckins } = useCheckinData(today.format('YYYY-MM-DD'));
 
-    const isLoading = lAnagrafiche || rapportini === undefined || lCheckins;
-    const error = eAnagrafiche || eCheckins;
+    const isLoading = lData || lCheckins;
+    const error = eData || eCheckins;
 
     const handleTimeRangeChange = (event: React.MouseEvent<HTMLElement>, newTimeRange: 'current' | 'previous') => {
         if (newTimeRange !== null) {
@@ -271,7 +269,7 @@ const DashboardContent = () => {
                                     <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(136, 132, 216, 0.2)' }} />
                                     <Legend verticalAlign="top" />
                                     <Bar dataKey="ore" fill="#8884d8" name="Ore lavorate" />
-                                </BarChart>
+                                 </BarChart>
                             </ResponsiveContainer>
                         </CardContent></Card></Grid>
                     </Grid>

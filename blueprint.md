@@ -19,8 +19,11 @@
 
 ### TASK CORRENTE: Esecuzione `piano_di_recupero.md`
 
-- **Stato:** **Da iniziare.**
-- **Prossimo Passo:** Iniziare con la **FASE 1, Punto 1** del `piano_di_recupero.md`: Creazione di `src/stores/globalStore.ts`.
+- **Stato:** **IN CORSO - FASE 1**
+- **Completati:**
+    - `FASE 1, Punto 1`: Creazione di `src/stores/globalStore.ts`.
+    - `FASE 1, Punto 2`: Creazione di `src/services/api.ts`.
+- **Prossimo Passo:** Esecuzione della **FASE 1, Punto 3** del `piano_di_recupero.md`: Creazione di `src/auth.ts`.
 
 ---
 

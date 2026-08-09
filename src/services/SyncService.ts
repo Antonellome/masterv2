@@ -1,7 +1,7 @@
 
 import { collection, getDocs, query, where, Timestamp, runTransaction, doc, getDoc } from 'firebase/firestore';
 import { db as firestore } from '../firebase';
-import { db, bulkPutAnagrafiche, bulkPutRapportini } from '@/db/db';
+import { db, bulkPutGeneric } from '@/db/db';
 
 // --- Utility per Timestamp (invariate) ---
 const getLastSyncTimestamp = async (key: string): Promise<Date | null> => {
@@ -107,7 +107,7 @@ async function pushDirtyRecords(tableName: string): Promise<string[]> {
 
 const ANAGRAFICHE_TABLES: string[] = [
     'tecnici', 'navi', 'luoghi', 'tipiGiornata', 'clienti',
-    'ditte', 'categorie', 'qualifiche', 'veicoli'
+    'ditte', 'categorie', 'veicoli'
 ];
 
 async function pushDirtyAnagrafiche(): Promise<string[]> {
@@ -142,7 +142,7 @@ export async function syncAnagrafiche(): Promise<string[]> {
 
             if (data.length > 0) {
                 const processedData = data.map(item => convertFirestoreTimestamps(item));
-                await bulkPutAnagrafiche(name, processedData);
+                await bulkPutGeneric(name, processedData);
             }
         }
         await setLastSyncTimestamp('anagraficheLastSync', now);
@@ -170,7 +170,7 @@ export async function syncRapportini(): Promise<string[]> {
 
         if (data.length > 0) {
             const processedData = data.map(item => convertFirestoreTimestamps(item));
-            await bulkPutRapportini(processedData);
+            await bulkPutGeneric('rapportini', processedData);
         }
 
         await setLastSyncTimestamp('rapportiniLastSync', now);
