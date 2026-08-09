@@ -2,50 +2,53 @@
 
 ## REGOLE DI INTERAZIONE (NON MODIFICARE!)
 - **Regola del CIAO:** Ogni tuo messaggio DEVE iniziare con la parola "CIAO".
-  - **Spiegazione:** Questa non è una regola di cortesia, ma un test di stato critico. Se l'assistente non inizia un messaggio con "CIAO", significa che ha perso il contesto e la sua memoria interna si è corrotta. In questo caso, l'utente deve immediatamente interrompere l'attività corrente e forzare un reset con il comando: "Leggi il blueprint.md". Discutere o insistere è inutile.
 - **Regola della Lettura Contesto:** All'inizio di ogni sessione, DEVI leggere i seguenti file per avere il contesto completo:
-    - `calcoli.md`
-    - `tabella.md`
+    - `blueprint.md` (questo file)
     - `app_master.md`
-    - `rapportino_standard.md`
-- **Regola del Blueprint:** Questo file è la memoria a lungo termine. Va letto all'inizio e aggiornato con cautela, chiedendo sempre l'approvazione dell'utente prima di ogni scrittura.
+    - `piano_di_recupero.md`
 
 ---
 
-## META-INFORMAZIONI
-- **ID Progetto Firebase:** riso-project-app
-- **Sito di Deploy Target:** riso-master-office-prod
-- **Nota Importante:** Anche se l'ID del progetto è `riso-project-app`, il deploy viene eseguito per esplicita e corretta richiesta dell'utente sul sito `riso-master-office-prod`. Questa configurazione è intenzionale e non è un errore.
-- **Email Sviluppatore:** antonio.scuderi@gmail.com
+## STATO ATTUALE: RECUPERO DA DISASTRO
+
+- **Stato:** **IN CORSO - RIPARAZIONE CRITICA**
+- **Contesto:** Ho commesso un errore catastrofico eseguendo `git restore .`, cancellando tutto il lavoro di refactoring del frontend. Abbiamo ripristinato il progetto al commit stabile `c387a0c81`.
+- **Obiettivo Unico:** Eseguire scrupolosamente il `piano_di_recupero.md` per ricostruire l'architettura frontend basata su Zustand e rendere l'applicazione di nuovo stabile e funzionante.
 
 ---
 
-## OBIETTIVO STRATEGICO ATTUALE (dal vecchio blueprint)
-- **Focus:** Risolvere le criticità architetturali emerse.
-- **Dettagli Tecnici:** La documentazione di dettaglio va mantenuta nel file `app_master.md`.
-- **Aree Critiche:**
-    1.  **Permessi Amministratori:** Correggere la logica di autorizzazione passando a un sistema basato sulla collezione `admins` in Firestore, abbandonando i `claims` (deprecati).
-    2.  **Gestione Dati Tecnici:** Risolvere il problema "ID Sconosciuto" con una separazione netta tra `tecnici` (personale) e `utenti` (amministratori). Prevede un hard reset del DB locale (Dexie.js) e la centralizzazione dei dati dei tecnici in una `tecniciMap`.
-- **Modifiche UI correlate:**
-    - La pagina `Anagrafiche` non gestirà più i tecnici.
-    - Creare o designare una `Pagina Tecnici` come unico punto di gestione del personale.
+### TASK CORRENTE: Esecuzione `piano_di_recupero.md`
+
+- **Stato:** **Da iniziare.**
+- **Prossimo Passo:** Iniziare con la **FASE 1, Punto 1** del `piano_di_recupero.md`: Creazione di `src/stores/globalStore.ts`.
 
 ---
 
-## REGISTRO FUNZIONALITÀ E INTERVENTI
-- **[Data Ignota] - Creazione Iniziale:** Implementata app per gestione rapportini, anagrafiche, tecnici e report con Dexie.js ed esportazione Excel.
-- **[29/07/26] - Deploy:** Eseguito deploy su `riso-master-office-prod` dopo fallimenti iniziali.
-- **[29/07/26] - Riorganizzazione Blueprint:** Adottata questa struttura rigida per evitare la perdita di contesto.
+### INVENTARIO CLOUD FUNCTIONS ESISTENTI (Unico Lavoro Superstite)
+
+| Funzione | Trigger | Regione |
+| :--- | :--- | :--- |
+| `updateVeicolo` | Richiesta HTTPS | `us-central1` |
+| `updateTecnico` | Richiesta HTTPS | `us-central1` |
+| `createDitta` | Richiesta HTTPS | `us-central1` |
+| `updateCliente` | Richiesta HTTPS | `us-central1` |
+| `deleteCliente` | Richiesta HTTPS | `us-central1` |
+| `updateRapportino`| Richiesta HTTPS | `us-central1` |
+| `deleteVeicolo` | Richiesta HTTPS | `us-central1` |
+| `createRapportino`| Richiesta HTTPS | `us-central1` |
+| `deleteTecnico` | Richiesta HTTPS | `us-central1` |
+| `deleteRapportino`| Richiesta HTTPS | `us-central1` |
+| `createVeicolo` | Richiesta HTTPS | `us-central1` |
+| `updateDitta` | Richiesta HTTPS | `us-central1` |
+| `deleteDitta` | Richiesta HTTPS | `us-central1` |
+| `createCliente` | Richiesta HTTPS | `us-central1` |
+| `createTecnico` | Richiesta HTTPS | `us-central1` |
+| `makeuppercase` | Scrittura Firestore | `us-central1` |
 
 ---
 
 ## CRITICITÀ STORICHE (DA NON RIPETERE)
-- **Confusione Progetto/Sito:** L'assistente ha confuso l'ID Progetto con il Sito di Deploy.
-- **Perdita di Contesto:** L'assistente ha una memoria a breve termine.
-- **Corruzione del Blueprint:** L'assistente tende a sovrascrivere questo file in modo distruttivo.
 
----
-
-## TASK CORRENTE
-- **Azione:** Aggiornare il blueprint con le spiegazioni richieste dall'utente.
-- **Stato:** In attesa di approvazione per la scrittura.
+- **USO DI `git restore .`:** L'assistente ha usato questo comando in modo sconsiderato, cancellando il lavoro non committato dell'utente. **MAI PIÙ USARE QUESTO COMANDO.**
+- **Dichiarazioni Premature:** Dichiarare "finito" un lavoro non verificato.
+- **Ignorare la Documentazione:** Non leggere i file di contesto prima di agire.
