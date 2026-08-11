@@ -1,16 +1,17 @@
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthProvider';
-import { useRefresh } from '@/contexts/RefreshContext';
-import { useAlert } from '@/contexts/AlertContext'; // <-- 1. IMPORTIAMO useAlert
+import { useGlobalStore } from './stores/globalStore'; 
 import { Box, CircularProgress, Typography } from '@mui/material';
+
+import { useAuthInitializer } from '@/auth';
+import { DataHydrator } from '@/components/DataHydrator';
+import { GlobalAlert } from '@/components/GlobalAlert';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
-import { syncAnagrafiche, syncRapportini } from '@/services/SyncService';
 
-// --- Lazy Imports (invariati) ---
+// --- Le lazy Imports rimangono invariate ---
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const SignupPage = lazy(() => import('@/pages/SignupPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
@@ -29,55 +30,15 @@ const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 
 const AppContent = () => {
-  const { loading: authLoading, user } = useAuth();
-  const { refreshKey } = useRefresh();
-  const { showAlert } = useAlert(); // <-- 2. INIZIALIZZIAMO L'HOOK
-  const [syncState, setSyncState] = useState({ syncing: false, message: '' });
+  const isAuthLoading = useGlobalStore((state) => state.isAuthLoading);
+  const isAuthenticated = useGlobalStore((state) => state.isAuthenticated);
 
-  useEffect(() => {
-    const runSync = async () => {
-      if (user) {
-        console.log(`Sincronizzazione avviata. Trigger: ${refreshKey > 0 ? 'Manuale' : 'Login'}`);
-        
-        setSyncState({ syncing: true, message: 'Sincronizzazione anagrafiche...' });
-        try {
-          // 3. CATTURIAMO I CONFLITTI E MOSTRIAMO LE NOTIFICHE
-          const anagraficheConflicts = await syncAnagrafiche();
-          if (anagraficheConflicts.length > 0) {
-            anagraficheConflicts.forEach(msg => showAlert(msg, 'warning'));
-          }
-          console.log("Sincronizzazione anagrafiche completata.");
-
-          setSyncState({ syncing: true, message: 'Sincronizzazione rapportini...' });
-          const rapportiniConflicts = await syncRapportini();
-          if (rapportiniConflicts.length > 0) {
-            rapportiniConflicts.forEach(msg => showAlert(msg, 'warning'));
-          }
-          console.log("Sincronizzazione rapportini completata.");
-
-        } catch (error) {
-          console.error("Errore critico durante la sincronizzazione:", error);
-          showAlert('Errore grave di sincronizzazione. Controlla la console.', 'error');
-        } finally {
-          setSyncState({ syncing: false, message: '' });
-        }
-      } else {
-        setSyncState({ syncing: false, message: '' });
-      }
-    };
-
-    if (!authLoading) {
-      runSync();
-    }
-    // 4. AGGIUNGIAMO showAlert ALLE DIPENDENZE
-  }, [user, authLoading, refreshKey, showAlert]);
-
-  if (authLoading || syncState.syncing) {
+  if (isAuthLoading) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
         <Typography sx={{ mt: 2 }}>
-          {authLoading ? 'Verifica autenticazione...' : syncState.message}
+          Verifica autenticazione...
         </Typography>
       </Box>
     );
@@ -86,8 +47,8 @@ const AppContent = () => {
   return (
     <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>}>
       <Routes>
-        <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" replace />} />
-        <Route path="/signup" element={!user ? <SignupPage /> : <Navigate to="/" replace />} />
+        <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} />
+        <Route path="/signup" element={!isAuthenticated ? <SignupPage /> : <Navigate to="/" replace />} />
         <Route path="/rapportini/stampa/:id" element={<RapportinoPrintPage />} />
 
         <Route element={<ProtectedRoute />}>
@@ -112,14 +73,22 @@ const AppContent = () => {
           </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />
+        <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
       </Routes>
     </Suspense>
   );
 };
 
 function App() {
-  return <AppContent />;
+  useAuthInitializer();
+
+  return (
+    <>
+      <GlobalAlert />
+      <DataHydrator />
+      <AppContent />
+    </>
+  );
 }
 
 export default App;

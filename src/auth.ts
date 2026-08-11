@@ -1,53 +1,73 @@
 
+import { useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db as firestoreDb } from './firebase'; // Importa istanza auth e firestore
-import { useGlobalStore } from './stores/globalStore';
-import { UserProfile } from './models/definitions';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '@/firebase';
+import { useGlobalStore } from '@/stores/globalStore';
+import type { Tecnico } from '@/models/definitions';
+
+let unsubscribeProfile: (() => void) | null = null;
 
 /**
- * Recupera il profilo utente da Firestore.
- * @param uid L'UID dell'utente.
- * @returns Il profilo utente o null se non trovato.
+ * Hook per inizializzare e gestire lo stato di autenticazione dell'utente.
+ * Ascolta i cambiamenti di stato di Firebase Auth e aggiorna lo store globale (Zustand).
+ * Quando un utente si autentica, recupera il suo profilo dal database e lo mantiene sincronizzato.
  */
-const fetchUserProfile = async (uid: string): Promise<UserProfile | null> => {
-  try {
-    const userDocRef = doc(firestoreDb, 'users', uid); // Assumiamo la collezione 'users'
-    const userDocSnap = await getDoc(userDocRef);
+export const useAuthInitializer = () => {
+  const { setUserAndProfile, setAuthLoading, logout } = useGlobalStore(state => ({
+    setUserAndProfile: state.setUserAndProfile,
+    setAuthLoading: state.setAuthLoading,
+    logout: state.logout,
+  }));
 
-    if (userDocSnap.exists()) {
-      // Ricostruisce l'oggetto UserProfile con l'id del documento
-      return { uid, ...userDocSnap.data() } as UserProfile;
-    } else {
-      console.warn(`Profilo utente non trovato per UID: ${uid}. L'utente potrebbe non avere permessi.`);
-      return null;
-    }
-  } catch (error) {
-    console.error("Errore nel recuperare il profilo utente:", error);
-    return null;
-  }
-};
+  useEffect(() => {
+    setAuthLoading(true);
 
-/**
- * Inizializza il listener per lo stato di autenticazione.
- * Aggiorna il globalStore con l'utente e il suo profilo.
- */
-export const initializeAuth = () => {
-  onAuthStateChanged(auth, async (user: User | null) => {
-    const { setUser, setUserProfile, setIsAuthLoading } = useGlobalStore.getState();
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user: User | null) => {
+      // Se c'è già una sottoscrizione attiva per il profilo, la cancello
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
 
-    if (user) {
-      // Utente autenticato
-      setUser(user);
-      const profile = await fetchUserProfile(user.uid);
-      setUserProfile(profile);
-    } else {
-      // Utente non autenticato o sloggato
-      setUser(null);
-      setUserProfile(null);
-    }
+      if (user) {
+        console.log("[Auth] Utente autenticato:", user.uid);
+        // L'utente è loggato. Ora recupero e sincronizzo il suo profilo.
+        const profileRef = doc(db, 'tecnici', user.uid);
 
-    // In ogni caso, il controllo iniziale dell'autenticazione è terminato.
-    setIsAuthLoading(false);
-  });
+        // Ascolto in tempo reale le modifiche al profilo
+        unsubscribeProfile = onSnapshot(profileRef, 
+          (docSnap) => {
+            if (docSnap.exists()) {
+              const profileData = { id: docSnap.id, ...docSnap.data() } as Tecnico;
+              console.log("[Auth] Profilo utente caricato/aggiornato:", profileData);
+              setUserAndProfile(user, profileData);
+            } else {
+              // Il profilo non esiste nel DB. L'utente è autenticato ma non autorizzato.
+              console.warn(`[Auth] Profilo non trovato per l'utente ${user.uid}. Logout forzato.`);
+              setUserAndProfile(user, null); // Imposto il profilo a null
+            }
+          },
+          (error) => {
+            console.error("[Auth] Errore durante l'ascolto del profilo:", error);
+            logout(); // In caso di errore, effettuo il logout per sicurezza
+          }
+        );
+
+      } else {
+        // L'utente non è loggato.
+        console.log("[Auth] Nessun utente autenticato. Eseguo logout.");
+        logout();
+      }
+    });
+
+    // Cleanup: rimuovo i listener quando il componente viene smontato
+    return () => {
+      console.log("[Auth] Cleanup: rimozione listeners.");
+      unsubscribeAuth();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
+  }, [setUserAndProfile, setAuthLoading, logout]);
 };

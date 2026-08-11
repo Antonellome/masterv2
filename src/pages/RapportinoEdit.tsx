@@ -12,15 +12,12 @@ import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
-import { useAuth } from '@/contexts/AuthProvider';
-import { useAnagraficaData } from '@/contexts/DataContext';
-import { db as firestoreDb } from '@/firebase'; 
-import { doc, addDoc, updateDoc, collection, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { useGlobalStore } from '@/stores/globalStore';
+import { api } from '@/services/api';
 import { db } from '@/db/db';
 import type { Rapportino, TipoGiornata, Tecnico } from '@/models/definitions';
-import { useAlert } from '@/contexts/AlertContext';
-dayjs.locale('it');
 
+dayjs.locale('it');
 
 const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly }) => {
     const oreOptions = useMemo(() => Array.from({ length: 49 }, (_, i) => i * 0.5), []);
@@ -92,14 +89,24 @@ const emptyDettaglioOre: DettaglioOreData = {
     ore: 8
 };
 
-
 const RapportinoEdit: React.FC = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
     const { id: reportId } = useParams<{ id: string }>();
-    const { showAlert } = useAlert();
     const isEditMode = Boolean(reportId);
-    const { tipiGiornata, tecnici, veicoli, navi, luoghi, loading: collectionsLoading } = useAnagraficaData();
+
+    const showNotification = useGlobalStore((state) => state.showNotification);
+    const profile = useGlobalStore((state) => state.profile);
+    const { 
+        tipiGiornata, tecnici, veicoli, navi, luoghi, 
+        areAnagraficheLoading: collectionsLoading 
+    } = useGlobalStore((state) => ({
+        tipiGiornata: state.tipiGiornata,
+        tecnici: state.tecnici,
+        veicoli: state.veicoli,
+        navi: state.navi,
+        luoghi: state.luoghi,
+        areAnagraficheLoading: state.areAnagraficheLoading,
+    }));
 
     const sortedTipiGiornata = useMemo(() => [...tipiGiornata].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [tipiGiornata]);
     const tipiGiornataLavorativi = useMemo(() => sortedTipiGiornata.filter(t => !isTrasfertaTipo(t)), [sortedTipiGiornata]);
@@ -109,7 +116,7 @@ const RapportinoEdit: React.FC = () => {
     const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')), [luoghi]);
     const sortedVeicoli = useMemo(() => [...veicoli].sort((a, b) => (a.targa || '').localeCompare(b.targa || '')), [veicoli]);
     const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => (`${a.cognome || ''} ${a.nome || ''}`.trim()).localeCompare((`${b.cognome || ''} ${b.nome || ''}`.trim()))), [tecnici]);
-
+    
     const [tecnicoResponsabileId, setTecnicoResponsabileId] = useState<string | null>(null);
     const [data, setData] = useState<Dayjs | null>(dayjs());
     const [giornataId, setGiornataId] = useState('');
@@ -172,14 +179,11 @@ const RapportinoEdit: React.FC = () => {
                     if (reportData) {
                         const dateToLoad = reportData.dataInizio || reportData.data;
                         
-                        // --- INIZIO CORREZIONE DEFINITIVA DATA ---
                         let dataDaImpostare: Dayjs | null = null;
                         if (dateToLoad) {
-                            // Gestisce il formato { seconds: ..., nanoseconds: ... } da Dexie/Firestore
                             if (typeof dateToLoad.seconds === 'number') {
                                 dataDaImpostare = dayjs(new Date(dateToLoad.seconds * 1000));
                             } else {
-                                // Fallback per oggetti Date, stringhe ISO, o altri formati leggibili da dayjs
                                 const parsedDate = dayjs(dateToLoad);
                                 if (parsedDate.isValid()) {
                                     dataDaImpostare = parsedDate;
@@ -187,7 +191,6 @@ const RapportinoEdit: React.FC = () => {
                             }
                         }
                         setData(dataDaImpostare);
-                        // --- FINE CORREZIONE DEFINITIVA DATA ---
 
                         setTecnicoResponsabileId(reportData.tecnicoId);
                         const resolvedGiornataId = reportData.tipoGiornataId || '';
@@ -220,20 +223,20 @@ const RapportinoEdit: React.FC = () => {
                         setDettaglioOre(dettagliCaricati);
                         
                     } else {
-                        showAlert("Rapportino non trovato nel database locale.", "error");
+                        showNotification("Rapportino non trovato nel database locale.", "error");
                         navigate('/reportistica');
                     }
                 } catch (e) {
                     console.error("Errore caricamento report da Dexie: ", e);
-                    showAlert("Errore durante il caricamento del report locale.", "error");
+                    showNotification("Errore durante il caricamento del report locale.", "error");
                 } finally {
                     setPageLoading(false);
                 }
             };
             loadReportFromLocalDB();
         } else {
-            setTecnicoResponsabileId(user?.tecnicoId || null);
-            const tecnicoCorrente = tecnici.find(t => t.id === user?.tecnicoId);
+            setTecnicoResponsabileId(profile.tecnicoId || null);
+            const tecnicoCorrente = tecnici.find(t => t.id === profile.tecnicoId);
             setDettaglioOre(tecnicoCorrente ? [{
                 ...emptyDettaglioOre,
                 tecnicoId: tecnicoCorrente.id,
@@ -243,7 +246,7 @@ const RapportinoEdit: React.FC = () => {
             setTrasfertaId('');
             setPageLoading(false);
         }
-    }, [isEditMode, reportId, navigate, collectionsLoading, tipiGiornataMap, showAlert, user?.tecnicoId, tecnici]);
+    }, [isEditMode, reportId, navigate, collectionsLoading, tipiGiornataMap, showNotification, profile.tecnicoId, tecnici]);
     
     const tecnicoResponsabileSelezionato = useMemo(() => {
         if (!tecnicoResponsabileId) return null;
@@ -300,7 +303,7 @@ const RapportinoEdit: React.FC = () => {
 
     const removeTecnico = (idToRemove: string) => {
         if (idToRemove === tecnicoResponsabileId) {
-            showAlert("Non puoi rimuovere il tecnico responsabile.", "warning");
+            showNotification("Non puoi rimuovere il tecnico responsabile.", "warning");
             return;
         }
         setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== idToRemove));
@@ -309,24 +312,22 @@ const RapportinoEdit: React.FC = () => {
     const handleCloseModal = () => setIsModalOpen(false);
     const handleSaveFromModal = () => { if (tempDettaglioOre) { handleOreUpdate(tempDettaglioOre); } handleCloseModal(); };
     
-    // --- CORREZIONE DEFINITIVA SALVATAGGIO --- //
     const handleSubmit = async () => {
         if (!tecnicoResponsabileId || !giornataId || !data) {
-            showAlert("Compila tutti i campi obbligatori: Tecnico, Data e Tipo Giornata.", "warning");
+            showNotification("Compila tutti i campi obbligatori: Tecnico, Data e Tipo Giornata.", "warning");
             return;
         }
         if (includeTrasferta && !trasfertaId) {
-            showAlert("Se attivi la trasferta devi selezionare il tipo di trasferta.", "warning");
+            showNotification("Se attivi la trasferta devi selezionare il tipo di trasferta.", "warning");
             return;
         }
 
         setIsSaving(true);
         try {
-            const now = new Date();
             const dataRapportino = data.toDate();
 
-            // 1. Oggetto base con tipi JS standard per Dexie
-            const commonData = {
+            const rapportinoData: Partial<Rapportino> = {
+                // @ts-ignore
                 dataInizio: dataRapportino,
                 tipoGiornataId: giornataId,
                 tecnicoId: tecnicoResponsabileId,
@@ -349,59 +350,28 @@ const RapportinoEdit: React.FC = () => {
                 materialiImpiegati: isLavorativo ? materialiImpiegati : '',
                 ordineLavoro: isLavorativo ? ordineLavoro : '',
                 ...(includeTrasferta && trasfertaId ? { trasfertaId } : {}),
+                ...(firma && { firmaVettoriale: firma }),
             };
 
             if (isEditMode && reportId) {
-                // --- MODALITÀ MODIFICA ---
-                // Oggetto per Dexie (locale)
-                const localData = {
-                    ...commonData,
-                    id: reportId,
-                    updatedAt: now,
-                    ...(firma && { firmaVettoriale: firma }),
-                };
-
-                // Oggetto per Firestore (remoto)
-                const remoteData = {
-                    ...commonData,
-                    dataInizio: Timestamp.fromDate(dataRapportino), // Converte per Firestore
-                    updatedAt: serverTimestamp(),
-                    ...(firma && { firmaVettoriale: firma }),
-                };
-
-                await updateDoc(doc(firestoreDb, 'rapportini', reportId), remoteData);
-                await db.rapportini.put(localData);
-                showAlert("Rapportino aggiornato!", "success");
+                await api.rapportini.update(reportId, rapportinoData);
+                await db.rapportini.update(reportId, { ...rapportinoData, updatedAt: new Date() });
+                showNotification("Rapportino aggiornato con successo!", "success");
 
             } else {
-                // --- MODALITÀ CREAZIONE ---
-                // Oggetto per Dexie (locale)
-                const localData = {
-                    ...commonData,
-                    createdAt: now,
-                    updatedAt: now,
-                    createdBy: user?.uid,
+                const finalData = {
+                    ...rapportinoData,
+                    createdBy: profile.id,
                 };
-
-                // Oggetto per Firestore (remoto)
-                const remoteData = {
-                    ...commonData,
-                    dataInizio: Timestamp.fromDate(dataRapportino),
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
-                    createdBy: user?.uid,
-                };
-                
-                const docRef = await addDoc(collection(firestoreDb, 'rapportini'), remoteData);
-                // Assegna l'ID generato e salva in Dexie
-                await db.rapportini.put({ ...localData, id: docRef.id });
-                showAlert("Rapportino creato!", "success");
+                const newId = await api.rapportini.create(finalData);
+                await db.rapportini.put({ ...finalData, id: newId, createdAt: new Date(), updatedAt: new Date() });
+                showNotification("Rapportino creato con successo!", "success");
             }
 
             navigate('/reportistica');
         } catch (error: any) { 
-            console.error("Errore salvataggio: ", error); 
-            showAlert(`Errore durante il salvataggio: ${error.message}`, "error");
+            console.error("Errore salvataggio tramite API centralizzata: ", error); 
+            showNotification(error.message || "Errore durante il salvataggio.", "error");
         } finally { 
             setIsSaving(false); 
         }

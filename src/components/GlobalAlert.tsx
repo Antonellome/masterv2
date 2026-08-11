@@ -1,34 +1,94 @@
 
-import React from 'react';
-import { Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-import { useGlobalStore } from '../stores/globalStore';
+import { useGlobalStore } from '@/stores/globalStore';
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Snackbar,
+} from '@mui/material';
 
-const GlobalAlert: React.FC = () => {
-  // Esempio di come leggere lo stato degli alert dallo store
-  // const { alertOptions, confirmOptions, hideAlert, resolveConfirm } = useGlobalStore();
+/**
+ * Componente globale per la gestione di notifiche (Snackbar) e dialoghi di conferma (Dialog).
+ * Legge lo stato direttamente dallo store Zustand e non richiede props.
+ */
+export const GlobalAlert = () => {
+  // CORREZIONE: Usiamo i nomi corretti ('dialog', 'hideDialog') come definiti in globalStore.ts
+  const {
+    notification,
+    dialog,
+    hideNotification,
+    hideDialog,
+  } = useGlobalStore(state => ({
+    notification: state.notification,
+    dialog: state.dialog,
+    hideNotification: state.hideNotification,
+    hideDialog: state.hideDialog,
+  }));
 
-  // Logica per mostrare Snackbar o Dialog in base a alertOptions/confirmOptions
+  const handleCloseSnackbar = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    hideNotification();
+  };
+
+  const handleAlertClose = (confirmed: boolean) => {
+    // Eseguiamo il callback `onConfirm` solo se l'utente ha confermato
+    if (confirmed && dialog?.onConfirm) {
+      dialog.onConfirm();
+    }
+    hideDialog();
+  };
 
   return (
     <>
-      {/* Esempio di Snackbar */}
-      {/* <Snackbar open={alertOptions.open} autoHideDuration={6000} onClose={hideAlert}>
-        <Alert onClose={hideAlert} severity={alertOptions.severity} sx={{ width: '100%' }}>
-          {alertOptions.message}
-        </Alert>
-      </Snackbar> */}
+      {/* --- Componente per le NOTIFICHE --- */}
+      <Snackbar
+        open={notification?.open || false}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <div>
+          {notification?.message && (
+            <Alert
+              onClose={handleCloseSnackbar}
+              severity={notification.severity}
+              variant="filled"
+              sx={{ width: '100%' }}
+            >
+              {notification.message}
+            </Alert>
+          )}
+        </div>
+      </Snackbar>
 
-      {/* Esempio di Dialog di conferma */}
-      {/* <Dialog open={confirmOptions.open} onClose={() => resolveConfirm(false)}>
-        <DialogTitle>{confirmOptions.title}</DialogTitle>
-        <DialogContent>{confirmOptions.message}</DialogContent>
+      {/* --- Componente per i DIALOGHI DI CONFERMA --- */}
+      <Dialog
+        open={dialog?.open || false}
+        onClose={() => handleAlertClose(false)}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">{dialog?.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            {dialog?.message}
+          </DialogContentText>
+        </DialogContent>
         <DialogActions>
-          <Button onClick={() => resolveConfirm(false)}>Annulla</Button>
-          <Button onClick={() => resolveConfirm(true)} autoFocus>Conferma</Button>
+          <Button onClick={() => handleAlertClose(false)} color="primary">
+            {dialog?.cancelText || 'Annulla'}
+          </Button>
+          <Button onClick={() => handleAlertClose(true)} color="primary" autoFocus>
+            {dialog?.confirmText || 'Conferma'}
+          </Button>
         </DialogActions>
-      </Dialog> */}
+      </Dialog>
     </>
   );
 };
-
-export default GlobalAlert;

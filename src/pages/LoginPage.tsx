@@ -1,7 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthProvider';
+// 1. Rimuoviamo il vecchio hook e importiamo quello nuovo e il servizio api
+import { useGlobalStore } from '@/stores/globalStore';
+import { api } from '@/services/api';
 import { Container, Box, TextField, Button, Typography, Alert, Avatar, Link, Grid } from '@mui/material';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/firebase';
@@ -9,14 +11,15 @@ import { auth } from '@/firebase';
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, error, setError, loading } = useAuth();
+  // 2. Usiamo uno stato locale per l'UI della pagina di login
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const [resetSent, setResetSent] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setError(null);
-  }, [setError]);
+  // 3. Prendiamo la funzione per mostrare notifiche globali, se necessario
+  const showNotification = useGlobalStore((state) => state.showNotification);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -24,11 +27,19 @@ const LoginPage: React.FC = () => {
       setError("Email e password sono obbligatori.");
       return;
     }
+    setLoading(true);
+    setError(null);
     try {
-      await login(email, password);
-      navigate('/');
+      // 4. Usiamo il nostro nuovo servizio API per il login
+      await api.auth.login(email, password);
+      // Il redirect è gestito globalmente da App.tsx, quindi non serve più navigate('/')
+      showNotification('Accesso effettuato con successo!', 'success');
     } catch (err: any) {
       console.error("Tentativo di login fallito:", err.message);
+      setError(err.message || "Si è verificato un errore durante il login.");
+      showNotification('Credenziali non valide o utente non trovato.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -42,9 +53,11 @@ const LoginPage: React.FC = () => {
     try {
       await sendPasswordResetEmail(auth, email);
       setResetSent(true);
+      showNotification('Email di reset inviata! Controlla la tua posta.', 'success');
     } catch (error: any) {
       console.error("Errore invio email di reset:", error);
       setResetError("Impossibile inviare l'email di reset. Controlla l'indirizzo email e riprova.");
+      showNotification('Impossibile inviare l\'email di reset.', 'error');
     }
   };
 
@@ -88,6 +101,7 @@ const LoginPage: React.FC = () => {
             autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
           />
           <TextField
             margin="normal"
@@ -100,6 +114,7 @@ const LoginPage: React.FC = () => {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
           />
 
           {error && <Alert severity="error" sx={{ mt: 2, width: '100%' }}>{error}</Alert>}

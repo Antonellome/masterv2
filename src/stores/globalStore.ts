@@ -1,44 +1,105 @@
 
 import { create } from 'zustand';
-import { User } from 'firebase/auth'; // Importa il tipo User
-import { UserProfile } from '@/models/definitions'; // Assumendo che UserProfile esista
-import { api } from '@/services/api'; // Assumendo che api esista
+import { User } from 'firebase/auth';
+import { Tecnico, Cliente, Veicolo, Cantiere, Ditta, TipoGiornata, Luogo, Nave } from '@/models/definitions';
 
-// Definisce la struttura dello slice di autenticazione
-interface AuthState {
-  user: User | null;
-  userProfile: UserProfile | null;
-  isAuthLoading: boolean;
+// Definiamo l'interfaccia per lo stato dell'utente e i suoi permessi
+interface UserState {
+  user: User | null; // L'oggetto User di Firebase
+  profile: Tecnico | null; // Il profilo 'Tecnico' dal nostro DB
   isAdmin: boolean;
-  login: (email: string, pass: string) => Promise<void>;
-  logout: () => Promise<void>;
-  setUser: (user: User | null) => void; // Azione per aggiornare l'utente da auth.ts
-  setUserProfile: (profile: UserProfile | null) => void; // Azione per aggiornare il profilo
-  setIsAuthLoading: (loading: boolean) => void;
+  isAuthenticated: boolean;
+  isLoading: boolean; // Per gestire lo stato di caricamento iniziale
 }
 
-// Estende GlobalState con AuthState
-interface GlobalState extends AuthState {}
+// Definiamo l'interfaccia per i dati delle anagrafiche
+interface DataState {
+  tecnici: Tecnico[];
+  clienti: Cliente[];
+  veicoli: Veicolo[];
+  cantieri: Cantiere[];
+  ditte: Ditta[];
+  tipiGiornata: TipoGiornata[];
+  luoghi: Luogo[];
+  navi: Nave[];
+  lastUpdated: Date | null;
+  loading: boolean; // Per caricamenti specifici delle anagrafiche
+}
 
-export const useGlobalStore = create<GlobalState>((set, get) => ({
-  // Stato iniziale per l'autenticazione
-  user: null,
-  userProfile: null,
-  isAuthLoading: true, // Inizia come true finché non si riceve il primo stato da Firebase
-  isAdmin: false,
+// Definiamo l'interfaccia per lo stato delle notifiche e dei dialoghi
+interface UIState {
+  notification: { open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' };
+  dialog: { open: boolean; title: string; content: string; onConfirm: () => void };
+}
 
-  // Azioni di autenticazione
-  login: async (email, password) => {
-    // La logica effettiva di login con Firebase Auth sarà qui
-    // Esempio: await signInWithEmailAndPassword(auth, email, password);
-  },
-  logout: async () => {
-    // La logica di logout sarà qui
-    // Esempio: await signOut(auth);
-  },
+// Azioni relative all'autenticazione
+interface AuthActions {
+  setUserAndProfile: (user: User | null, profile: Tecnico | null) => void;
+  setAuthLoading: (isLoading: boolean) => void;
+  logout: () => void;
+}
 
-  // Azioni per aggiornare lo stato dall'esterno (es. da auth.ts)
-  setUser: (user) => set({ user }),
-  setUserProfile: (profile) => set({ userProfile: profile, isAdmin: profile?.isAdmin ?? false }),
-  setIsAuthLoading: (loading) => set({ isAuthLoading: loading }),
+// Azioni relative ai dati
+interface DataActions {
+  setData: (data: Partial<DataState>) => void;
+  setDataLoading: (loading: boolean) => void;
+}
+
+// Azioni relative all'interfaccia utente
+interface UIActions {
+  showNotification: (message: string, severity: UIState['notification']['severity']) => void;
+  hideNotification: () => void;
+  showDialog: (title: string, content: string, onConfirm: () => void) => void;
+  hideDialog: () => void;
+}
+
+// Uniamo tutto in un'unica interfaccia per lo store globale
+type GlobalStore = UserState & DataState & UIState & AuthActions & DataActions & UIActions;
+
+const initialState = {
+    // User
+    user: null,
+    profile: null,
+    isAdmin: false,
+    isAuthenticated: false,
+    isLoading: true,
+    // Data
+    tecnici: [],
+    clienti: [],
+    veicoli: [],
+    cantieri: [],
+    ditte: [],
+    tipiGiornata: [],
+    luoghi: [],
+    navi: [],
+    lastUpdated: null,
+    loading: false,
+    // UI
+    notification: { open: false, message: '', severity: 'info' as const },
+    dialog: { open: false, title: '', content: '', onConfirm: () => {} },
+}
+
+export const useGlobalStore = create<GlobalStore>((set, get) => ({
+    ...initialState,
+
+    // Implementazione Azioni Auth
+    setUserAndProfile: (user, profile) => set({
+        user,
+        profile,
+        isAuthenticated: !!user,
+        isAdmin: profile?.isAdmin ?? false,
+        isLoading: false,
+    }),
+    setAuthLoading: (isLoading) => set({ isLoading }),
+    logout: () => set({ ...initialState, isLoading: false }),
+
+    // Implementazione Azioni Dati
+    setData: (data) => set({ ...data, lastUpdated: new Date(), loading: false }),
+    setDataLoading: (loading) => set({ loading }),
+
+    // Implementazione Azioni UI
+    showNotification: (message, severity) => set({ notification: { open: true, message, severity } }),
+    hideNotification: () => set(state => ({ ...state, notification: { ...state.notification, open: false }})),
+    showDialog: (title, content, onConfirm) => set({ dialog: { open: true, title, content, onConfirm } }),
+    hideDialog: () => set(state => ({ ...state, dialog: { ...state.dialog, open: false }})),
 }));

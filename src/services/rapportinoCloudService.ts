@@ -3,54 +3,46 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/firebase';
 import type { Rapportino } from '@/models/definitions';
 
-// Otteniamo le referenze alle nostre Cloud Functions deployate per i rapportini
-const createRapportinoFn = httpsCallable(functions, 'createRapportino');
-const updateRapportinoFn = httpsCallable(functions, 'updateRapportino');
-const deleteRapportinoFn = httpsCallable(functions, 'deleteRapportino');
+// Definiamo un tipo per l'input della funzione, che è un Rapportino parziale
+// senza i campi gestiti dal server (come id, createdAt, updatedAt)
+type RapportinoInputData = Partial<Omit<Rapportino, 'id' | 'createdAt' | 'updatedAt'>>;
 
-/**
- * Chiama la Cloud Function per creare un nuovo rapportino.
- * La funzione gestirà la logica di business, validazione e salvataggio sicuro.
- * @param data - I dati del rapportino da creare (senza id, che verrà generato o gestito dal backend).
- * @returns L'ID del nuovo rapportino.
- */
-export const createRapportino = async (data: Partial<Rapportino>): Promise<{ id: string }> => {
-    try {
-        const result = await createRapportinoFn(data);
-        return result.data as { id: string };
-    } catch (error) {
-        console.error("Errore durante la chiamata a createRapportino:", error);
-        // Rilancio l'errore per permettere al SyncService di gestirlo (es. conflitti)
-        throw error;
-    }
-};
+const createRapportinoCloud = httpsCallable<RapportinoInputData, { id: string }>(functions, 'createRapportino');
+const updateRapportinoCloud = httpsCallable<{ id: string; data: RapportinoInputData }, void>(functions, 'updateRapportino');
+const deleteRapportinoCloud = httpsCallable<{ id: string }, void>(functions, 'deleteRapportino');
 
-/**
- * Chiama la Cloud Function per aggiornare un rapportino esistente.
- * La funzione gestirà la logica di business, validazione e salvataggio sicuro.
- * @param data - I dati da aggiornare, deve includere l'ID del rapportino.
- */
-export const updateRapportino = async (data: Partial<Rapportino>): Promise<void> => {
-    if (!data.id) {
-        throw new Error("L'ID del rapportino è richiesto per l'aggiornamento.");
-    }
+export const rapportinoCloudService = {
+  create: async (data: RapportinoInputData) => {
+    console.log("Invio a Cloud Function 'createRapportino':", data);
     try {
-        await updateRapportinoFn(data);
+      const result = await createRapportinoCloud(data);
+      console.log("Risposta da 'createRapportino':", result.data.id);
+      return result.data.id;
     } catch (error) {
-        console.error("Errore durante la chiamata a updateRapportino:", error);
-        throw error;
+      console.error("Errore durante la chiamata a createRapportino:", error);
+      throw new Error("La creazione del rapportino sul server è fallita.");
     }
-};
+  },
 
-/**
- * Chiama la Cloud Function per eliminare un rapportino.
- * @param id - L'ID del rapportino da eliminare.
- */
-export const deleteRapportino = async (id: string): Promise<void> => {
+  update: async (id: string, data: RapportinoInputData) => {
+    console.log(`Invio a Cloud Function 'updateRapportino' (id: ${id}):`, data);
     try {
-        await deleteRapportinoFn({ id });
+      await updateRapportinoCloud({ id, data });
+      console.log("Risposta da 'updateRapportino' ricevuta.");
     } catch (error) {
-        console.error("Errore durante la chiamata a deleteRapportino:", error);
-        throw error;
+      console.error("Errore durante la chiamata a updateRapportino:", error);
+      throw new Error("L'aggiornamento del rapportino sul server è fallito.");
     }
+  },
+
+  delete: async (id: string) => {
+    console.log(`Invio a Cloud Function 'deleteRapportino' (id: ${id})`);
+     try {
+      await deleteRapportinoCloud({ id });
+      console.log("Risposta da 'deleteRapportino' ricevuta.");
+    } catch (error) {
+      console.error("Errore durante la chiamata a deleteRapportino:", error);
+      throw new Error("L'eliminazione del rapportino sul server è fallita.");
+    }
+  }
 };

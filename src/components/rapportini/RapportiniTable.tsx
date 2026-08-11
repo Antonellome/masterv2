@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Rapportino } from '@/models/definitions';
-import { useData } from '@/contexts/DataContext';
+import { useGlobalStore } from '@/stores/globalStore'; // SOSTITUITO
 import { 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
     Paper, IconButton, Box, Typography, Chip 
@@ -18,30 +18,46 @@ interface RapportiniTableProps {
 }
 
 const RapportiniTable: React.FC<RapportiniTableProps> = ({ rapportini, onEdit, onDelete, onPrint, onCopy }) => {
-  // Usiamo il DataContext per ottenere le mappe delle anagrafiche
-  const { tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap } = useData();
+  // Usiamo useGlobalStore per ottenere le mappe delle anagrafiche
+  const { tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap } = useGlobalStore(state => ({
+      tecniciMap: state.tecniciMap,
+      clientiMap: state.clientiMap,
+      naviMap: state.naviMap,
+      luoghiMap: state.luoghiMap,
+      tipiGiornataMap: state.tipiGiornataMap,
+  }));
 
-  // Memoizziamo i dati processati per evitare ricalcoli inutili
+  // La logica di processamento dati rimane identica
   const processedData = useMemo(() => {
     return rapportini.map(r => {
-      const tecnicoPrincipale = tecniciMap.get(r.tecnicoId);
-      const nomeTecnico = tecnicoPrincipale ? `${tecnicoPrincipale.nome} ${tecnicoPrincipale.cognome}` : `ID: ${r.tecnicoId}`;
-      
-      const altriTecniciCount = r.presenze?.filter(pId => pId !== r.tecnicoId).length || 0;
-      const displayTecnici = `${nomeTecnico} ${altriTecniciCount > 0 ? `(+${altriTecniciCount})` : ''}`;
+        const dataInizio = r.dataInizio || r.data;
+        const dataValida = dataInizio ? (typeof dataInizio.seconds === 'number' ? dayjs(new Date(dataInizio.seconds * 1000)) : dayjs(dataInizio)) : dayjs();
 
-      return {
-        id: r.id,
-        data: dayjs(r.dataInizio).format('DD/MM/YYYY'),
-        tecnici: displayTecnici,
-        tipoGiornata: tipiGiornataMap.get(r.tipoGiornataId)?.nome || 'N/D',
-        ordineLavoro: r.numeroOrdine || 'N/A',
-        nave: naviMap.get(r.naveId)?.nome || 'Altro',
-        luogo: luoghiMap.get(r.luogoId)?.nome || 'N/D',
-        cliente: clientiMap.get(naviMap.get(r.naveId)?.clienteId || luoghiMap.get(r.luogoId)?.clienteId || r.clienteId)?.nome || 'N/D',
-        oreResp: `${r.oreResponsabile}h`,
-        oreTotali: `${r.oreTotali}h`,
-      };
+        const tecnicoPrincipale = tecniciMap.get(r.tecnicoId);
+        const nomeTecnico = tecnicoPrincipale ? `${tecnicoPrincipale.cognome} ${tecnicoPrincipale.nome}`.trim() : `ID: ${r.tecnicoId}`;
+      
+        const altriTecniciCount = r.presenze?.filter(pId => pId !== r.tecnicoId).length || 0;
+        const displayTecnici = `${nomeTecnico} ${altriTecniciCount > 0 ? `(+${altriTecniciCount})` : ''}`;
+        
+        const oreLavoro = r.dettaglioOreTecnici?.reduce((acc, curr) => acc + (curr.ore || 0), 0) || r.oreLavoro || 0;
+        const oreResponsabile = r.dettaglioOreTecnici?.find(d => d.tecnicoId === r.tecnicoId)?.ore || 0;
+
+        const nave = naviMap.get(r.naveId || '');
+        const luogo = luoghiMap.get(r.luogoId || '');
+        const cliente = clientiMap.get(nave?.clienteId || luogo?.clienteId || '');
+
+        return {
+            id: r.id,
+            data: dataValida.format('DD/MM/YYYY'),
+            tecnici: displayTecnici,
+            tipoGiornata: tipiGiornataMap.get(r.tipoGiornataId)?.nome || 'N/D',
+            ordineLavoro: r.ordineLavoro || 'N/A',
+            nave: nave?.nome || 'Altro',
+            luogo: luogo?.nome || 'N/D',
+            cliente: cliente?.nome || 'N/D',
+            oreResp: `${oreResponsabile}h`,
+            oreTotali: `${oreLavoro}h`,
+        };
     });
   }, [rapportini, tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap]);
 
@@ -54,10 +70,8 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ rapportini, onEdit, o
             <TableCell>Tecnici</TableCell>
             <TableCell>Tipo Giornata</TableCell>
             <TableCell>Ordine Lavoro</TableCell>
-            <TableCell>Nave</TableCell>
-            <TableCell>Luogo</TableCell>
+            <TableCell>Nave/Luogo</TableCell>
             <TableCell>Cliente</TableCell>
-            <TableCell>Ore Resp.</TableCell>
             <TableCell>Ore Totali</TableCell>
             <TableCell align="right">Azioni</TableCell>
           </TableRow>
@@ -71,15 +85,13 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({ rapportini, onEdit, o
                 <Chip 
                   label={row.tipoGiornata} 
                   size="small"
-                  color={row.tipoGiornata === 'Straordinario' ? 'secondary' : (row.tipoGiornata === 'Permesso' ? 'warning' : 'primary')}
+                  color={row.tipoGiornata.toLowerCase().includes('ferie') || row.tipoGiornata.toLowerCase().includes('malattia') ? 'warning' : 'primary'}
                 />
               </TableCell>
               <TableCell>{row.ordineLavoro}</TableCell>
-              <TableCell>{row.nave}</TableCell>
-              <TableCell>{row.luogo}</TableCell>
+              <TableCell>{row.nave !== 'Altro' ? row.nave : row.luogo}</TableCell>
               <TableCell>{row.cliente}</TableCell>
-              <TableCell>{row.oreResp}</TableCell>
-              <TableCell>{row.oreTotali}</TableCell>
+              <TableCell sx={{fontWeight: 'bold'}}>{row.oreTotali}</TableCell>
               <TableCell align="right">
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <IconButton size="small" onClick={() => onEdit(row.id)} aria-label="Modifica">

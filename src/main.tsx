@@ -1,42 +1,21 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { GlobalStyles } from '@mui/material';
-
+import { BrowserRouter as Router } from 'react-router-dom';
 import App from './App';
-import { ThemeProvider } from '@/contexts/ThemeContext';
-import { AuthProvider } from '@/contexts/AuthProvider';
-import { DataProvider } from '@/contexts/DataContext';
-import { NotificationProvider } from '@/contexts/NotificationProvider';
-import { RefreshProvider } from '@/contexts/RefreshContext';
-import { AlertProvider } from '@/contexts/AlertContext';
-
+import { LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFnsV3';
+import { it } from 'date-fns/locale';
 import './index.css';
-import 'dayjs/locale/it';
-import './firebase';
+
+// L'inizializzazione dell'autenticazione ora avviene DENTRO l'app React
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <ThemeProvider>
-        <GlobalStyles styles={{ a: { color: 'inherit', textDecoration: 'none' } }} />
-        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='it'>
-          <AuthProvider>
-            <DataProvider>
-              <RefreshProvider>
-                <NotificationProvider>
-                  <AlertProvider>
-                    <App />
-                  </AlertProvider>
-                </NotificationProvider>
-              </RefreshProvider>
-            </DataProvider>
-          </AuthProvider>
-        </LocalizationProvider>
-      </ThemeProvider>
-    </BrowserRouter>
-  </React.StrictMode>,
+    <Router>
+      <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={it}>
+        <App />
+      </LocalizationProvider>
+    </Router>
+  </React.StrictMode>
 );

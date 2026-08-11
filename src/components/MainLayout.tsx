@@ -1,24 +1,9 @@
 
 import { useState } from 'react';
 import {
-    AppBar,
-    Box,
-    CssBaseline,
-    Drawer,
-    IconButton,
-    List,
-    Toolbar,
-    Typography,
-    useMediaQuery,
-    Avatar,
-    Menu,
-    MenuItem,
-    Badge,
-    Tooltip,
-    useTheme,
-    CircularProgress,
-    keyframes,
-    ListItemIcon
+    AppBar, Box, CssBaseline, Drawer, IconButton, List, Toolbar, Typography, 
+    useMediaQuery, Avatar, Menu, MenuItem, Badge, Tooltip, useTheme, 
+    CircularProgress, keyframes, ListItemIcon
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import PeopleIcon from '@mui/icons-material/People';
@@ -35,14 +20,12 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import DnsIcon from '@mui/icons-material/Dns';
 import SentimentSatisfiedAltOutlinedIcon from '@mui/icons-material/SentimentSatisfiedAltOutlined';
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/firebase';
-import { useAuth } from '@/contexts/AuthProvider';
+import { useGlobalStore } from '@/stores/globalStore';
 import { useScadenze } from '@/hooks/useScadenze';
-import { useRefresh } from '@/contexts/RefreshContext';
-import { useNotifications } from '@/contexts/NotificationProvider';
 import Logo from '@/components/Logo';
 import NavMenuItem from './NavMenuItem';
+
+// RIMOSSO: import { useNotifications } from '@/contexts/NotificationProvider';
 
 const drawerWidth = 260;
 const appBarHeight = '80px';
@@ -84,14 +67,22 @@ const pageTitles: { [key: string]: string } = {
 const MainLayout = () => { 
     const [mobileOpen, setMobileOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-    const { user, loading } = useAuth();
-    const { activeScadenzeCount, overallStatus } = useScadenze();
-    const { triggerRefresh } = useRefresh();
-    const { unreadCount } = useNotifications();
     const navigate = useNavigate();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const location = useLocation();
+
+    const user = useGlobalStore((state) => state.user);
+    const loading = useGlobalStore((state) => state.isAuthLoading); 
+    const logout = useGlobalStore((state) => state.logout);
+    const triggerRefresh = useGlobalStore((state) => state.triggerRefresh);
+
+    // --- MODIFICA CHIAVE: Dati delle notifiche dallo store globale ---
+    const unreadCount = useGlobalStore((state) => state.unreadCount);
+    const areNotificationsLoading = useGlobalStore((state) => state.areNotificationsLoading);
+
+    // L'hook useScadenze rimane per ora, sarà migrato successivamente
+    const { activeScadenzeCount, overallStatus } = useScadenze();
 
     const getPageTitle = (path: string) => {
         const anagraficheSubPages: { [key: string]: string } = {
@@ -115,8 +106,10 @@ const MainLayout = () => {
     const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
     const handleMenu = (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);
     const handleClose = () => setAnchorEl(null);
+
     const handleLogout = async () => {
-        await signOut(auth);
+        handleClose();
+        await logout(); 
         navigate('/login');
     };
 
@@ -166,7 +159,7 @@ const MainLayout = () => {
         <Box sx={{ display: 'flex', height: '100vh' }}>
             <CssBaseline />
             <AppBar component="header" className="no-print" position="fixed" elevation={0} sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, height: appBarHeight, justifyContent: 'center' }}>
-                <Toolbar sx={{ position: 'relative', height: '100%' }}>
+                 <Toolbar sx={{ position: 'relative', height: '100%' }}>
                     <IconButton color="inherit" aria-label="open drawer" edge="start" onClick={handleDrawerToggle} sx={{ mr: 2, display: { md: 'none' } }}><MenuIcon /></IconButton>
                     
                     <Box sx={{ 
@@ -205,7 +198,7 @@ const MainLayout = () => {
                         <Tooltip title="Notifiche">
                              <IconButton color="inherit" component={NavLink} to="/notifications">
                                  <Badge badgeContent={unreadCount} color="error">
-                                     <NotificationsIcon />
+                                    {areNotificationsLoading ? <CircularProgress size={24} color="inherit" /> : <NotificationsIcon />}
                                  </Badge>
                              </IconButton>
                         </Tooltip>

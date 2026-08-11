@@ -1,70 +1,58 @@
-# Piano di Recupero Ristrutturazione Frontend
+# Piano di Ricostruzione e Recupero
 
-*Questo documento è la checklist operativa per ripristinare il refactoring andato perso. Ogni passo deve essere eseguito in sequenza.*
+*Questo documento è la nostra checklist operativa per **ricostruire** il refactoring andato perso. Ogni fase è un passo per ripristinare l'architettura corretta, basata sull'analisi di `app_master.md`.*
 
-**Obiettivo:** Ristrutturare il frontend migrando tutti i `Context` ad un unico store globale `Zustand` (`globalStore.ts`), eliminando il "Provider Hell" e centralizzando la gestione dello stato.
-
----
-
-### **FASE 1: Creazione delle Fondamenta (Store e Idratazione)**
-
-1.  **Crea `src/stores/globalStore.ts`:**
-    -   Definire la struttura base dello store con Zustand, inizialmente vuota.
-
-2.  **Crea `src/services/api.ts`:**
-    -   Implementare il servizio per la comunicazione con le Cloud Functions (necessario per le fasi successive).
-
-3.  **Crea `src/auth.ts`:**
-    -   Implementare l'inizializzatore `initializeAuth` che ascolta `onAuthStateChanged` e aggiorna lo store.
-
-4.  **Crea `src/components/DataHydrator.tsx`:**
-    -   Implementare il componente che usa `useLiveQuery` per leggere da Dexie e popola `globalStore`.
-
-5.  **Crea `src/components/GlobalAlert.tsx`:**
-    -   Implementare il componente per la visualizzazione centralizzata di `Snackbar` e `Dialog` di conferma.
-
-6.  **Modifica `src/models/definitions.ts`:**
-    -   Assicurarsi che tutte le interfacce dei dati (es. `EventoGiornaliero`, `Notifica`) siano definite.
-
-7.  **Modifica `src/db/db.ts`:**
-    -   Assicurarsi che lo schema di Dexie includa tutte le tabelle necessarie (`eventi_giornalieri`, `notifiche`, etc.).
+**Obiettivo Strategico:** Ricostruire l'architettura frontend che era stata completata, risolvendo le criticità identificate, principalmente:
+- **A-2 (Stato Globale Frammentato)** e **A-5 ("Provider Hell")**: Ricostruendo l'architettura basata su un unico store globale `Zustand` (`globalStore.ts`).
+- **SEC-1 (Modello di Sicurezza Incoerente)** e **DI-1 (Operazioni Non Atomiche)**: Ripristinando l'uso obbligatorio delle Cloud Functions tramite un servizio `api.ts`.
 
 ---
 
-### **FASE 2: Migrazione dei Context Provider**
+### **FASE 1: Ricostruzione delle Fondamenta (Store e Servizi Centrali)**
 
-1.  **Migra `AuthProvider`:**
-    -   Integrare `user`, `isAdmin`, `login`, `logout` in `globalStore`.
-    -   Modificare `main.tsx` per chiamare `initializeAuth`.
-    -   Sostituire `useAuth()` con `useGlobalStore()` in `LoginPage`, `ProtectedRoute`, `MainLayout`.
-    -   **Elimina `AuthProvider.tsx` e i file associati.**
+*Questa fase ricostruisce l'infrastruttura centrale che era andata persa.*
 
-2.  **Migra `DataProvider` e `RefreshProvider`:**
-    -   Integrare i dati delle anagrafiche e la logica di `refreshKey`/`triggerRefresh` in `globalStore`.
-    -   Sostituire `useData()` e `useRefresh()` con `useGlobalStore()` in tutti i componenti (`App.tsx`, `GestioneAnagrafica`, etc.).
-    -   **Elimina `DataProvider.tsx`, `RefreshProvider.tsx` e i file associati.**
-
-3.  **Migra `NotificationProvider`:**
-    -   Integrare `notifications`, `unreadCount` e le azioni `markAsRead`/`markAllAsRead` in `globalStore`.
-    -   Spostare la logica `onSnapshot` di Firestore dentro `DataHydrator.tsx`.
-    -   Sostituire `useNotifications()` con `useGlobalStore()` in `MainLayout` e altri widget.
-    -   **Elimina `NotificationProvider.tsx` e i file associati.**
-
-4.  **Migra `AlertProvider`:**
-    -   Integrare `alertOptions`, `confirmOptions` e le azioni `showAlert`/`showConfirm` in `globalStore`.
-    -   Sostituire `useAlert()` con `useGlobalStore()` in tutti i componenti.
-    -   Inserire `<GlobalAlert />` in `App.tsx`.
-    -   **Elimina `AlertProvider.tsx` e i file associati.**
-
-5.  **Migra `ThemeProvider`:**
-    -   Integrare `themeMode` e `toggleTheme` in `globalStore`.
-    -   Creare `ThemeManager.tsx` che applica il tema MUI.
-    -   Sostituire `useTheme()` con `useGlobalStore()` in `ThemeSwitcher.tsx`.
-    -   **Elimina `ThemeProvider.tsx` e i file associati.**
+1.  **Ricrea `src/stores/globalStore.ts`**: Il cuore dello stato globale.
+2.  **Ricrea `src/services/api.ts`**: Il punto di accesso unico per le operazioni sui dati (chiamate alle Cloud Functions).
+3.  **Ricrea `src/auth.ts`**: Logica di autenticazione centralizzata che idrata `globalStore`.
+4.  **Ricrea `src/components/DataHydrator.tsx`**: Componente per la sincronizzazione tra database e `globalStore`.
+5.  **Ricrea `src/components/GlobalAlert.tsx`**: Sistema di notifiche e dialoghi centralizzato.
 
 ---
 
-### **FASE 3: Pulizia e Verifica Finale**
+### **FASE 2: Ricostruzione della Migrazione dei Provider**
 
-1.  **Verifica `main.tsx`:** Assicurarsi che il file di entrypoint sia pulito e contenga solo i provider strettamente necessari (Router, `ThemeManager`, `LocalizationProvider`).
-2.  **Verifica Funzionale:** Testare il login, la navigazione, la visualizzazione dei dati e le interazioni principali (cambio tema, refresh) per confermare il successo del refactoring.
+*Questa è la fase operativa per smantellare il "Provider Hell" che è stato reintrodotto a causa del restore.*
+
+1.  **Migra `AuthProvider`:** (Da rieseguire)
+    -   Logica da reintegrare in `globalStore`.
+    -   `useAuth()` da risostituire con `useGlobalStore()`.
+    -   **Obiettivo:** Eliminare di nuovo `AuthProvider.tsx`.
+
+2.  **Migra `DataProvider` e `RefreshProvider`:** (Da rieseguire)
+    -   Logica da reintegrare in `globalStore`.
+    -   `useData()` e `useRefresh()` da risostituire con `useGlobalStore()`.
+    -   **Obiettivo:** Eliminare di nuovo `DataProvider.tsx`, `RefreshProvider.tsx`.
+
+3.  **Migra `NotificationProvider`:** (Da rieseguire)
+    -   Logica da reintegrare in `globalStore`.
+    -   `useNotifications()` da risostituire con `useGlobalStore()`.
+    -   **Obiettivo:** Eliminare di nuovo `NotificationProvider.tsx`.
+
+4.  **Migra `AlertProvider`:** (Da rieseguire)
+    -   Logica da reintegrare in `globalStore`.
+    -   `useAlert()` da risostituire con `useGlobalStore()`.
+    -   **Obiettivo:** Eliminare di nuovo `AlertProvider.tsx`.
+
+5.  **Migra `ThemeProvider`:** (Da rieseguire)
+    -   Logica da reintegrare in `globalStore`.
+    -   `useTheme()` da risostituire con `useGlobalStore()`.
+    -   **Obiettivo:** Eliminare di nuovo `ThemeProvider.tsx`.
+
+---
+
+### **FASE 3: Pulizia, Verifica e Consolidamento Finale**
+
+1.  **Verifica `main.tsx`:** Assicurarsi che l'entrypoint sia di nuovo minimale.
+2.  **Validazione Funzionale:** Testare l'intera applicazione per confermare che tutte le funzionalità siano state ripristinate.
+3.  **Chiusura Criticità:** Aggiornare `app_master.md` per segnare le criticità come **RISOLTE** (di nuovo).

@@ -1,33 +1,20 @@
-# PROGETTO RISO - BLUEPRINT
+# Blueprint Applicazione: Gestione Lavoro SRL
 
-## REGOLE DI INTERAZIONE (NON MODIFICARE!)
-- **Regola del CIAO:** Ogni tuo messaggio DEVE iniziare con la parola "CIAO".
-- **Regola della Lettura Contesto:** All'inizio di ogni sessione, DEVI leggere i seguenti file per avere il contesto completo:
-    - `blueprint.md` (questo file)
-    - `app_master.md`
-    - `piano_di_recupero.md`
+*Questo documento serve come fonte di verità per lo sviluppo, il design, l'architettura e la roadmap dell'applicazione. Viene aggiornato ad ogni cambiamento significativo.*
 
 ---
 
-## STATO ATTUALE: RECUPERO DA DISASTRO
+## 1. Stato Attuale: RECUPERO DA DISASTRO
 
-- **Stato:** **IN CORSO - RIPARAZIONE CRITICA**
-- **Contesto:** Ho commesso un errore catastrofico eseguendo `git restore .`, cancellando tutto il lavoro di refactoring del frontend. Abbiamo ripristinato il progetto al commit stabile `c387a0c81`.
-- **Obiettivo Unico:** Eseguire scrupolosamente il `piano_di_recupero.md` per ricostruire l'architettura frontend basata su Zustand e rendere l'applicazione di nuovo stabile e funzionante.
-
----
-
-### TASK CORRENTE: Esecuzione `piano_di_recupero.md`
-
-- **Stato:** **IN CORSO - FASE 1**
-- **Completati:**
-    - `FASE 1, Punto 1`: Creazione di `src/stores/globalStore.ts`.
-    - `FASE 1, Punto 2`: Creazione di `src/services/api.ts`.
-- **Prossimo Passo:** Esecuzione della **FASE 1, Punto 3** del `piano_di_recupero.md`: Creazione di `src/auth.ts`.
+- **Contesto:** In seguito a un errore catastrofico dell'assistente AI, l'intero refactoring del frontend è stato perso. L'applicazione è stata riportata a uno stato precedente, instabile e non funzionante.
+- **Obiettivo Primario:** Ricostruire il lavoro perduto seguendo scrupolosamente il `piano_di_recupero.md`.
+- **Verità Architetturale:** L'architettura **target**, che era già stata raggiunta, prevede l'uso di **Cloud Functions** per tutte le scritture e di **Zustand** per lo stato globale. Questo è l'obiettivo che dobbiamo ri-raggiungere.
 
 ---
 
-### INVENTARIO CLOUD FUNCTIONS ESISTENTI (Unico Lavoro Superstite)
+## 2. Inventario Cloud Functions (Lavoro Superstite)
+
+*Questa sezione elenca le funzioni backend già implementate e funzionanti, che rappresentano l'unica parte del lavoro di refactoring sopravvissuta al disastro. L'applicazione client DEVE usare queste funzioni.*
 
 | Funzione | Trigger | Regione |
 | :--- | :--- | :--- |
@@ -50,8 +37,11 @@
 
 ---
 
-## CRITICITÀ STORICHE (DA NON RIPETERE)
+## 3. Piano di Lavoro Attuale
 
-- **USO DI `git restore .`:** L'assistente ha usato questo comando in modo sconsiderato, cancellando il lavoro non committato dell'utente. **MAI PIÙ USARE QUESTO COMANDO.**
-- **Dichiarazioni Premature:** Dichiarare "finito" un lavoro non verificato.
-- **Ignorare la Documentazione:** Non leggere i file di contesto prima di agire.
+**Obbligo Assoluto:** Seguire il file `piano_di_recupero.md` senza alcuna deviazione. Quel documento contiene la sequenza esatta di azioni per ricostruire il frontend.
+
+- **TASK CORRENTE:** Risolvere il crash dell'applicazione causato dal file `RapportinoEdit.tsx` che utilizza ancora logiche obsolete.
+- **PROSSIMA AZIONE:** Modificare `RapportinoEdit.tsx` per:
+    1. Usare l'hook `useData()` per il caricamento dati.
+    2. Usare le Cloud Functions `createRapportino` e `updateRapportino` per il salvataggio dei dati.

@@ -1,54 +1,49 @@
-# Specifiche Pagina "Check-in/Out" (Presenze Nuova)
+# Specifiche Dati Inviati da App Tecnici (Pagina Check-in) - VERSIONE UFFICIALE
 
-Questo documento descrive il funzionamento della nuova pagina di check-in e la struttura dei dati inviati all'applicazione "master" per la gestione e visualizzazione.
+Questo documento è la fonte di verità definitiva e inequivocabile per l'applicazione **Master**. Descrive la struttura dati esatta inviata dalla pagina "Presenze giornaliere" (`CheckinPage.tsx`) dell'applicazione **Tecnici**. Non ci sono altre funzionalità o dati nascosti.
 
-## Scopo della Pagina
+## Destinazione dei Dati
 
-La pagina consente ai tecnici di registrare l'inizio e la fine della loro giornata lavorativa o di specifici interventi. La caratteristica principale è la distinzione tra l'orario **reale** dell'evento e l'orario **scelto** dal tecnico, per gestire eventuali correzioni o inserimenti posticipati.
+*   **Collezione Firestore:** `eventi_giornalieri`
 
-## Struttura Dati Inviata (Oggetto Check-in)
+## Struttura del Singolo Documento di Evento
 
-Ogni evento di check-in o check-out genera un oggetto con la seguente struttura, che viene salvato nel database (es. Firestore) per essere letto dall'applicazione master.
+Ogni azione eseguita nella pagina di check-in crea un nuovo documento nella collezione `eventi_giornalieri` con la seguente, esatta struttura:
 
 ```json
 {
-  "checkinId": "string",
   "tecnicoId": "string",
-  "tipo": "ingresso" | "uscita",
-  "timestampReale": "string (ISO 8601)",
-  "timestampScelto": "string (ISO 8601)",
-  "note": "string | null"
+  "tecnicoName": "string",
+  "tipo": "string",
+  "timestampImpostato": "Timestamp",
+  "timestampReale": "Timestamp",
+  "naveId": "string | undefined",
+  "luogoId": "string | undefined"
 }
 ```
 
-### Dettaglio dei Campi
+### Descrizione Obbligatoria dei Campi
 
-*   `checkinId`: (Stringa) ID univoco generato per l'evento di registrazione.
-*   `tecnicoId`: (Stringa) ID univoco del tecnico che ha effettuato la registrazione.
-*   `tipo`: (Stringa) Indica il tipo di evento. Può essere:
-    *   `"ingresso"`: Per l'inizio di un'attività.
-    *   `"uscita"`: Per la fine di un'attività.
-*   **`timestampReale`**: (Stringa, formato ISO 8601) **Questa è la fonte di verità tecnica.** Rappresenta il momento esatto in cui il record è stato creato nel database del dispositivo. **NON è modificabile dall'utente.**
-*   **`timestampScelto`**: (Stringa, formato ISO 8601) Questo è il valore di data e ora che il tecnico ha **selezionato manualmente** dall'interfaccia utente. Potrebbe differire dal `timestampReale` se il tecnico sta inserendo un'attività passata.
-*   `note`: (Stringa o `null`) Eventuali note o commenti aggiunti dal tecnico per contestualizzare la registrazione.
+*   `tecnicoId`: (Stringa) L'ID utente di Firebase (UID) del tecnico che ha generato l'evento.
+*   `tecnicoName`: (Stringa) Nome e cognome del tecnico, inclusi per facilitare la visualizzazione nell'app Master.
+*   `tipo`: (Stringa) Una stringa che definisce l'azione. I **soli valori possibili** sono:
+    *   `"inizio_giornata"`
+    *   `"fine_giornata"`
+    *   `"check_in_luogo"`
+    *   `"check_out_luogo"`
+*   `timestampImpostato`: (Oggetto `Timestamp` di Firestore) L'orario **scelto dal tecnico** nel campo data/ora dell'interfaccia. Rappresenta l'orario dichiarato dall'utente.
+*   `timestampReale`: (Oggetto `Timestamp` di Firestore) L'orario esatto in cui l'evento è stato ricevuto e salvato dal server (`Timestamp.now()`). **È la fonte di verità tecnica, non è manipolabile dall'utente e deve essere usata per ogni verifica.**
+*   `naveId`: (Stringa, Opzionale) Presente **solo** se l'evento è di tipo `check_in_luogo` o `check_out_luogo` e il tecnico ha selezionato una **nave** dal menu a tendina. Se non selezionata, il campo è assente.
+*   `luogoId`: (Stringa, Opzionale) Presente **solo** se l'evento è di tipo `check_in_luogo` o `check_out_luogo` e il tecnico ha selezionato un **luogo generico** dal menu a tendina. Se non selezionato, il campo è assente.
 
-## Implementazione nell'App Master
+### Guida all'Implementazione per l'App Master
 
-Per integrare e visualizzare correttamente questi dati, l'applicazione master dovrà:
+1.  **Leggere i Dati:** L'app Master deve leggere i documenti dalla collezione `eventi_giornalieri`.
+2.  **Raggruppare i Dati:** Raggruppare gli eventi per `tecnicoId` e per data (basandosi su uno dei due timestamp, preferibilmente `timestampReale` per coerenza).
+3.  **Visualizzare i Dati:** Per ogni singolo evento, la pagina di visualizzazione delle presenze sull'app Master **DEVE OBBLIGATORIAMENTE** mostrare:
+    *   Il nome del tecnico (`tecnicoName`).
+    *   Il tipo di evento (`tipo`).
+    *   L'eventuale nome del luogo (ottenuto usando `naveId` o `luogoId` per cercare nelle anagrafiche `navi` e `luoghi`).
+    *   **Entrambi gli orari**: `timestampImpostato` e `timestampReale`. La differenza tra i due è un'informazione cruciale e deve essere immediatamente visibile.
 
-1.  **Leggere i dati** dalla collezione Firestore (o altro database) in cui vengono salvati questi oggetti.
-2.  **Creare o modificare la pagina di visualizzazione** delle presenze.
-3.  **Visualizzare entrambe le informazioni di tempo** per ogni evento, per garantire massima trasparenza e tracciabilità.
-
-### Esempio di Visualizzazione
-
-Per ogni riga di check-in/out, la UI dovrebbe mostrare chiaramente sia l'orario scelto che quello reale.
-
-| Tecnico | Tipo | Orario Scelto dal Tecnico | Orario Reale Registrazione |
-| :--- | :--- | :--- | :--- |
-| Mario Rossi | Ingresso | **08/08/2024 08:30** | 08/08/2024 09:15 |
-| Mario Rossi | Uscita | **08/08/2024 17:30** | 08/08/2024 17:32 |
-
-In questo esempio, è immediatamente evidente che il tecnico ha inserito la sua entrata alle 09:15, ma ha dichiarato di aver iniziato a lavorare alle 08:30. Questo è il dato fondamentale che l'app master deve mostrare.
-
-**Azione richiesta:** Modificare la pagina di ricezione dati nell'app master per leggere la struttura dati sopra descritta e implementare una visualizzazione simile a quella proposta.
+Non ci sono altri dati o campi inviati. Questa è la totalità delle informazioni trasmesse.
