@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthProvider';
-import { auth, db, functions } from '@/firebase';
+import { useGlobalStore } from '@/stores/globalStore'; // SOSTITUITO
+import { functions } from '@/firebase'; // Rimosso auth, db non necessari direttamente qui
 import { httpsCallable } from 'firebase/functions';
-import { sendPasswordResetEmail } from "firebase/auth";
-import { collection, onSnapshot } from 'firebase/firestore';
+import { sendPasswordResetEmail, getAuth } from "firebase/auth"; // getAuth importato per l'azione di reset
+import { collection, onSnapshot, getFirestore } from 'firebase/firestore'; // getFirestore importato
 import {
   Box, Typography, CircularProgress, Alert, Button,
   Switch, Tooltip, IconButton, Snackbar, Chip
@@ -19,13 +19,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import EditIcon from '@mui/icons-material/Edit';
 
-// Import dei dialoghi dal nuovo file separato
 import { NuovoUtenteDialog, ModificaUtenteDialog, ConfermaEliminazioneDialog } from './AmministratoriDialogs';
 
-// Callable function per la gestione centralizzata
 const gestisciUtenti = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 
-// Interfaccia per l'utente
 interface User {
   id: string;
   nome: string;
@@ -34,7 +31,7 @@ interface User {
 }
 
 const GestioneAmministratori = () => {
-  const { user: currentUser } = useAuth();
+  const currentUser = useGlobalStore(state => state.user); // SOSTITUITO
   const [utenti, setUtenti] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,9 +42,9 @@ const GestioneAmministratori = () => {
   const [userToDelete, setUserToDelete] = useState<User | null>(null); 
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
 
-  // Caricamento e ascolto dei dati in tempo reale
   useEffect(() => {
     setLoading(true);
+    const db = getFirestore();
     const unsubUtentiMaster = onSnapshot(collection(db, 'utenti_master'), (snapshotMaster) => {
         const masterUsers = snapshotMaster.docs.map(doc => ({ id: doc.id, ...doc.data() } as Omit<User, 'ruolo'>));
         
@@ -71,12 +68,11 @@ const GestioneAmministratori = () => {
     return () => unsubUtentiMaster();
   }, []);
 
-  // --- Handler delle Azioni (chiamano la Cloud Function) ---
-
   const handleSendPasswordReset = async (email: string) => {
     if(isSaving) return;
     setIsSaving(true);
     try {
+      const auth = getAuth();
       await sendPasswordResetEmail(auth, email);
       setFeedback({ type: 'success', message: `Email di reset inviata con successo a ${email}.` });
     } catch (err: any) {

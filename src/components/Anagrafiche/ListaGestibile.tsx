@@ -3,10 +3,11 @@ import { DataGrid, GridActionsCellItem, type GridColDef, type GridRenderCellPara
 import { Box, CircularProgress, Alert } from '@mui/material';
 import { Edit, Delete } from '@mui/icons-material';
 import type { BaseEntity } from '@/models/definitions';
-import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
+
+// Rimossa dipendenza da useData, il componente è ora agnostico rispetto alla fonte dei dati.
 
 interface ListaGestibileProps<T extends BaseEntity> {
-    items?: T[]; // La prop è opzionale
+    items?: T[];
     columns: GridColDef[];
     loading: boolean;
     error: { message: string } | null;
@@ -14,12 +15,10 @@ interface ListaGestibileProps<T extends BaseEntity> {
     onDelete: (id: string) => void;
     onAdd: (data: Partial<T>) => void;
     FormComponent: React.ElementType;
-    collectionName: string;
-
 }
 
 function ListaGestibile<T extends BaseEntity>({
-    items = [], // Valore di default per la prop items
+    items = [],
     columns,
     loading,
     error,
@@ -27,11 +26,11 @@ function ListaGestibile<T extends BaseEntity>({
     onDelete,
     onAdd,
     FormComponent,
-
 }: ListaGestibileProps<T>) {
     const [isFormOpen, setFormOpen] = useState(false);
     const [itemToEdit, setItemToEdit] = useState<T | null>(null);
-    const { ...dataContext } = useData();
+
+    // La chiamata a useData() è stata rimossa. Questo componente non ha più bisogno di conoscere l'intero stato dei dati.
 
     const internalHandleOpenForm = (item: T | null = null) => {
         setItemToEdit(item);
@@ -106,10 +105,9 @@ function ListaGestibile<T extends BaseEntity>({
                     onClose={handleCloseForm}
                     onSave={handleSave}
                     initialData={itemToEdit}
-                    // Passiamo tutti i dati necessari dal contesto al form
-                    ditte={dataContext.ditte}
-                    clienti={dataContext.clienti}
-                    categorie={dataotec.categorie}
+                    // Rimosso il passaggio di props non necessarie. Il FormComponent
+                    // ora recupera i dati ausiliari (es. ditte, categorie)
+                    // direttamente da useGlobalStore.
                 />
             )}
         </>

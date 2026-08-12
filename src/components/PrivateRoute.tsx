@@ -1,21 +1,23 @@
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthProvider';
+import { useGlobalStore } from '@/stores/globalStore'; // SOSTITUITO
 
 interface PrivateRouteProps {
   children: ReactNode;
 }
 
 const PrivateRoute = ({ children }: PrivateRouteProps) => {
-  const { user, loading } = useAuth();
+  // Lettura dallo store globale invece che dal vecchio context
+  const user = useGlobalStore(state => state.user);
+  const loading = useGlobalStore(state => state.loadingInitialAuth);
 
   if (loading) {
-    // Potremmo mostrare uno spinner di caricamento qui
-    return <div>Caricamento...</div>;
+    // Mostra uno spinner di caricamento globale o un placeholder
+    return <div>Caricamento sessione utente...</div>;
   }
 
   if (!user) {
-    // Se non c'è utente, reindirizza alla pagina di login
+    // Se non c'è utente dopo il caricamento, reindirizza alla pagina di login
     return <Navigate to="/login" replace />;
   }
 

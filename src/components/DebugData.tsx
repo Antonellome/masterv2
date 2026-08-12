@@ -1,34 +1,20 @@
-import { useData } from '@/hooks/useData';
+import { useGlobalStore } from '@/stores/globalStore';
 
 const DebugData = () => {
-    const {
-        loading,
-        tecnici,
-        veicoli,
-        documenti,
-        rapportini,
-        clienti,
-        navi,
-        ditte,
-        luoghi,
-        qualifiche,
-        webAppUsers,
-    } = useData();
-
-    if (loading) {
-        return (
-            <div style={{
-                backgroundColor: '#ffc',
-                padding: '10px',
-                border: '1px solid #ccc',
-                margin: '10px',
-                fontFamily: 'monospace',
-                fontSize: '12px'
-            }}>
-                <p><strong>[DEBUG]</strong> In attesa del caricamento dei dati...</p>
-            </div>
-        );
-    }
+    const tecnici = useGlobalStore(state => state.tecnici);
+    const veicoli = useGlobalStore(state => state.veicoli);
+    const documenti = useGlobalStore(state => state.documenti);
+    const rapportini = useGlobalStore(state => state.rapportini);
+    const clienti = useGlobalStore(state => state.clienti);
+    const navi = useGlobalStore(state => state.navi);
+    const ditte = useGlobalStore(state => state.ditte);
+    const luoghi = useGlobalStore(state => state.luoghi);
+    const qualifiche = useGlobalStore(state => state.qualifiche);
+    const webAppUsers = useGlobalStore(state => state.webAppUsers);
+    
+    // In questa versione, assumiamo che i dati siano già caricati 
+    // dal DataHydrator all'avvio dell'app. Il concetto di "loading"
+    // a livello di singolo componente non è più necessario.
 
     return (
         <div style={{
@@ -39,7 +25,7 @@ const DebugData = () => {
             fontFamily: 'monospace',
             fontSize: '12px'
         }}>
-            <p><strong>[STATO DATI DEBUG]</strong></p>
+            <p><strong>[STATO DATI DEBUG - da GlobalStore]</strong></p>
             <ul>
                 <li>Tecnici: <strong>{tecnici.length}</strong></li>
                 <li>Utenti App: <strong>{webAppUsers.length}</strong></li>

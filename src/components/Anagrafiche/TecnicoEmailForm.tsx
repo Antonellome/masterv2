@@ -3,8 +3,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { Button, TextField, Dialog, DialogActions, DialogContent, DialogTitle, CircularProgress } from '@mui/material';
-import { useData } from '@/contexts/DataContext.tsx'; // CORREZIONE
 import type { Tecnico } from '@/models/definitions';
+import { api } from '@/services/api';
+import { useGlobalStore } from '@/stores/globalStore';
 
 interface TecnicoEmailFormProps {
   open: boolean;
@@ -17,7 +18,6 @@ const schema = yup.object().shape({
 });
 
 const TecnicoEmailForm = ({ open, onClose, tecnico }: TecnicoEmailFormProps) => {
-  const { updateData } = useData(); // HOOK CORRETTO
   const { control, handleSubmit, reset, formState: { isSubmitting, errors } } = useForm<Pick<Tecnico, 'email'>>({
     resolver: yupResolver(schema),
     defaultValues: { email: '' },
@@ -33,12 +33,15 @@ const TecnicoEmailForm = ({ open, onClose, tecnico }: TecnicoEmailFormProps) => 
 
   const onSubmit = async (data: Pick<Tecnico, 'email'>) => {
     if (!tecnico) return;
+    const { setSuccess, setError } = useGlobalStore.getState();
     try {
-      // La logica di aggiornamento è ora corretta grazie all'hook giusto
-      await updateData('tecnici', tecnico.id, data);
-      onClose(); 
+      // Logica di aggiornamento che utilizza la Cloud Function tramite il servizio API
+      await api.tecnici.update(tecnico.id, data);
+      setSuccess('Email del tecnico aggiornata con successo!');
+      onClose();
     } catch (error) {
       console.error("Errore durante l'aggiornamento dell'email:", error);
+      setError("Si è verificato un errore durante l'aggiornamento dell'email.");
     }
   };
 

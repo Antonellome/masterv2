@@ -1,26 +1,8 @@
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { useData } from '@/hooks/useData';
-import type { Ditta } from '@/models/definitions';
 import GestioneAnagrafica from './GestioneAnagrafica';
+import type { Ditta } from '@/models/definitions';
+import { GridColDef } from '@mui/x-data-grid';
 
 const GestioneDitte: React.FC = () => {
-    const { ditte, loading, refreshData } = useData();
-
-    const handleSave = async (formData: Ditta) => {
-        const { id, ...dataToSave } = formData;
-        if (id) {
-            await updateDoc(doc(db, 'ditte', id), dataToSave);
-        } else {
-            await addDoc(collection(db, 'ditte'), dataToSave);
-        }
-        await refreshData(['ditte']);
-    };
-
-    const handleDelete = async (id: string) => {
-        await deleteDoc(doc(db, 'ditte', id));
-        await refreshData(['ditte']);
-    };
 
     const ditteFields = [
         { name: 'nome', label: 'Nome', type: 'text', required: true },
@@ -34,21 +16,22 @@ const GestioneDitte: React.FC = () => {
         { name: 'telefono', label: 'Telefono', type: 'text' },
     ];
 
-    const columns = [
-        { field: 'nome', headerName: 'Nome', flex: 1 },
-        { field: 'pIva', headerName: 'Partita IVA', width: 200 },
-        { field: 'citta', headerName: 'Città', width: 200 },
+    const columns: GridColDef<Ditta>[] = [
+        { field: 'nome', headerName: 'Nome', flex: 1, editable: true },
+        { field: 'pIva', headerName: 'Partita IVA', width: 150, editable: true },
+        { field: 'citta', headerName: 'Città', width: 150, editable: true },
+        { field: 'email', headerName: 'Email', flex: 1, editable: true },
+        { field: 'telefono', headerName: 'Telefono', width: 130, editable: true },
     ];
 
     return (
         <GestioneAnagrafica<Ditta>
-            data={ditte}
-            loading={loading}
+            collectionName="ditte"
+            anagraficaType="ditte" // Chiave per accedere allo stato in globalStore
             title="Ditte"
             fields={ditteFields}
             columns={columns}
-            onSave={handleSave}
-            onDelete={handleDelete}
+            initialSortModel={[{ field: 'nome', sort: 'asc' }]}
         />
     );
 };

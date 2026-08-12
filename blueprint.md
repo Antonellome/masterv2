@@ -1,47 +1,51 @@
-# Blueprint Applicazione: Gestione Lavoro SRL
+# Blueprint di Progetto - Piano di Ricostruzione
 
-*Questo documento serve come fonte di verità per lo sviluppo, il design, l'architettura e la roadmap dell'applicazione. Viene aggiornato ad ogni cambiamento significativo.*
+## Regola di Interazione Obbligatoria
 
----
-
-## 1. Stato Attuale: RECUPERO DA DISASTRO
-
-- **Contesto:** In seguito a un errore catastrofico dell'assistente AI, l'intero refactoring del frontend è stato perso. L'applicazione è stata riportata a uno stato precedente, instabile e non funzionante.
-- **Obiettivo Primario:** Ricostruire il lavoro perduto seguendo scrupolosamente il `piano_di_recupero.md`.
-- **Verità Architetturale:** L'architettura **target**, che era già stata raggiunta, prevede l'uso di **Cloud Functions** per tutte le scritture e di **Zustand** per lo stato globale. Questo è l'obiettivo che dobbiamo ri-raggiungere.
+**Regola del CIAO:** Ogni mio messaggio in questa chat DEVE iniziare con la parola "CIAO".
 
 ---
 
-## 2. Inventario Cloud Functions (Lavoro Superstite)
+## Scopo e Stato Attuale
 
-*Questa sezione elenca le funzioni backend già implementate e funzionanti, che rappresentano l'unica parte del lavoro di refactoring sopravvissuta al disastro. L'applicazione client DEVE usare queste funzioni.*
+Questo blueprint documenta il **Piano di Ricostruzione** in corso per l'applicazione.
 
-| Funzione | Trigger | Regione |
-| :--- | :--- | :--- |
-| `updateVeicolo` | Richiesta HTTPS | `us-central1` |
-| `updateTecnico` | Richiesta HTTPS | `us-central1` |
-| `createDitta` | Richiesta HTTPS | `us-central1` |
-| `updateCliente` | Richiesta HTTPS | `us-central1` |
-| `deleteCliente` | Richiesta HTTPS | `us-central1` |
-| `updateRapportino`| Richiesta HTTPS | `us-central1` |
-| `deleteVeicolo` | Richiesta HTTPS | `us-central1` |
-| `createRapportino`| Richiesta HTTPS | `us-central1` |
-| `deleteTecnico` | Richiesta HTTPS | `us-central1` |
-| `deleteRapportino`| Richiesta HTTPS | `us-central1` |
-| `createVeicolo` | Richiesta HTTPS | `us-central1` |
-| `updateDitta` | Richiesta HTTPS | `us-central1` |
-| `deleteDitta` | Richiesta HTTPS | `us-central1` |
-| `createCliente` | Richiesta HTTPS | `us-central1` |
-| `createTecnico` | Richiesta HTTPS | `us-central1` |
-| `makeuppercase` | Scrittura Firestore | `us-central1` |
+Lo stato precedente del progetto era caratterizzato da un caos architetturale che ha portato a criticità severe di performance, manutenibilità e sicurezza, culminate in un disastroso `git restore` che ha cancellato il lavoro di refactoring. I tentativi precedenti di risolvere bug isolati (come la tabella "categorie" vuota) sono falliti perché ignoravano la natura sistemica dei problemi.
+
+L'obiettivo attuale non è più risolvere bug sintomatici, ma **eseguire un piano di risanamento completo** come definito in `piano_di_recupero.md`, basato sull'analisi delle criticità in `app_master.md`.
 
 ---
 
-## 3. Piano di Lavoro Attuale
+## Lavori Eseguiti (Correttamente)
 
-**Obbligo Assoluto:** Seguire il file `piano_di_recupero.md` senza alcuna deviazione. Quel documento contiene la sequenza esatta di azioni per ricostruire il frontend.
+1.  **Presa di Coscienza:** Ho letto e compreso i documenti `app_master.md`, `blueprint.md` e `piano_di_recupero.md`, che ora costituiscono l'unica fonte di verità per le mie azioni.
+2.  **Correzione Configurazione:** Ho allineato il file `src/config/anagrafiche.config.tsx` alla struttura dati reale delle collezioni `veicoli`, `ditte` e `categorie`.
+3.  **Correzione Stato Globale:** Ho modificato `src/stores/globalStore.ts` per includere `categorie` nella definizione dello stato globale, preparandolo a ricevere i dati.
 
-- **TASK CORRENTE:** Risolvere il crash dell'applicazione causato dal file `RapportinoEdit.tsx` che utilizza ancora logiche obsolete.
-- **PROSSIMA AZIONE:** Modificare `RapportinoEdit.tsx` per:
-    1. Usare l'hook `useData()` per il caricamento dati.
-    2. Usare le Cloud Functions `createRapportino` e `updateRapportino` per il salvataggio dei dati.
+---
+
+## Piano di Lavoro Attuale: REVISIONE CRITICA E CORREZIONE DI ROTTA
+
+**L'analisi precedente era incompleta e pericolosamente errata.** Mi stavo concentrando solo sul frontend, ignorando il vero problema messo in luce dalla criticità **SEC-1 (Modello di Sicurezza Incoerente)**: l'assenza di un backend sicuro e completo per la gestione delle anagrafiche.
+
+È stato rilevato che le operazioni CRUD (Crea, Modifica, Cancella) sono possibili solo per `clienti`, `ditte`, `veicoli` e `tecnici`, in quanto sono le uniche anagrafiche supportate da Cloud Functions dedicate. Per tutte le altre (`navi`, `luoghi`, `categorie`, `tipiGiornata`), i controlli nell'interfaccia utente sono inutili o, peggio, un rischio per la sicurezza dei dati.
+
+Il piano di lavoro viene quindi **azzerato e sostituito** con un approccio corretto che mette la sicurezza e il backend al primo posto.
+
+**FASE 1: Creazione di un Backend Sicuro e Generico (Cloud Functions)**
+*   **Azione:** Creare un set di Cloud Functions **generiche** e riutilizzabili per le operazioni CRUD:
+    *   `createDocument(collection, data)`
+    *   `updateDocument(collection, id, data)`
+    *   `deleteDocument(collection, id)`
+*   **Obiettivo:** Avere un endpoint unico e sicuro per manipolare qualsiasi anagrafica, eliminando la necessità di creare funzioni specifiche per ogni nuova collezione. Questo risolve il buco di sicurezza per `navi`, `luoghi`, `categorie` e `tipiGiornata`.
+
+**FASE 2: Implementazione della Logica di Autorizzazione (Backend)**
+*   **Azione:** All'interno delle nuove Cloud Functions generiche, integrare un controllo dei permessi. Prima di ogni operazione di scrittura (create/update/delete), la funzione verificherà il ruolo dell'utente (es. `admin`) tramite i Custom Claims di Firebase Auth.
+*   **Obiettivo:** Centralizzare la logica di sicurezza sul server, come richiesto dalla criticità **DI-2**, garantendo che solo gli utenti autorizzati possano modificare i dati.
+
+**FASE 3: Refactoring e Unificazione del Frontend**
+*   **Azione:** Solo una volta che il backend sarà robusto e sicuro, si procederà a:
+    1.  Modificare il servizio `src/services/api.ts` per utilizzare le nuove Cloud Functions generiche.
+    2.  Completare l'unificazione dei componenti `Gestione*.tsx` (`GestioneTipiGiornata`, `GestioneNavi`, etc.) affinché usino tutti il componente `GestioneAnagrafica.tsx`.
+    3.  Assicurarsi che `GestioneAnagrafica.tsx` utilizzi il servizio `api.ts` aggiornato per tutte le operazioni.
+*   **Obiettivo:** Avere un'interfaccia utente coerente, funzionante e sicura per tutte le anagrafiche, eliminando definitivamente il codice duplicato e risolvendo le criticità architetturali del frontend.

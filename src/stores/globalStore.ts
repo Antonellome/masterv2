@@ -1,19 +1,19 @@
 
 import { create } from 'zustand';
 import { User } from 'firebase/auth';
-import { Tecnico, Cliente, Veicolo, Cantiere, Ditta, TipoGiornata, Luogo, Nave } from '@/models/definitions';
+// Aggiungo Categoria e rimuovo la mia invenzione Qualifica
+import { Tecnico, Cliente, Veicolo, Cantiere, Ditta, TipoGiornata, Luogo, Nave, Rapportino, Checkin, Documento, Categoria } from '@/models/definitions';
 
-// Definiamo l'interfaccia per lo stato dell'utente e i suoi permessi
-interface UserState {
-  user: User | null; // L'oggetto User di Firebase
-  profile: Tecnico | null; // Il profilo 'Tecnico' dal nostro DB
+// Interfaccia per lo stato completo
+interface AppState {
+  // --- Slice Utente e Autenticazione ---
+  user: User | null;
+  profile: Tecnico | null;
   isAdmin: boolean;
   isAuthenticated: boolean;
-  isLoading: boolean; // Per gestire lo stato di caricamento iniziale
-}
+  isAuthLoading: boolean;
 
-// Definiamo l'interfaccia per i dati delle anagrafiche
-interface DataState {
+  // --- Slice Dati Principali ---
   tecnici: Tecnico[];
   clienti: Cliente[];
   veicoli: Veicolo[];
@@ -22,84 +22,152 @@ interface DataState {
   tipiGiornata: TipoGiornata[];
   luoghi: Luogo[];
   navi: Nave[];
+  categorie: Categoria[]; // <-- AGGIUNTO CORRETTAMENTE
+  rapportini: Rapportino[];
+  checkins: Checkin[];
+  documenti: Documento[];
+
+  // Mappe per accesso rapido
+  tecniciMap: Map<string, string>;
+  clientiMap: Map<string, string>;
+  naviMap: Map<string, string>;
+  luoghiMap: Map<string, string>;
+  tipiGiornataMap: Map<string, TipoGiornata>;
+
+  // Stato di caricamento
+  areAnagraficheLoading: boolean;
   lastUpdated: Date | null;
-  loading: boolean; // Per caricamenti specifici delle anagrafiche
-}
-
-// Definiamo l'interfaccia per lo stato delle notifiche e dei dialoghi
-interface UIState {
+  conflicts: string[];
+  
+  // --- Slice UI ---
   notification: { open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' };
-  dialog: { open: boolean; title: string; content: string; onConfirm: () => void };
+  dialog: { open: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string; cancelText?: string; };
 }
 
-// Azioni relative all'autenticazione
-interface AuthActions {
+// Interfaccia per le azioni
+interface AppActions {
+  // Azioni Auth
   setUserAndProfile: (user: User | null, profile: Tecnico | null) => void;
   setAuthLoading: (isLoading: boolean) => void;
   logout: () => void;
-}
 
-// Azioni relative ai dati
-interface DataActions {
-  setData: (data: Partial<DataState>) => void;
-  setDataLoading: (loading: boolean) => void;
-}
+  // Azioni Dati
+  setAnagrafiche: (data: {
+    tecnici: Tecnico[],
+    clienti: Cliente[],
+    veicoli: Veicolo[],
+    cantieri: Cantiere[],
+    ditte: Ditta[],
+    tipiGiornata: TipoGiornata[],
+    luoghi: Luogo[],
+    navi: Nave[],
+    categorie: Categoria[], // <-- AGGIUNTO CORRETTAMENTE
+  }) => void;
+  setRapportini: (rapportini: Rapportino[]) => void;
+  setCheckins: (checkins: Checkin[]) => void;
+  setDocumenti: (documenti: Documento[]) => void;
+  setAnagraficheLoading: (loading: boolean) => void;
+  setLastUpdated: (date?: Date) => void;
+  setConflicts: (conflicts: string[]) => void;
 
-// Azioni relative all'interfaccia utente
-interface UIActions {
-  showNotification: (message: string, severity: UIState['notification']['severity']) => void;
+  // Azioni UI
+  showNotification: (message: string, severity: AppState['notification']['severity']) => void;
   hideNotification: () => void;
-  showDialog: (title: string, content: string, onConfirm: () => void) => void;
+  showDialog: (options: Omit<AppState['dialog'], 'open' | 'onConfirm'> & { onConfirm: () => void }) => void;
   hideDialog: () => void;
 }
 
-// Uniamo tutto in un'unica interfaccia per lo store globale
-type GlobalStore = UserState & DataState & UIState & AuthActions & DataActions & UIActions;
+// Stato iniziale
+const initialState: AppState = {
+  user: null,
+  profile: null,
+  isAdmin: false,
+  isAuthenticated: false,
+  isAuthLoading: true,
 
-const initialState = {
-    // User
-    user: null,
-    profile: null,
-    isAdmin: false,
-    isAuthenticated: false,
-    isLoading: true,
-    // Data
-    tecnici: [],
-    clienti: [],
-    veicoli: [],
-    cantieri: [],
-    ditte: [],
-    tipiGiornata: [],
-    luoghi: [],
-    navi: [],
-    lastUpdated: null,
-    loading: false,
-    // UI
-    notification: { open: false, message: '', severity: 'info' as const },
-    dialog: { open: false, title: '', content: '', onConfirm: () => {} },
-}
+  tecnici: [],
+  clienti: [],
+  veicoli: [],
+  cantieri: [],
+  ditte: [],
+  tipiGiornata: [],
+  luoghi: [],
+  navi: [],
+  categorie: [], // <-- AGGIUNTO CORRETTAMENTE
+  rapportini: [],
+  checkins: [],
+  documenti: [],
+  
+  tecniciMap: new Map(),
+  clientiMap: new Map(),
+  naviMap: new Map(),
+  luoghiMap: new Map(),
+  tipiGiornataMap: new Map(),
 
-export const useGlobalStore = create<GlobalStore>((set, get) => ({
-    ...initialState,
+  areAnagraficheLoading: true,
+  lastUpdated: null,
+  conflicts: [],
 
-    // Implementazione Azioni Auth
-    setUserAndProfile: (user, profile) => set({
-        user,
-        profile,
-        isAuthenticated: !!user,
-        isAdmin: profile?.isAdmin ?? false,
-        isLoading: false,
-    }),
-    setAuthLoading: (isLoading) => set({ isLoading }),
-    logout: () => set({ ...initialState, isLoading: false }),
+  notification: { open: false, message: '', severity: 'info' },
+  dialog: { open: false, title: '', message: '', onConfirm: () => {} },
+};
 
-    // Implementazione Azioni Dati
-    setData: (data) => set({ ...data, lastUpdated: new Date(), loading: false }),
-    setDataLoading: (loading) => set({ loading }),
+// Creazione dello store
+export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
+  ...initialState,
 
-    // Implementazione Azioni UI
-    showNotification: (message, severity) => set({ notification: { open: true, message, severity } }),
-    hideNotification: () => set(state => ({ ...state, notification: { ...state.notification, open: false }})),
-    showDialog: (title, content, onConfirm) => set({ dialog: { open: true, title, content, onConfirm } }),
-    hideDialog: () => set(state => ({ ...state, dialog: { ...state.dialog, open: false }})),
+  // Implementazione Azioni Auth
+  setUserAndProfile: (user, profile) => set({
+    user,
+    profile,
+    isAuthenticated: !!user && !!profile,
+    isAdmin: profile?.isAdmin ?? false,
+    isAuthLoading: false,
+  }),
+  setAuthLoading: (isLoading) => set({ isAuthLoading: isLoading }),
+  logout: () => {
+    set(state => ({
+        ...initialState,
+        isAuthLoading: false,
+        // Manteniamo le anagrafiche per l'uso offline
+        tecnici: state.tecnici,
+        clienti: state.clienti,
+        veicoli: state.veicoli,
+        cantieri: state.cantieri,
+        ditte: state.ditte,
+        tipiGiornata: state.tipiGiornata,
+        luoghi: state.luoghi,
+        navi: state.navi,
+        categorie: state.categorie, // <-- AGGIUNTO CORRETTAMENTE
+        documenti: state.documenti,
+    }));
+  },
+
+  // Implementazione Azioni Dati
+  setAnagrafiche: (data) => {
+    const createMap = (items: any[], nameKey = 'nome', cognomeKey = 'cognome') => 
+        new Map(items.map(item => [item.id, `${item[cognomeKey] || ''} ${item[nameKey] || ''}`.trim()]));
+
+    set({
+      ...data,
+      tecniciMap: createMap(data.tecnici),
+      clientiMap: createMap(data.clienti),
+      naviMap: createMap(data.navi),
+      luoghiMap: createMap(data.luoghi),
+      tipiGiornataMap: new Map(data.tipiGiornata.map(t => [t.id, t])),
+      areAnagraficheLoading: false,
+    });
+  },
+  setRapportini: (rapportini) => set({ rapportini }),
+  setCheckins: (checkins) => set({ checkins }),
+  setDocumenti: (documenti) => set({ documenti }),
+  setAnagraficheLoading: (loading) => set({ areAnagraficheLoading: loading }),
+  setLastUpdated: (date = new Date()) => set({ lastUpdated: date }),
+  setConflicts: (conflicts) => set({ conflicts: [...get().conflicts, ...conflicts] }),
+  
+  // Implementazione Azioni UI
+  showNotification: (message, severity) => set({ notification: { open: true, message, severity } }),
+  hideNotification: () => set(state => ({ ...state, notification: { ...state.notification, open: false } })),
+  showDialog: (options) => set({ dialog: { ...options, open: true } }),
+  hideDialog: () => set(state => ({ ...state, dialog: { ...state.dialog, open: false } })),
 }));

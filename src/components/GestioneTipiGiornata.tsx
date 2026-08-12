@@ -1,158 +1,20 @@
 
-import React, { useState } from 'react';
-import {
-    Box,
-    Typography,
-    Button,
-    CircularProgress,
-    Alert,
-    Stack,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    Paper,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    IconButton,
-    Tooltip
-} from '@mui/material';
-import Edit from '@mui/icons-material/Edit';
-import Delete from '@mui/icons-material/Delete';
-import Add from '@mui/icons-material/Add';
-
-// AGGIORNAMENTO: Utilizziamo il context moderno e i nuovi servizi
-import { useAnagraficaData } from '@/contexts/DataContext';
-import { saveTipoGiornata, deleteTipoGiornata } from '@/services/tipiGiornataService';
-
-import TipoGiornataForm from '@/components/TipiGiornata/TipoGiornataForm';
-import type { TipoGiornata } from '@/models/definitions';
+import React from 'react';
+import GestioneAnagrafica from './GestioneAnagrafica';
+import { anagraficheConfig } from '@/config/anagrafiche.config';
+import { TipoGiornata } from '@/models/definitions';
 
 const GestioneTipiGiornata: React.FC = () => {
-    // Lettura dati dal context locale (veloce e offline-first)
-    const { tipiGiornata, loading, error } = useAnagraficaData();
-
-    const [formOpen, setFormOpen] = useState(false);
-    const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-    const [selectedTipoGiornata, setSelectedTipoGiornata] = useState<TipoGiornata | null>(null);
-    const [itemToDelete, setItemToDelete] = useState<TipoGiornata | null>(null);
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-
-    const handleOpenForm = (item: TipoGiornata | null = null) => {
-        setSelectedTipoGiornata(item);
-        setFormOpen(true);
-        setFeedback(null);
-    };
-
-    const handleCloseForm = () => {
-        setFormOpen(false);
-        setSelectedTipoGiornata(null);
-    };
-
-    const handleOpenDeleteDialog = (item: TipoGiornata) => {
-        setItemToDelete(item);
-        setConfirmDialogOpen(true);
-    };
-
-    const handleCloseDeleteDialog = () => {
-        setConfirmDialogOpen(false);
-        setItemToDelete(null);
-    };
-
-    // AGGIORNAMENTO: Utilizzo del nuovo service per il salvataggio
-    const handleSave = async (formData: Partial<TipoGiornata>) => {
-        try {
-            const dataToSave = { ...selectedTipoGiornata, ...formData };
-            await saveTipoGiornata(dataToSave);
-            setFeedback({ type: 'success', message: `"${formData.nome}" salvato con successo.` });
-            handleCloseForm();
-        } catch (err) {
-            console.error("Errore nel salvataggio:", err);
-            setFeedback({ type: 'error', message: 'Si è verificato un errore durante il salvataggio.' });
-        }
-    };
-
-    // AGGIORNAMENTO: Utilizzo del nuovo service per l'eliminazione
-    const handleDelete = async () => {
-        if (itemToDelete && itemToDelete.id) {
-            try {
-                await deleteTipoGiornata(itemToDelete.id);
-                setFeedback({ type: 'success', message: 'Tipo giornata eliminato con successo.' });
-            } catch (err) {
-                console.error("Errore eliminazione:", err);
-                setFeedback({ type: 'error', message: 'Impossibile eliminare il tipo giornata.' });
-            }
-        }
-        handleCloseDeleteDialog();
-    };
-
-    if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto' }} />;
+    const config = anagraficheConfig.tipigiornata;
 
     return (
-        <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6">Tipi di Giornata Lavorativa</Typography>
-                <Button variant="contained" startIcon={<Add />} onClick={() => handleOpenForm()}>Aggiungi Tipo Giornata</Button>
-            </Stack>
-
-            {error && <Alert severity="error" sx={{ my: 2 }}>{error.message}</Alert>}
-            {feedback && <Alert severity={feedback.type} sx={{ my: 2 }} onClose={() => setFeedback(null)}>{feedback.message}</Alert>}
-
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell>Nome</TableCell>
-                            <TableCell>Tariffa (€)</TableCell>
-                            <TableCell>Tipo</TableCell>
-                            <TableCell align="right">Azioni</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {tipiGiornata && [...tipiGiornata].sort((a,b) => a.nome.localeCompare(b.nome)).map((item) => (
-                            <TableRow key={item.id} hover>
-                                <TableCell>{item.nome}</TableCell>
-                                <TableCell>{typeof item.tariffa === 'number' ? item.tariffa.toFixed(2) : 'N/D'}</TableCell>
-                                <TableCell>{item.tipo}</TableCell>
-                                <TableCell align="right">
-                                    <Tooltip title="Modifica">
-                                        <IconButton size="small" onClick={() => handleOpenForm(item)}><Edit /></IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Elimina">
-                                        <IconButton size="small" onClick={() => handleOpenDeleteDialog(item)}><Delete /></IconButton>
-                                    </Tooltip>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </TableContainer>
-
-            <TipoGiornataForm
-                open={formOpen}
-                onClose={handleCloseForm}
-                onSave={handleSave}
-                tipoGiornata={selectedTipoGiornata}
-            />
-
-            <Dialog open={confirmDialogOpen} onClose={handleCloseDeleteDialog}>
-                <DialogTitle>Conferma Eliminazione</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        Sei sicuro di voler eliminare il tipo di giornata <Typography component="span" fontWeight="bold">{itemToDelete?.nome}</Typography>? L&apos;azione è irreversibile.
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDeleteDialog}>Annulla</Button>
-                    <Button onClick={handleDelete} color="error" variant="contained">Elimina</Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+        <GestioneAnagrafica<TipoGiornata>
+            collectionName={config.collectionName}
+            title={config.title}
+            columns={config.columns}
+            fields={config.fields}
+            initialSortModel={[{ field: 'nome', sort: 'asc' }]}
+        />
     );
 };
 

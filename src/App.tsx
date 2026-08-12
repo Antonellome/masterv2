@@ -27,7 +27,6 @@ const RapportinoEdit = lazy(() => import('@/pages/RapportinoEdit'));
 const RapportinoPrintPage = lazy(() => import('@/pages/RapportinoPrint'));
 const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
-const GestioneAnagrafica = lazy(() => import('@/pages/GestioneAnagrafica'));
 
 const AppContent = () => {
   const isAuthLoading = useGlobalStore((state) => state.isAuthLoading);
@@ -55,10 +54,8 @@ const AppContent = () => {
           <Route element={<MainLayout />}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
-            <Route path="/anagrafiche" element={<AnagrafichePage />}>
-              <Route index element={<Navigate to="clienti" replace />} />
-              <Route path=":anagraficaId" element={<GestioneAnagrafica />} />
-            </Route>
+            {/* La rotta AnagrafichePage ora gestisce tutte le sue sotto-rotte interne */}
+            <Route path="/anagrafiche/*" element={<AnagrafichePage />} />
             <Route path="/rapportini" element={<RapportiniList />} />
             <Route path="/rapportino/edit/new" element={<RapportinoEdit />} />
             <Route path="/rapportino/edit/:id" element={<RapportinoEdit />} />

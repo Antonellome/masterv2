@@ -1,17 +1,15 @@
-
 import { useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/firebase';
 import { useGlobalStore } from '@/stores/globalStore';
-import type { Tecnico } from '@/models/definitions';
+import type { Tecnico } from '@/models/definitions'; // Useremo Tecnico come tipo base, ma da una collezione diversa
 
 let unsubscribeProfile: (() => void) | null = null;
 
 /**
  * Hook per inizializzare e gestire lo stato di autenticazione dell'utente.
- * Ascolta i cambiamenti di stato di Firebase Auth e aggiorna lo store globale (Zustand).
- * Quando un utente si autentica, recupera il suo profilo dal database e lo mantiene sincronizzato.
+ * Per l'App Master, cerca il profilo nella collezione 'utenti_master'.
  */
 export const useAuthInitializer = () => {
   const { setUserAndProfile, setAuthLoading, logout } = useGlobalStore(state => ({
@@ -22,50 +20,46 @@ export const useAuthInitializer = () => {
 
   useEffect(() => {
     setAuthLoading(true);
-
     const unsubscribeAuth = onAuthStateChanged(auth, async (user: User | null) => {
-      // Se c'è già una sottoscrizione attiva per il profilo, la cancello
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = null;
       }
 
       if (user) {
-        console.log("[Auth] Utente autenticato:", user.uid);
-        // L'utente è loggato. Ora recupero e sincronizzo il suo profilo.
-        const profileRef = doc(db, 'tecnici', user.uid);
+        console.log("[Auth] Utente Master autenticato:", user.uid);
+        
+        // --- CORREZIONE CHIAVE: Cerco nella collezione 'utenti_master' --- //
+        const profileRef = doc(db, 'utenti_master', user.uid);
 
-        // Ascolto in tempo reale le modifiche al profilo
         unsubscribeProfile = onSnapshot(profileRef, 
           (docSnap) => {
             if (docSnap.exists()) {
-              const profileData = { id: docSnap.id, ...docSnap.data() } as Tecnico;
-              console.log("[Auth] Profilo utente caricato/aggiornato:", profileData);
+              // Assumiamo che il profilo admin abbia una struttura simile a Tecnico
+              const profileData = { id: docSnap.id, ...docSnap.data() } as Tecnico; 
+              console.log("[Auth] Profilo Amministratore caricato:", profileData);
               setUserAndProfile(user, profileData);
             } else {
-              // Il profilo non esiste nel DB. L'utente è autenticato ma non autorizzato.
-              console.warn(`[Auth] Profilo non trovato per l'utente ${user.uid}. Logout forzato.`);
-              setUserAndProfile(user, null); // Imposto il profilo a null
+              console.error(`[Auth] Profilo Amministratore NON TROVATO nella collezione 'utenti_master' per l'UID ${user.uid}. Logout forzato.`);
+              setUserAndProfile(user, null); // Logout forzato logico
             }
           },
           (error) => {
-            console.error("[Auth] Errore durante l'ascolto del profilo:", error);
-            logout(); // In caso di errore, effettuo il logout per sicurezza
+            console.error("[Auth] Errore durante l'ascolto del profilo admin:", error);
+            logout();
           }
         );
-
       } else {
-        // L'utente non è loggato.
-        console.log("[Auth] Nessun utente autenticato. Eseguo logout.");
+        console.log("[Auth] Nessun utente autenticato.");
         logout();
       }
     });
 
-    // Cleanup: rimuovo i listener quando il componente viene smontato
     return () => {
-      console.log("[Auth] Cleanup: rimozione listeners.");
+      console.log("[Auth] Cleanup: rimozione listeners auth.");
       unsubscribeAuth();
       if (unsubscribeProfile) {
+        console.log("[Auth] Cleanup: rimozione listeners profilo.");
         unsubscribeProfile();
       }
     };

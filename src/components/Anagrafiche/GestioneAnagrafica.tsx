@@ -1,315 +1,183 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { Box, Typography, IconButton, Button, CircularProgress, Snackbar, Alert } from '@mui/material';
-import { DataGrid, GridColDef, GridRowSelectionModel, GridToolbar, GridRenderCellParams, GridRowModel } from '@mui/x-data-grid';
-import { itIT } from '@mui/x-data-grid/locales';
-import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-import FormDialog from './FormDialog';
-import ConfirmationDialog from '../ConfirmationDialog';
-import type { FormField, Anagrafica } from '@/models/definitions';
-import { addAnagraficaWithVersion, updateAnagraficaWithVersion, deleteAnagraficaWithVersion } from '@/utils/firestoreWrite';
+import { Box, Typography, Alert, CircularProgress } from '@mui/material';
+import {
+  DataGrid,
+  GridColDef,
+  GridRowModel,
+  GridActionsCellItem,
+  GridRowModesModel,
+  GridRowModes,
+  GridToolbar,
+} from '@mui/x-data-grid';
+import { useGlobalStore } from '@/stores/globalStore';
+import { Anagrafica, AnagraficaKey } from '@/models/definitions';
+import { api } from '@/services/api';
+import { anagraficheConfig } from '@/config/anagrafiche.config';
+import AnagraficaForm from './AnagraficaForm';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SaveIcon from '@mui/icons-material/Save';
+import CancelIcon from '@mui/icons-material/Cancel';
 
-// Definizione di un tipo interno per rappresentare la riga della griglia
-type DataRow<T> = T & {
-    id: string;
-    numNavi?: number;
-    numLuoghi?: number;
-};
-
-interface GestioneAnagraficaProps<T extends Anagrafica> {
-    collectionName: string;
-    title: string;
-    fields: FormField[];
-    columns: GridColDef<DataRow<T>>[];
-    initialFormState?: Partial<T>;
-    anagraficaType: string;
-    lookupMaps?: { [key: string]: Map<string, string> };
-    initialSortModel?: { field: string; sort: 'asc' | 'desc' }[];
+interface GestioneAnagraficaProps {
+  anagraficaType: AnagraficaKey;
 }
 
-function GestioneAnagrafica<T extends Anagrafica>({
-    collectionName, title, fields, columns, initialFormState, anagraficaType, lookupMaps, initialSortModel
-}: GestioneAnagraficaProps<T>) {
-    const [data, setData] = useState<DataRow<T>[]>([]); // Stato tipizzato
-    const [loading, setLoading] = useState(true);
-    const [isFormOpen, setFormOpen] = useState(false);
-    const [isConfirmOpen, setConfirmOpen] = useState(false);
-    const [selectedItem, setSelectedItem] = useState<DataRow<T> | null>(null);
-    const [itemToDelete, setItemToDelete] = useState<string | null>(null);
-    const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
-    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
+const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType }) => {
+  const config = anagraficheConfig[anagraficaType];
+  
+  // Se la configurazione non esiste, non renderizzare nulla per evitare crash
+  if (!config) {
+    console.error(`Configurazione non trovata per l'anagrafica: ${anagraficaType}`);
+    return <Alert severity="error">Errore di configurazione: anagrafica "{anagraficaType}" non trovata.</Alert>;
+  }
 
-    const forceRefresh = useCallback(() => setRefreshTrigger(t => t + 1), []);
+  const data = useGlobalStore((state) => state[config.collectionName as keyof typeof state]) as Anagrafica[];
+  const isLoading = useGlobalStore((state) => state.areAnagraficheLoading);
+  const allData = useGlobalStore((state) => state);
 
-    useEffect(() => {
-        const abortController = new AbortController();
-        const { signal } = abortController;
+  const [rows, setRows] = useState<Anagrafica[]>([]);
+  const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({});
+  const [error, setError] = useState<string | null>(null);
 
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const mainSnapshot = await getDocs(collection(db, collectionName));
-                if (signal.aborted) return;
+  useEffect(() => {
+    setRows(data || []);
+  }, [data]);
 
-                let items: DataRow<T>[];
+  const { columns, fields } = useMemo(() => {
+    if (!config.relations) {
+      return { columns: config.columns, fields: config.fields };
+    }
 
-                if (anagraficaType === 'cliente') {
-                    const [naviSnapshot, luoghiSnapshot] = await Promise.all([
-                        getDocs(collection(db, 'navi')),
-                        getDocs(collection(db, 'luoghi'))
-                    ]);
-                    if (signal.aborted) return;
+    let newColumns = [...config.columns];
+    let newFields = [...config.fields];
 
-                    const naviPerCliente = new Map<string, number>();
-                    naviSnapshot.docs.forEach(doc => {
-                        const nave = doc.data();
-                        if (nave.clienteId) {
-                            naviPerCliente.set(nave.clienteId, (naviPerCliente.get(nave.clienteId) || 0) + 1);
-                        }
-                    });
+    Object.keys(config.relations).forEach((field) => {
+      const relation = config.relations![field];
+      const relationData = allData[relation.collection as keyof typeof allData] as Anagrafica[];
 
-                    const luoghiPerCliente = new Map<string, number>();
-                    luoghiSnapshot.docs.forEach(doc => {
-                        const luogo = doc.data();
-                        if (luogo.clienteId) {
-                            luoghiPerCliente.set(luogo.clienteId, (luoghiPerCliente.get(luogo.clienteId) || 0) + 1);
-                        }
-                    });
-                    
-                    items = mainSnapshot.docs.map(doc => {
-                        const docData = doc.data() as T;
-                        const sanitizedData: DataRow<T> = { id: doc.id, ...docData };
-                        fields.forEach((field) => {
-                           if (sanitizedData[field.name as keyof DataRow<T>] === undefined || sanitizedData[field.name as keyof DataRow<T>] === null) {
-                                (sanitizedData as Record<string, unknown>)[field.name] = field.type === 'number' ? 0 : '';
-                           }
-                        });
-                        sanitizedData.numNavi = naviPerCliente.get(doc.id) || 0;
-                        sanitizedData.numLuoghi = luoghiPerCliente.get(doc.id) || 0;
-                        return sanitizedData;
-                    });
-                } else {
-                     items = mainSnapshot.docs.map(doc => {
-                        const docData = doc.data() as T;
-                        const sanitizedData: DataRow<T> = { id: doc.id, ...docData };
-                         fields.forEach((field) => {
-                            if (sanitizedData[field.name as keyof DataRow<T>] === undefined || sanitizedData[field.name as keyof DataRow<T>] === null) {
-                                (sanitizedData as Record<string, unknown>)[field.name] = field.type === 'number' ? 0 : '';
-                            }
-                        });
-                        return sanitizedData;
-                    });
-                }
-                
-                setData(items);
+      if (!relationData) return;
 
-            } catch (error: unknown) { // Use 'unknown' for better type safety
-                if (error instanceof Error && error.name !== 'AbortError') {
-                    console.error(`Errore durante il caricamento della collezione '${collectionName}':`, error);
-                    setData([]);
-                    setSnackbar({ open: true, message: `Errore caricamento dati per ${collectionName}.`, severity: 'error' });
-                }
-            } finally {
-                setLoading(false);
-            }
+      const relationMap = new Map(relationData.map((item) => [item.id, item[relation.displayField] as string]));
+      const valueOptions = relationData.map((item) => ({ value: item.id, label: item[relation.displayField] as string }));
+
+      const colIndex = newColumns.findIndex((col) => col.field === field);
+      if (colIndex !== -1) {
+        newColumns[colIndex] = {
+          ...newColumns[colIndex],
+          valueOptions,
+          valueFormatter: (value:string) => relationMap.get(value) || value,
         };
+      }
 
-        fetchData();
+      const fieldIndex = newFields.findIndex((f) => f.name === field);
+      if (fieldIndex !== -1) {
+        newFields[fieldIndex] = { ...newFields[fieldIndex], options: valueOptions };
+      }
+    });
 
-        return () => {
-            abortController.abort();
-        };
-    }, [collectionName, fields, anagraficaType, refreshTrigger]);
+    return { columns: newColumns, fields: newFields };
+  }, [config, allData]);
 
-    const handleSave = async (item: Partial<DataRow<T>>) => {
-        try {
-            // Rimuovi le proprietà calcolate prima del salvataggio
-            const { id, ...itemToSave } = item;
-            delete (itemToSave as Partial<DataRow<T>>).numNavi;
-            delete (itemToSave as Partial<DataRow<T>>).numLuoghi;
+  const handleRowEditStart = () => {};
+  const handleRowEditStop = () => {};
+  const handleEditClick = (id: string) => () => { setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } }); };
+  const handleSaveClick = (id: string) => () => { setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } }); };
+  const handleCancelClick = (id: string) => () => {
+    setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View, ignoreModifications: true } });
+    const editedRow = rows.find((row) => row.id === id);
+    if ((editedRow as any)?.isNew) {
+      setRows(rows.filter((row) => row.id !== id));
+    }
+  };
 
-            if (id) {
-                // Modifica
-                await updateAnagraficaWithVersion(collectionName, id, itemToSave);
-            } else {
-                // Aggiunta
-                await addAnagraficaWithVersion(collectionName, itemToSave);
-            }
+  const processRowUpdate = useCallback(async (newRow: GridRowModel<Anagrafica>) => {
+      try {
+          setError(null);
+          const updatedItem = await api.update(config.collectionName, newRow.id, newRow as Partial<Anagrafica>);
+          return updatedItem;
+      } catch (err) {
+          const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
+          setError(`Salvataggio fallito: ${newError}`);
+          throw new Error(newError);
+      }
+  }, [config.collectionName]);
 
-            setSnackbar({ open: true, message: 'Elemento salvato con successo!', severity: 'success' });
-            forceRefresh();
-            setFormOpen(false);
-        } catch (error) {
-            console.error("Errore durante il salvataggio:", error);
-            setSnackbar({ open: true, message: `Errore durante il salvataggio: ${error instanceof Error ? error.message : String(error)}`, severity: 'error' });
-        }
-    };
+  const handleDeleteClick = (id: string) => async () => {
+    if (!window.confirm('Sei sicuro di voler eliminare questo elemento?')) return;
+    try {
+        setError(null);
+        await api.delete(config.collectionName, id);
+    } catch (err) {
+        const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
+        setError(`Eliminazione fallita: ${newError}`);
+    }
+  };
+  
+  const handleAdd = async (newItem: Omit<Anagrafica, 'id'>) => {
+      try {
+          setError(null);
+          await api.add(config.collectionName, newItem);
+      } catch (err) {
+          const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
+          setError(`Creazione fallita: ${newError}`);
+      }
+  };
 
-    const handleDelete = async (id: string) => {
-        try {
-            await deleteAnagraficaWithVersion(collectionName, id);
-            setSnackbar({ open: true, message: 'Elemento eliminato.', severity: 'success' });
-            forceRefresh();
-        } catch (error) {
-            console.error("Errore durante l'eliminazione:", error);
-            setSnackbar({ open: true, message: `Errore durante l'eliminazione: ${error instanceof Error ? error.message : String(error)}`, severity: 'error' });
-        }
-    };
-    
-    const processRowUpdate = useCallback(async (newRow: GridRowModel<DataRow<T>>, oldRow: GridRowModel<DataRow<T>>) => {
-        try {
-            const { id, ...dataToUpdate } = newRow;
-            delete (dataToUpdate as Partial<DataRow<T>>).numNavi;
-            delete (dataToUpdate as Partial<DataRow<T>>).numLuoghi;
-
-            const dataForUpdate: { [key: string]: unknown } = dataToUpdate;
-
-            // Assicura la corretta tipizzazione dei numeri prima di salvare
-            for (const field of fields) {
-                if (field.type === 'number' && dataForUpdate[field.name] !== undefined) {
-                    const numValue = Number(dataForUpdate[field.name]);
-                    dataForUpdate[field.name] = isNaN(numValue) ? 0 : numValue;
+  const finalColumns: GridColDef[] = useMemo(() => [
+      ...columns,
+       {
+            field: 'actions',
+            type: 'actions',
+            headerName: 'Azioni',
+            width: 100,
+            cellClassName: 'actions',
+            getActions: ({ id }) => {
+                const isInEditMode = rowModesModel[id as string]?.mode === GridRowModes.Edit;
+                if (isInEditMode) {
+                    return [
+                        <GridActionsCellItem icon={<SaveIcon />} label="Salva" onClick={handleSaveClick(id as string)} />,
+                        <GridActionsCellItem icon={<CancelIcon />} label="Annulla" onClick={handleCancelClick(id as string)} />,
+                    ];
                 }
-            }
-
-            await updateAnagraficaWithVersion(collectionName, id, dataForUpdate);
-            
-            setSnackbar({ open: true, message: 'Modifica salvata!', severity: 'success' });
-            forceRefresh(); 
-            return newRow;
-        } catch (error) {
-            setSnackbar({ open: true, message: 'Errore durante l\'aggiornamento.', severity: 'error' });
-            console.error("Update Error:", error);
-            return oldRow;
-        }
-    }, [collectionName, fields, forceRefresh]);
-
-    const handleAddNew = () => {
-        setSelectedItem(null);
-        setFormOpen(true);
-    };
-
-    const handleEdit = useCallback((item: DataRow<T>) => {
-        setSelectedItem(item);
-        setFormOpen(true);
-    }, []);
-
-    const handleConfirmDeleteRequest = useCallback((id: string) => {
-        setItemToDelete(id);
-        setConfirmOpen(true);
-    }, []);
-
-    const memoizedColumns = useMemo(() => {
-        const processedColumns: GridColDef<DataRow<T>>[] = columns.map(col => {
-            const lookupMap = lookupMaps?.[col.field];
-            if (lookupMap) {
-                return {
-                    ...col,
-                    type: 'singleSelect',
-                    valueOptions: Array.from(lookupMap.entries()).map(([value, label]) => ({ value, label }))
-                };
-            }
-            return col;
-        });
-
-        return [
-            ...processedColumns,
-            {
-                field: 'actions',
-                headerName: 'Azioni',
-                width: 120,
-                sortable: false,
-                renderCell: (params: GridRenderCellParams<DataRow<T>>) => (
-                    <Box>
-                        <IconButton size="small" onClick={() => handleEdit(params.row)}><EditIcon /></IconButton>
-                        <IconButton size="small" onClick={() => handleConfirmDeleteRequest(params.id as string)}><DeleteIcon /></IconButton>
-                    </Box>
-                ),
+                return [
+                    <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={handleEditClick(id as string)} />,
+                    <GridActionsCellItem icon={<DeleteIcon />} label="Elimina" onClick={handleDeleteClick(id as string)} />,
+                ];
             },
-        ];
-    }, [columns, handleEdit, handleConfirmDeleteRequest, lookupMaps]);
+        },
+  ], [rowModesModel, columns]);
 
-    const handleConfirmDelete = async () => {
-        if (itemToDelete) await handleDelete(itemToDelete);
-        setConfirmOpen(false);
-        setItemToDelete(null);
-    };
-
-    const handleCloseSnackbar = () => {
-        setSnackbar(null);
-    }
-
-    if (loading) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
-    }
-
-    return (
-        <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-             <Box sx={{ p: 2, pb: 1.5, flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
-                    {title}
-                </Typography>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddNew}>Nuovo</Button>
-            </Box>
-
-            <Box sx={{ flex: 1, width: '100%', minHeight: 0 }}>
-                <DataGrid
-                    sx={{ border: 0 }}
-                    rows={data || []}
-                    columns={memoizedColumns}
-                    localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-                    slots={{ toolbar: GridToolbar }}
-                    slotProps={{
-                      toolbar: {
-                        showQuickFilter: true,
-                      },
-                    }}
-                    processRowUpdate={processRowUpdate}
-                    onProcessRowUpdateError={(error) => console.error(error)}
-                    initialState={{
-                        pagination: {
-                            paginationModel: { pageSize: 25, page: 0 },
-                        },
-                        sorting: {
-                            sortModel: initialSortModel || [],
-                        },
-                    }}
-                    pageSizeOptions={[10, 25, 50, 100]}
-                    checkboxSelection
-                    disableRowSelectionOnClick
-                    onRowSelectionModelChange={(newSelectionModel) => setSelectionModel(newSelectionModel)}
-                    rowSelectionModel={selectionModel}
-                    editMode="row"
-                />
-            </Box>
-
-            <FormDialog
-                open={isFormOpen}
-                onClose={() => setFormOpen(false)}
-                onSave={handleSave as (data: Partial<Anagrafica>) => Promise<void>}
-                fields={fields}
-                initialData={selectedItem ?? (initialFormState as Partial<T>)}
-                title={selectedItem ? `Modifica ${title.slice(0, -1)}` : `Nuovo ${title.slice(0, -1)}`}
-            />
-
-            <ConfirmationDialog
-                open={isConfirmOpen}
-                onClose={() => setConfirmOpen(false)}
-                onConfirm={handleConfirmDelete}
-                title="Conferma Eliminazione"
-                message="Sei sicuro di voler eliminare questo elemento? L'azione è irreversibile."
-            />
-            {snackbar && (
-                <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                    <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
-            )}
-        </Box>
-    );
-}
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', p: 1 }}>
+      <Typography variant="h4" gutterBottom>{config.title}</Typography>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      <AnagraficaForm fields={fields} onSubmit={handleAdd} />
+      <Box sx={{ flex: 1, width: '100%', mt: 2 }}>
+          {isLoading ? (
+              <CircularProgress />
+          ) : (
+              <DataGrid
+                  rows={rows}
+                  columns={finalColumns}
+                  editMode="row"
+                  rowModesModel={rowModesModel}
+                  onRowModesModelChange={setRowModesModel}
+                  onRowEditStart={handleRowEditStart}
+                  onRowEditStop={handleRowEditStop}
+                  processRowUpdate={processRowUpdate}
+                  onProcessRowUpdateError={(err) => setError(`Update Error: ${String(err)}`)}
+                  slots={{ toolbar: GridToolbar }}
+                  slotProps={{
+                      toolbar: { showQuickFilter: true },
+                  }}
+                  density="compact"
+              />
+          )}
+      </Box>
+    </Box>
+  );
+};
 
 export default GestioneAnagrafica;

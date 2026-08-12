@@ -1,10 +1,10 @@
 import GestioneUtenti from '@/components/GestioneUtenti/GestioneUtenti';
-import { useData } from '@/hooks/useData';
+import { useGlobalStore } from '@/stores/globalStore';
+import { SyncService } from '@/services/SyncService';
 import type { Tecnico } from '@/models/definitions';
 import { GridColDef } from '@mui/x-data-grid';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
-import { useAlert } from '@/contexts/AlertContext';
-import { useNavigate } from 'react-router-dom'; // Importa useNavigate
+import { useNavigate } from 'react-router-dom';
 
 // Colonne di base per i tecnici
 const baseColumns: GridColDef<Tecnico>[] = [
@@ -14,46 +14,47 @@ const baseColumns: GridColDef<Tecnico>[] = [
 ];
 
 const SincronizzazionePage = () => {
-  const { tecnici, updateData } = useData();
-  const { showAlert } = useAlert();
+  // Corretto il selettore per puntare direttamente a state.tecnici
+  const tecnici = useGlobalStore((state) => state.tecnici);
+  // Sostituito useAlert con showNotification dal global store
+  const showNotification = useGlobalStore((state) => state.showNotification);
   const auth = getAuth();
-  const navigate = useNavigate(); // Inizializza useNavigate
+  const navigate = useNavigate();
 
   const handleStatusChange = async (id: string, newStatus: boolean) => {
     try {
-      await updateData('tecnici', id, { sincronizzazioneAttiva: newStatus });
-      showAlert(`Stato sincronizzazione aggiornato per il tecnico.`, 'success');
+      await SyncService.updateRecord('tecnici', id, { sincronizzazioneAttiva: newStatus });
+      showNotification(`Stato sincronizzazione aggiornato per il tecnico.`, 'success');
     } catch (error) {
       console.error("Errore durante l'aggiornamento: ", error);
-      showAlert("Errore durante l'aggiornamento dello stato.", 'error');
+      showNotification("Errore durante l'aggiornamento dello stato.", 'error');
     }
   };
 
   const handleSendPassword = (email: string) => {
     sendPasswordResetEmail(auth, email)
       .then(() => {
-        showAlert(`Email di reset password inviata con successo a ${email}.`, 'success');
+        showNotification(`Email di reset password inviata con successo a ${email}.`, 'success');
       })
       .catch((error) => {
         console.error("Errore durante l'invio dell'email: ", error);
-        showAlert(`Errore durante l'invio dell'email a ${email}.`, 'error');
+        showNotification(`Errore durante l'invio dell'email a ${email}.`, 'error');
       });
   };
 
-  // Funzione per gestire il click sul pulsante "Nuovo"
   const handleAddNew = () => {
-    navigate('/tecnici/nuovo'); // Naviga alla pagina di creazione
+    navigate('/tecnici/nuovo');
   };
 
   return (
     <GestioneUtenti<Tecnico>
       title="Gestione Sincronizzazione Tecnici"
-      data={tecnici}
+      data={tecnici} // I dati ora arrivano correttamente dal globalStore
       baseColumns={baseColumns}
       statusField="sincronizzazioneAttiva"
       onStatusChange={handleStatusChange}
       onSendPassword={handleSendPassword}
-      onAddNew={handleAddNew} // Passa la funzione alla toolbar
+      onAddNew={handleAddNew}
     />
   );
 };
