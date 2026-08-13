@@ -1,8 +1,16 @@
 # Blueprint di Progetto - Piano di Ricostruzione
 
-## Regola di Interazione Obbligatoria
+## REGOLE FONDAMENTALI DI INTERAZIONE
 
-**Regola del CIAO:** Ogni mio messaggio in questa chat DEVE iniziare con la parola "CIAO".
+### **DIVIETO ASSOLUTO DI MODIFICA DELL'INTERFACCIA UTENTE**
+
+**NON DEVI TOCCARE LE PARTI VISIBILI DELL'APP: PAGINE, TABELLE, TESTI, LAYOUT O QUALSIASI ALTRO ELEMENTO DELL'INTERFACCIA UTENTE ESISTENTE, A MENO CHE NON VENGA ESPLICITAMENTE E DIRETTAMENTE RICHIESTO.**
+
+---
+
+### **Regola del CIAO**
+
+Ogni mio messaggio in questa chat DEVE iniziare con la parola "CIAO".
 
 ---
 
@@ -49,3 +57,23 @@ Il piano di lavoro viene quindi **azzerato e sostituito** con un approccio corre
     2.  Completare l'unificazione dei componenti `Gestione*.tsx` (`GestioneTipiGiornata`, `GestioneNavi`, etc.) affinché usino tutti il componente `GestioneAnagrafica.tsx`.
     3.  Assicurarsi che `GestioneAnagrafica.tsx` utilizzi il servizio `api.ts` aggiornato per tutte le operazioni.
 *   **Obiettivo:** Avere un'interfaccia utente coerente, funzionante e sicura per tutte le anagrafiche, eliminando definitivamente il codice duplicato e risolvendo le criticità architetturali del frontend.
+
+---
+
+## **CORREZIONE DI ROTTA CRUCIALE (Input Utente)**
+
+**È stato rilevato che il piano precedente, basato sulla sostituzione *totale* di tutte le funzioni di scrittura con le funzioni CRUD generiche, era errato e avrebbe causato un'interruzione critica delle funzionalità per l'app mobile dei tecnici.**
+
+L'utente ha fornito un'informazione fondamentale:
+*   I **tecnici sul campo** (che non sono amministratori) devono poter creare `rapportini` tramite la loro app.
+*   Questi rapportini creati dall'app mobile contengono campi speciali (es. la firma del cliente) che richiedono una logica di business specifica sul backend.
+
+Questo invalida l'approccio "tutto generico".
+
+**Decisione Strategica Adottata: Modello Ibrido**
+
+Su indicazione dell'utente, il piano è stato aggiornato a un **modello ibrido**, come ora documentato nel `piano_di_recupero.md`:
+1.  **Anagrafiche Semplici:** Entità come `clienti`, `navi`, `luoghi`, `categorie`, `ditte`, etc., che sono dati anagrafici gestiti solo da amministratori, utilizzeranno le nuove funzioni **CRUD generiche** (`createDocument`, `updateDocument`, `deleteDocument`). Questo garantisce sicurezza, coerenza e scalabilità.
+2.  **Entità Complesse:** Entità con logica di business specifica o permessi di accesso differenziati, come `rapportini` e la gestione dei `tecnici`, **manterranno le loro Cloud Functions dedicate**. Questo preserva le funzionalità esistenti per gli utenti non-admin (i tecnici) e gestisce correttamente i dati speciali (firme).
+
+Il piano di lavoro prosegue quindi con l'implementazione di questa strategia ibrida.

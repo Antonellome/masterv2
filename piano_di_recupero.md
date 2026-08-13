@@ -1,58 +1,38 @@
-# Piano di Ricostruzione e Recupero
+# Piano di Refactoring del Backend: Un Approccio Ibrido
 
-*Questo documento è la nostra checklist operativa per **ricostruire** il refactoring andato perso. Ogni fase è un passo per ripristinare l'architettura corretta, basata sull'analisi di `app_master.md`.*
+*Questo documento definisce la strategia operativa per risolvere le criticità di sicurezza e architetturali identificate in `app_master.md`, in particolare la criticità `SEC-1` (Modello di Sicurezza Incoerente).*
 
-**Obiettivo Strategico:** Ricostruire l'architettura frontend che era stata completata, risolvendo le criticità identificate, principalmente:
-- **A-2 (Stato Globale Frammentato)** e **A-5 ("Provider Hell")**: Ricostruendo l'architettura basata su un unico store globale `Zustand` (`globalStore.ts`).
-- **SEC-1 (Modello di Sicurezza Incoerente)** e **DI-1 (Operazioni Non Atomiche)**: Ripristinando l'uso obbligatorio delle Cloud Functions tramite un servizio `api.ts`.
+**Obiettivo Strategico:** Evolvere l'architettura del backend da un modello "una funzione per operazione" a un **modello ibrido** che combini la sicurezza e la scalabilità di funzioni CRUD generiche con la flessibilità di funzioni specifiche per logiche di business complesse.
 
 ---
 
-### **FASE 1: Ricostruzione delle Fondamenta (Store e Servizi Centrali)**
+### **FASE 1: Attivazione del Backend CRUD Generico e Sicuro**
 
-*Questa fase ricostruisce l'infrastruttura centrale che era andata persa.*
+*Questa fase attiva le fondamenta della nuova architettura, rendendo disponibili le funzioni generiche già scritte.*
 
-1.  **Ricrea `src/stores/globalStore.ts`**: Il cuore dello stato globale.
-2.  **Ricrea `src/services/api.ts`**: Il punto di accesso unico per le operazioni sui dati (chiamate alle Cloud Functions).
-3.  **Ricrea `src/auth.ts`**: Logica di autenticazione centralizzata che idrata `globalStore`.
-4.  **Ricrea `src/components/DataHydrator.tsx`**: Componente per la sincronizzazione tra database e `globalStore`.
-5.  **Ricrea `src/components/GlobalAlert.tsx`**: Sistema di notifiche e dialoghi centralizzato.
+1.  **Analisi `genericCrud.ts`:** Verificare che le funzioni `createDocument`, `updateDocument`, `deleteDocument` contengano i controlli di autenticazione e autorizzazione (verifica del custom claim `admin`). **(FATTO)**
+2.  **Modifica `functions/src/index.ts`:** Importare ed esportare le tre funzioni generiche da `genericCrud.ts`. Questo le renderà Cloud Functions chiamabili.
+3.  **Mantenimento Funzioni Specifiche:** Assicurarsi che le funzioni esistenti per la gestione dei rapportini e degli utenti (`amministrazione_gestisciUtenti`, etc.) **siano mantenute** e non rimosse, per garantire la continuità operativa dell'app dei tecnici e delle logiche complesse.
 
 ---
 
-### **FASE 2: Ricostruzione della Migrazione dei Provider**
+### **FASE 2: Refactoring del Frontend (Livello Servizi)**
 
-*Questa è la fase operativa per smantellare il "Provider Hell" che è stato reintrodotto a causa del restore.*
+*Questa fase adatta il frontend per comunicare con la nuova architettura ibrida del backend.*
 
-1.  **Migra `AuthProvider`:** (Da rieseguire)
-    -   Logica da reintegrare in `globalStore`.
-    -   `useAuth()` da risostituire con `useGlobalStore()`.
-    -   **Obiettivo:** Eliminare di nuovo `AuthProvider.tsx`.
-
-2.  **Migra `DataProvider` e `RefreshProvider`:** (Da rieseguire)
-    -   Logica da reintegrare in `globalStore`.
-    -   `useData()` e `useRefresh()` da risostituire con `useGlobalStore()`.
-    -   **Obiettivo:** Eliminare di nuovo `DataProvider.tsx`, `RefreshProvider.tsx`.
-
-3.  **Migra `NotificationProvider`:** (Da rieseguire)
-    -   Logica da reintegrare in `globalStore`.
-    -   `useNotifications()` da risostituire con `useGlobalStore()`.
-    -   **Obiettivo:** Eliminare di nuovo `NotificationProvider.tsx`.
-
-4.  **Migra `AlertProvider`:** (Da rieseguire)
-    -   Logica da reintegrare in `globalStore`.
-    -   `useAlert()` da risostituire con `useGlobalStore()`.
-    -   **Obiettivo:** Eliminare di nuovo `AlertProvider.tsx`.
-
-5.  **Migra `ThemeProvider`:** (Da rieseguire)
-    -   Logica da reintegrare in `globalStore`.
-    -   `useTheme()` da risostituire con `useGlobalStore()`.
-    -   **Obiettivo:** Eliminare di nuovo `ThemeProvider.tsx`.
+1.  **Modifica `src/services/api.ts`:**
+    *   Creare un nuovo "servizio generico" all'interno di `api.ts` che faccia chiamate alle nuove funzioni `createDocument`, `updateDocument`, `deleteDocument`.
+    *   Mantenere i servizi esistenti che chiamano le funzioni specifiche (es. per i rapportini).
+    *   Esportare le istanze del servizio generico per **tutte le anagrafiche semplici** (clienti, navi, luoghi, categorie, tipiGiornata, veicoli, ditte).
 
 ---
 
-### **FASE 3: Pulizia, Verifica e Consolidamento Finale**
+### **FASE 3: Refactoring del Frontend (Livello UI)**
 
-1.  **Verifica `main.tsx`:** Assicurarsi che l'entrypoint sia di nuovo minimale.
-2.  **Validazione Funzionale:** Testare l'intera applicazione per confermare che tutte le funzionalità siano state ripristinate.
-3.  **Chiusura Criticità:** Aggiornare `app_master.md` per segnare le criticità come **RISOLTE** (di nuovo).
+*Questa fase finale collega l'interfaccia utente al nuovo livello di servizi, completando la transizione.*
+
+1.  **Aggiorna `GestioneAnagrafica.tsx`:** Modificare il componente per utilizzare il nuovo servizio API generico. Dato che il componente è già progettato per essere generico, questa modifica dovrebbe essere minima e consistere principalmente nel chiamare `api.generic.create(collectionName, data)` invece di una funzione specifica come `api.clienti.create(data)`.
+2.  **Verifica Funzionale:** Testare approfonditamente le operazioni di creazione, modifica e cancellazione su **tutte** le tabelle di anagrafica per confermare che:
+    *   Le operazioni per le anagrafiche semplici funzionino correttamente tramite il nuovo flusso generico.
+    *   Le operazioni su entità complesse (rapportini) continuino a funzionare tramite il loro flusso specifico.
+3.  **Chiusura Criticità `SEC-1`:** Una volta completato e verificato, la criticità `SEC-1` potrà essere finalmente segnata come **RISOLTA**.
