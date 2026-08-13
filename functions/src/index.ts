@@ -10,7 +10,6 @@ export { createDocument, updateDocument, deleteDocument } from './genericCrud';
 // --- Funzioni Specifiche Mantenute (LOGICA COMPLESSA) ---
 // Queste funzioni sono mantenute perché gestiscono logica di business specifica
 // (es. creazione utenti Auth, gestione rapportini) che non può essere generalizzata.
-
 export { createTecnico } from './createTecnico';
 export { amministrazione_gestisciUtenti } from './amministrazione-gestisciUtenti';
 export { risorseUmane_gestisciAccessoTecnico } from './risorseUmane-gestisciAccessoTecnico';

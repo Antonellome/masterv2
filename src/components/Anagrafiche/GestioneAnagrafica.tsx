@@ -12,8 +12,8 @@ import {
 } from '@mui/x-data-grid';
 import { useGlobalStore } from '@/stores/globalStore';
 import { Anagrafica, AnagraficaKey } from '@/models/definitions';
-import { api } from '@/services/api'; // Mantiene l'import
-import { SyncService } from '@/services/SyncService'; // <-- IMPORTIAMO IL SYNC SERVICE
+import { api } from '@/services/api';
+import { syncAnagrafiche } from '@/services/SyncService'; // <-- CORREZIONE IMPORT
 import { anagraficheConfig } from '@/config/anagrafiche.config';
 import AnagraficaForm from './AnagraficaForm';
 import EditIcon from '@mui/icons-material/Edit';
@@ -45,7 +45,6 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
     setRows(data || []);
   }, [data]);
 
-  // La logica per le colonne e le relazioni rimane INVARIATA
   const { columns, fields } = useMemo(() => {
     if (!config.relations) {
       return { columns: config.columns, fields: config.fields };
@@ -70,7 +69,6 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
     return { columns: newColumns, fields: newFields };
   }, [config, allData]);
 
-  // Funzioni di gestione della UI della tabella (invariate)
   const handleRowEditStart = () => {};
   const handleRowEditStop = () => {};
   const handleEditClick = (id: string) => () => { setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } }); };
@@ -83,15 +81,12 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
     }
   };
 
-  // ============ MODIFICA CHIRURGICA QUI ============ 
-
   const processRowUpdate = useCallback(async (newRow: GridRowModel<Anagrafica>) => {
       try {
           setError(null);
-          // USA IL NUOVO SERVIZIO GENERICO
           await api.generic.update(config.collectionName, newRow.id, newRow as Partial<Anagrafica>);
-          await SyncService.syncAnagrafiche(); // Forza il refresh dei dati
-          return newRow; // Ritorna il nuovo record per aggiornare la UI della DataGrid
+          await syncAnagrafiche(); // <-- CORREZIONE CHIAMATA
+          return newRow;
       } catch (err) {
           const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
           setError(`Salvataggio fallito: ${newError}`);
@@ -103,9 +98,8 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
     if (!window.confirm('Sei sicuro di voler eliminare questo elemento?')) return;
     try {
         setError(null);
-        // USA IL NUOVO SERVIZIO GENERICO
         await api.generic.delete(config.collectionName, id);
-        await SyncService.syncAnagrafiche(); // Forza il refresh dei dati
+        await syncAnagrafiche(); // <-- CORREZIONE CHIAMATA
     } catch (err) {
         const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
         setError(`Eliminazione fallita: ${newError}`);
@@ -115,16 +109,14 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
   const handleAdd = async (newItem: Omit<Anagrafica, 'id'>) => {
       try {
           setError(null);
-          // USA IL NUOVO SERVIZIO GENERICO
           await api.generic.create(config.collectionName, newItem);
-          await SyncService.syncAnagrafiche(); // Forza il refresh dei dati
+          await syncAnagrafiche(); // <-- CORREZIONE CHIAMATA
       } catch (err) {
           const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
           setError(`Creazione fallita: ${newError}`);
       }
   };
 
-  // La definizione delle colonne finali rimane INVARIATA
   const finalColumns: GridColDef[] = useMemo(() => [
       ...columns,
        {
@@ -149,7 +141,6 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
         },
   ], [rowModesModel, columns, handleDeleteClick]);
 
-  // Il rendering del componente rimane INVARIATO
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', p: 1 }}>
       <Typography variant="h4" gutterBottom>{config.title}</Typography>

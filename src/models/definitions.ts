@@ -46,6 +46,7 @@ export interface Tecnico extends BaseEntity {
   sincronizzazioneAttiva?: boolean;
   dataSync?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;
+  scadenzeSilenced?: Record<string, boolean>;
 }
 
 export interface Cliente extends BaseEntity {
@@ -66,6 +67,23 @@ export interface Ditta extends BaseEntity {
   nome: string;
 }
 
+export interface Veicolo extends BaseEntity {
+    anno?: string;
+    id: string;
+    kmAttuali?: string;
+    marca: string;
+    modello: string;
+    note?: string;
+    scadenzaAssicurazione?: Timestamp | Date | string | null;
+    scadenzaBollo?: Timestamp | Date | string | null;
+    scadenzaRevisione?: Timestamp | Date | string | null;
+    scadenzaTachigrafo?: Timestamp | Date | string | null;
+    scadenzaTagliando?: Timestamp | Date | string | null;
+    targa: string;
+    tipo?: string;
+    scadenzeSilenced?: Record<string, boolean>;
+}
+
 // --- ANAGRAFICHE DI SUPPORTO ---
 
 export interface TipoGiornata extends BaseEntity {
@@ -83,11 +101,7 @@ export interface Nave extends BaseEntity {
 
 export interface Luogo extends BaseEntity {
   nome: string;
-  clienteId?: string; // CORREZIONE STRUTTURALE: Aggiunto clienteId opzionale
-}
-
-export interface Veicolo extends BaseEntity {
-  nome: string;
+  clienteId?: string; 
 }
 
 // --- DATI OPERATIVI (STRUTTURA UNIFICATA POST-COMPATIBILITÀ) ---
@@ -142,7 +156,7 @@ export interface Rapportino extends BaseEntity {
   approvato?: boolean;
   note?: string;
   oreLavoro?: number;
-  data?: any; // Mantenuto temporaneamente per la migrazione
+  data?: any; 
 }
 
 // --- IMPOSTAZIONI E PROFILI ---
@@ -231,20 +245,45 @@ export interface FormField {
 
 // --- TIPI RICHIESTI DAL PIANO DI RECUPERO ---
 
-/**
- * Interfaccia per le notifiche ricevute dall'utente, da persistere in locale.
- */
 export interface Notifica extends BaseEntity {
   title: string;
   body: string;
   createdAt: Timestamp | Date;
   read: boolean;
-  linkTo?: string; // Es. link a un rapportino specifico
-  fcmMessageId?: string; // Per deduplicazione
+  linkTo?: string; 
+  fcmMessageId?: string;
 }
 
 /**
- * Alias per Rapportino, rappresenta l'evento giornaliero come da piano.
- * In futuro potrebbe divergere se la struttura dati verrà raffinata.
+ * Rappresenta una singola scadenza aggregata da diverse collezioni (Tecnici, Veicoli, etc.)
+ * per essere visualizzata nella pagina Scadenze.
  */
+export interface Scadenza {
+  id: string; 
+  data: string; 
+  descrizione: string;
+  tipo: 'personali' | 'veicoli' | 'documenti';
+  status: 'ok' | 'in_scadenza' | 'imminente' | 'scaduto' | 'non_impostata';
+  silenced: boolean; 
+  riferimento: string; 
+  itemOriginaleId: string; 
+  collection: 'tecnici' | 'veicoli' | 'documenti';
+  campoOriginale: string; 
+}
+
 export type EventoGiornaliero = Rapportino;
+
+export interface AnagraficaConfig {
+    [key: string]: {
+        collectionName: string;
+        title: string;
+        fields: FormField[];
+        columns: GridColDef[];
+        relations?: {
+            [key: string]: {
+                collection: string;
+                displayField: string;
+            }
+        }
+    }
+}

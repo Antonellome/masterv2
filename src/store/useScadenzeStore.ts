@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { collection, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
-import { veicoloConverter, tecnicoConverter, documentoConverter } from '@/utils/converters';
-import type { Scadenza, Veicolo, Tecnico, Documento } from '@/models/definitions';
+import type { Scadenza, Veicolo, Tecnico } from '@/models/definitions';
 
 interface ScadenzeStore {
   scadenze: Scadenza[];
@@ -12,7 +11,7 @@ interface ScadenzeStore {
   toggleSilence: (id: string) => Promise<void>;
 }
 
-const MAPPATURA_SCADENZE_TECNICI: Record<keyof Tecnico, string> = {
+const MAPPATURA_SCADENZE_TECNICI: Record<string, string> = {
     scadenzaVisita: "Visita Medica",
     scadenzaPatente: "Patente",
     scadenzaCartaIdentita: "Carta d'Identità",
@@ -25,53 +24,67 @@ const MAPPATURA_SCADENZE_TECNICI: Record<keyof Tecnico, string> = {
     scadenzaPrimoSoccorso: "Corso Primo Soccorso",
 };
 
-const createScadenzaFromItem = (item: Veicolo | Tecnico | Documento, collectionName: 'veicoli' | 'tecnici' | 'documenti', tipo: Scadenza['tipo'], campo: string, nomeCampo: string): Scadenza | null => {
-    const data = item[campo];
-    if (!data) return null;
+const MAPPATURA_SCADENZE_VEICOLI: Record<string, string> = {
+    scadenzaAssicurazione: "Assicurazione",
+    scadenzaBollo: "Bollo",
+    scadenzaRevisione: "Revisione",
+    scadenzaTagliando: "Tagliando",
+    scadenzaTachigrafo: "Tachigrafo",
+};
 
-    let dataScadenza: Date;
+const createScadenzaFromItem = (
+    item: any, 
+    collectionName: 'veicoli' | 'tecnici' | 'documenti', 
+    tipo: Scadenza['tipo'], 
+    campo: string, 
+    nomeCampo: string
+): Scadenza | null => {
+    const data = item[campo];
+    let dataScadenza: Date | null = null;
+
     if (data instanceof Timestamp) {
         dataScadenza = data.toDate();
     } else if (data instanceof Date) {
         dataScadenza = data;
-    } else if (typeof data === 'string') {
-        dataScadenza = new Date(data);
-    } else {
+    } else if (typeof data === 'string' && data.trim() !== '') {
+        const parsedDate = new Date(data);
+        if (!isNaN(parsedDate.getTime())) {
+            dataScadenza = parsedDate;
+        }
+    }
+
+    // SE LA DATA NON È VALIDA O È ASSENTE, NON CREARE LA SCADENZA. RITORNA NULL.
+    if (!dataScadenza) {
         return null;
     }
 
-    if (isNaN(dataScadenza.getTime())) return null;
+    const id = `${item.id}-${campo}`;
+    let riferimento = '';
+    if (item.cognome && item.nome) riferimento = `${item.cognome} ${item.nome}`.trim();
+    else if (item.targa) riferimento = item.targa;
+    else if (item.marca && item.modello) riferimento = `${item.marca} ${item.modello}`.trim();
+    else if (item.nome) riferimento = item.nome;
 
     const oggi = new Date();
     oggi.setHours(0, 0, 0, 0);
     const diffTime = dataScadenza.getTime() - oggi.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    // NUOVA REGOLA: Non mostrare scadenze oltre i 30 giorni
-    if (diffDays > 30) {
-        return null;
-    }
-
     let status: Scadenza['status'] = 'ok';
-    // NUOVA REGOLA COLORI:
-    if (diffDays <= 15) { // Da 15 giorni in giù (compresi scaduti) è rosso
+    if (diffDays <= 0) {
         status = 'scaduto';
-    } else if (diffDays <= 30) { // Da 16 a 30 giorni è giallo
+    } else if (diffDays <= 15) {
         status = 'imminente';
+    } else if (diffDays <= 30) {
+        status = 'in_scadenza';
     }
-
-    const id = `${item.id}-${campo}`;
-    let riferimento = '';
-    if ('cognome' in item && 'nome' in item) riferimento = `${item.cognome} ${item.nome}`.trim();
-    else if ('targa' in item) riferimento = item.targa;
-    else if ('nome' in item) riferimento = item.nome;
 
     return {
         id,
         data: dataScadenza.toISOString(),
         descrizione: nomeCampo,
         tipo,
-        status, // Lo stato ora rispetta le nuove regole
+        status,
         silenced: item.scadenzeSilenced?.[campo] ?? false,
         riferimento,
         itemOriginaleId: item.id,
@@ -88,40 +101,30 @@ export const useScadenzeStore = create<ScadenzeStore>((set, get) => ({
   fetchScadenze: async () => {
     set({ loading: true, error: null });
     try {
-        const [veicoliSnap, tecniciSnap, documentiSnap] = await Promise.all([
-            getDocs(collection(db, 'veicoli').withConverter(veicoloConverter)),
-            getDocs(collection(db, 'tecnici').withConverter(tecnicoConverter)),
-            getDocs(collection(db, 'documenti').withConverter(documentoConverter)),
+        const [veicoliSnap, tecniciSnap] = await Promise.all([
+            getDocs(collection(db, 'veicoli')),
+            getDocs(collection(db, 'tecnici')),
         ]);
 
         const allScadenze: Scadenza[] = [];
 
         veicoliSnap.forEach(doc => {
-            const veicolo = doc.data();
-            allScadenze.push(...[
-                createScadenzaFromItem(veicolo, 'veicoli', 'veicoli', 'scadenzaAssicurazione', 'Assicurazione'),
-                createScadenzaFromItem(veicolo, 'veicoli', 'veicoli', 'scadenzaBollo', 'Bollo'),
-                createScadenzaFromItem(veicolo, 'veicoli', 'veicoli', 'scadenzaRevisione', 'Revisione'),
-                createScadenzaFromItem(veicolo, 'veicoli', 'veicoli', 'scadenzaTagliando', 'Tagliando'),
-                createScadenzaFromItem(veicolo, 'veicoli', 'veicoli', 'scadenzaTachigrafo', 'Tachigrafo'),
-            ].filter((s): s is Scadenza => s !== null));
+            const veicolo = { id: doc.id, ...doc.data() };
+            const scadenzeVeicolo = Object.keys(MAPPATURA_SCADENZE_VEICOLI)
+                .map(key => createScadenzaFromItem(veicolo, 'veicoli', 'veicoli', key, MAPPATURA_SCADENZE_VEICOLI[key]))
+                .filter((s): s is Scadenza => s !== null); // <-- FILTRA VIA I NULL
+            allScadenze.push(...scadenzeVeicolo);
         });
 
         tecniciSnap.forEach(doc => {
-            const tecnico = doc.data();
+            const tecnico = { id: doc.id, ...doc.data() };
             const scadenzeTecnico = Object.keys(MAPPATURA_SCADENZE_TECNICI)
-                .map(key => createScadenzaFromItem(tecnico, 'tecnici', 'personali', key, MAPPATURA_SCADENZE_TECNICI[key as keyof Tecnico]))
-                .filter((s): s is Scadenza => s !== null);
+                .map(key => createScadenzaFromItem(tecnico, 'tecnici', 'personali', key, MAPPATURA_SCADENZE_TECNICI[key]))
+                .filter((s): s is Scadenza => s !== null); // <-- FILTRA VIA I NULL
             allScadenze.push(...scadenzeTecnico);
         });
 
-        documentiSnap.forEach(doc => {
-            const documento = doc.data();
-            allScadenze.push(...[
-                createScadenzaFromItem(documento, 'documenti', 'documenti', 'scadenza1', documento.nome || 'Scadenza 1'),
-                createScadenzaFromItem(documento, 'documenti', 'documenti', 'scadenza2', documento.nome || 'Scadenza 2'),
-            ].filter((s): s is Scadenza => s !== null));
-        });
+        allScadenze.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
 
         set({ scadenze: allScadenze, loading: false });
 
@@ -151,7 +154,7 @@ export const useScadenzeStore = create<ScadenzeStore>((set, get) => ({
     } catch (err) {
         console.error("Errore nel salvare lo stato di silenziamento:", err);
         set(state => ({
-            scadenze: state.scadenze.map(s => s.id === id ? { ...s, silenced } : s) // Ripristina
+            scadenze: state.scadenze.map(s => s.id === id ? { ...s, silenced } : s) 
         }));
     }
   },
