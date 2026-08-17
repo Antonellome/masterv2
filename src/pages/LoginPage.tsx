@@ -6,7 +6,7 @@ import { useGlobalStore } from '@/stores/globalStore';
 import { api } from '@/services/api';
 import { Container, Box, TextField, Button, Typography, Alert, Avatar, Link, Grid } from '@mui/material';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '@/firebase';
+import { auth } from '@/config/firebase';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');

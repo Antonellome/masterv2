@@ -62,4 +62,4 @@ exports.eliminaTecnico = functions.region('europe-west1').https.onCall(async (da
         throw new functions.https.HttpsError("internal", `Errore interno durante l'eliminazione. ${error.message}`);
     }
 });
-//# sourceMappingURL=risorseUmane-eliminaTecnico.js.map
+//# sourceMappingURL=risorseUmaneEliminaTecnico.js.map

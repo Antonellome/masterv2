@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "concurrently \"vite --port 9002 --host 0.0.0.0\" \"node update-server.js\"",
+        "dev": "concurrently \"vite --port 9002 --host 0.0.0.0\" \"node update-server.cjs\"",
         "build": "vite build",
         "lint": "eslint .",
         "test": "vitest run"

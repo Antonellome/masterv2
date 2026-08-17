@@ -38,20 +38,16 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.onCall(async (data, context) => {
-    var _a;
-    // --- CONTROLLO AUTORIZZAZIONE BASATO SU FIRESTORE ---
-    if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "L'utente non è autenticato.");
-    }
-    const adminUid = context.auth.uid;
-    const adminDoc = await admin.firestore().collection('admins').doc(adminUid).get();
-    if (!adminDoc.exists) {
-        logger.error(`Tentativo non autorizzato da UID: ${adminUid}`);
+    var _a, _b;
+    // --- NUOVO CONTROLLO AUTORIZZAZIONE BASATO SU CUSTOM CLAIMS ---
+    if (!context.auth || context.auth.token.admin !== true) {
+        logger.error(`Tentativo non autorizzato da UID: ${(_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid}`);
         throw new functions.https.HttpsError("permission-denied", "Solo un amministratore può eseguire questa operazione.");
     }
     // --- FINE CONTROLLO AUTORIZZAZIONE ---
     const { action } = data;
-    logger.info(`Azione '${action}' richiesta da admin: ${context.auth.token.email}`);
+    const adminEmail = context.auth.token.email;
+    logger.info(`Azione '${action}' richiesta da admin: ${adminEmail}`);
     try {
         switch (action) {
             case 'createUser':
@@ -67,8 +63,9 @@ exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
                 logger.info(`Documento creato in utenti_master per UID: ${userRecord.uid}`);
-                await admin.auth().generatePasswordResetLink(data.email);
-                logger.info(`Invio email reset password per: ${data.email}`);
+                // Imposta il ruolo iniziale come 'user' (claim nullo o false)
+                await admin.auth().setCustomUserClaims(userRecord.uid, { admin: false });
+                logger.info(`Custom claim impostato per UID: ${userRecord.uid} (admin: false)`);
                 return { status: "success", message: `Utente ${data.nome} creato.`, uid: userRecord.uid };
             case 'updateUser':
                 if (!data.uid || !data.nome) {
@@ -82,37 +79,30 @@ exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.
                 if (!data.uid) {
                     throw new functions.https.HttpsError("invalid-argument", "L'UID è richiesto.");
                 }
-                if (data.uid === adminUid) {
+                if (data.uid === context.auth.uid) {
                     throw new functions.https.HttpsError("permission-denied", "Un admin non può eliminare se stesso.");
                 }
                 await admin.auth().deleteUser(data.uid);
                 await admin.firestore().collection('utenti_master').doc(data.uid).delete();
-                await admin.firestore().collection('admins').doc(data.uid).delete();
-                logger.info(`Utente ${data.uid} eliminato.`);
+                // La collezione 'admins' non è più necessaria.
+                logger.info(`Utente ${data.uid} eliminato da Auth e Firestore.`);
                 return { status: "success", message: "Utente eliminato." };
             case 'toggleRole':
                 if (!data.uid || !data.role) {
                     throw new functions.https.HttpsError("invalid-argument", "UID e ruolo sono richiesti.");
                 }
-                if (data.uid === adminUid) {
+                if (data.uid === context.auth.uid) {
                     throw new functions.https.HttpsError("permission-denied", "Non puoi modificare il tuo stesso ruolo.");
                 }
-                const adminDocRef = admin.firestore().collection('admins').doc(data.uid);
-                const userDocRef = admin.firestore().collection('utenti_master').doc(data.uid);
-                const userDoc = await userDocRef.get();
-                if (!userDoc.exists) {
-                    throw new functions.https.HttpsError("not-found", "Utente non trovato in utenti_master.");
-                }
-                const userData = userDoc.data();
-                if (data.role === 'admin') {
-                    await adminDocRef.set({ email: userData.email, nome: userData.nome });
+                const isAdmin = data.role === 'admin';
+                await admin.auth().setCustomUserClaims(data.uid, { admin: isAdmin });
+                if (isAdmin) {
                     logger.info(`Utente ${data.uid} promosso ad admin.`);
                 }
                 else {
-                    await adminDocRef.delete();
                     logger.info(`Privilegi admin revocati per l'utente ${data.uid}.`);
                 }
-                return { status: "success", message: "Ruolo utente aggiornato." };
+                return { status: "success", message: "Ruolo utente aggiornato con Custom Claims." };
             default:
                 logger.warn(`Azione non riconosciuta: '${action}'.`);
                 throw new functions.https.HttpsError("unimplemented", `L'azione '${action}' non è supportata.`);
@@ -120,10 +110,10 @@ exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.
     }
     catch (error) {
         logger.error(`Errore durante l'azione '${action}' per UID ${data.uid || 'N/D'}:`, error);
-        if ((_a = error.code) === null || _a === void 0 ? void 0 : _a.startsWith('auth/')) {
+        if ((_b = error.code) === null || _b === void 0 ? void 0 : _b.startsWith('auth/')) {
             throw new functions.https.HttpsError("already-exists", error.message);
         }
         throw new functions.https.HttpsError("internal", `Errore interno: ${error.message}`);
     }
 });
-//# sourceMappingURL=amministrazione-gestisciUtenti.js.map
+//# sourceMappingURL=amministrazioneGestisciUtenti.js.map

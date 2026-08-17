@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { collection, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db } from '@/config/firebase';
 import type { Scadenza, Veicolo, Tecnico } from '@/models/definitions';
 
 interface ScadenzeStore {

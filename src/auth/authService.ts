@@ -7,36 +7,50 @@ import {
 } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { useGlobalStore } from '@/stores/globalStore';
-// Importiamo il nostro nuovo servizio!
 import { firestoreService } from '@/services/firestoreService';
 
 export const authService = {
     /**
-     * Esegue il login manuale.
-     * Responsabilità: Autenticazione + Coordinamento recupero profilo.
+     * Esegue il login manuale basandosi ESCLUSIVAMENTE sul custom claim 'admin'.
+     * Impedisce l'accesso a chiunque non sia amministratore.
      */
     login: async (email: string, pass: string) => {
+        console.log("[AuthService] Inizio login manuale basato su permessi ADMIN...");
         try {
-            console.log("[AuthService] Inizio login manuale...");
             const userCredential = await signInWithEmailAndPassword(auth, email, pass);
             const user = userCredential.user;
-            
-            // DELEGA il recupero del profilo al servizio dedicato
-            const profile = await firestoreService.fetchUserProfile(user.uid);
 
-            if (user && profile) {
-                useGlobalStore.getState().setUserAndProfile(user, profile);
-                console.log("[AuthService] Login manuale completato con successo.");
+            if (!user) {
+                throw new Error("Credenziali non valide.");
+            }
+
+            // 1. FORZIAMO L'AGGIORNAMENTO DEL TOKEN PER LEGGERE I PERMESSI
+            console.log("[AuthService] Verifico i permessi dell'utente...");
+            const idTokenResult = await user.getIdTokenResult(true); // true = forza refresh
+
+            // 2. REGOLA DI ACCESSO INAPPELLABILE
+            const isAdmin = idTokenResult.claims.admin === true;
+
+            if (isAdmin) {
+                // 3. SUCCESSO: L'utente è un admin
+                console.log("[AuthService] Accesso consentito: l'utente è un AMMINISTRATORE.");
+                // Il profilo tecnico non viene cercato né richiesto.
+                // Le altre modifiche (authHooks, globalStore) gestiranno lo stato.
+                useGlobalStore.getState().setUserAndProfile(user, null); // Passiamo null per il profilo
+                useGlobalStore.getState().setAdminStatus(true);
             } else {
-                // Logout forzato se l'utente Auth esiste ma non ha un profilo nel DB
+                // 4. FALLIMENTO: L'utente non è un admin, ACCESSO NEGATO.
+                console.warn("[AuthService] ACCESSO NEGATO: l'utente non è un amministratore.");
                 await signOut(auth);
                 useGlobalStore.getState().logout();
-                throw new Error("Login fallito: il profilo utente non esiste in Firestore.");
+                throw new Error("Accesso negato: solo gli amministratori possono entrare.");
             }
         } catch (error) {
             console.error("[AuthService] Errore durante il login manuale:", error);
-            useGlobalStore.getState().logout(); // Assicura pulizia stato
-            throw error; // Rilancia per la UI
+            await signOut(auth); // Assicura che l'utente sia disconnesso in caso di qualsiasi errore
+            useGlobalStore.getState().logout();
+            // Rilanciamo l'errore per mostrarlo nella UI (es. "Credenziali errate" o "Accesso negato")
+            throw error;
         }
     },
 

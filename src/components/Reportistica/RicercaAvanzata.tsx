@@ -18,7 +18,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
-import { db as firestoreDb } from '@/firebase';
+import { db as firestoreDb } from '@/config/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { generateRapportinoPdf } from '@/utils/pdfGenerator';
@@ -87,7 +87,6 @@ const RicercaAvanzata: React.FC = () => {
         loading: anagraficheLoading 
     } = useAnagraficaData();
 
-    // =============== INIZIO CODICE CORRETTO PER ORDINAMENTO ===============
     const sortedTecnici = useMemo(() => {
         if (!anagraficaTecnici) return [];
         return [...anagraficaTecnici].sort((a, b) => {
@@ -116,7 +115,6 @@ const RicercaAvanzata: React.FC = () => {
         if (!anagraficaTipiGiornata) return [];
         return [...anagraficaTipiGiornata].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
     }, [anagraficaTipiGiornata]);
-    // =============== FINE CODICE CORRETTO PER ORDINAMENTO ===============
 
     const rapportini = useLiveQuery(() => db.rapportini.toArray());
     const rapportiniLoading = rapportini === undefined;
@@ -228,7 +226,7 @@ const RicercaAvanzata: React.FC = () => {
             };
             const mainTecnicoNome = mainTecnicoId ? getName(mainTecnicoId) : "N/D";
             const altriTecniciNomi = allTecnicoIdsInPresenze.filter(id => id !== mainTecnicoId).map(getName);
-            const tecnicoIds = [...new Set([mainTecnicoId, ...allTecnicoIdsInPresenze].filter(Boolean) as string[])];
+            const tecnicoIds = [...new Set([mainTecnicoId, ...altriTecniciNomi].filter(Boolean) as string[])];
             const tipoGiornataId = getCleanId(rapportino.tipoGiornataId);
             const tipoGiornataObj = tipoGiornataId ? safeTipiGiornataMap[tipoGiornataId] : undefined;
             const naveObj = naveId ? safeNaviMap[naveId] : undefined;
@@ -377,7 +375,7 @@ const RicercaAvanzata: React.FC = () => {
                         pageSizeOptions={[10, 25, 50, 100]} 
                         density="compact" 
                         onRowClick={handleRowClick}
-                        sx={{ border: 0, '& .MuiDataGrid-row': { cursor: 'pointer' }, '& .MuiDataGrid-cell': { alignItems: 'center', display: 'flex', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', }, }}
+                        sx={{ border: 0, '& .MuiDataGrid-row': { cursor: 'pointer' }, '& .MuiDataGrid-cell': { alignItems: 'center', display: 'flex', whiteSpace: 'nowrap' }, }}
                     />
                 </Paper>
                 

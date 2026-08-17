@@ -156,9 +156,9 @@ const MainLayout = () => {
                 </Drawer>
             </Box>
 
-            <Box component="main" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <Box component="main" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh' }}>
                 <Toolbar sx={{ minHeight: `${appBarHeight} !important` }} />
-                <Box sx={{ flexGrow: 1, p: 2, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <Box sx={{ flexGrow: 1, p: 3, overflowY: 'auto', overflowX: 'auto' }}>
                     <Outlet />
                 </Box>
             </Box>

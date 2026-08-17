@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = void 0;
+exports.forceAdmin = exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 // --- Funzioni CRUD Generiche (NUOVA ARCHITETTURA) ---
@@ -43,7 +43,6 @@ Object.defineProperty(exports, "updateDocument", { enumerable: true, get: functi
 Object.defineProperty(exports, "deleteDocument", { enumerable: true, get: function () { return genericCrud_1.deleteDocument; } });
 // --- FUNZIONI DI BUSINESS SPECIFICHE ---
 // Rapportini - API HTTP Completa per App Tecnici e App Master
-// Ultima modifica per forzare rebuild: 2024-10-26 11:00
 var rapportini_1 = require("./rapportini");
 Object.defineProperty(exports, "createRapportino", { enumerable: true, get: function () { return rapportini_1.createRapportino; } });
 Object.defineProperty(exports, "updateRapportino", { enumerable: true, get: function () { return rapportini_1.updateRapportino; } });
@@ -51,12 +50,12 @@ Object.defineProperty(exports, "deleteRapportino", { enumerable: true, get: func
 // Gestione Tecnici e Utenti
 var createTecnico_1 = require("./createTecnico");
 Object.defineProperty(exports, "createTecnico", { enumerable: true, get: function () { return createTecnico_1.createTecnico; } });
-var amministrazione_gestisciUtenti_1 = require("./amministrazione-gestisciUtenti");
-Object.defineProperty(exports, "amministrazione_gestisciUtenti", { enumerable: true, get: function () { return amministrazione_gestisciUtenti_1.amministrazione_gestisciUtenti; } });
-var risorseUmane_gestisciAccessoTecnico_1 = require("./risorseUmane-gestisciAccessoTecnico");
-Object.defineProperty(exports, "risorseUmane_gestisciAccessoTecnico", { enumerable: true, get: function () { return risorseUmane_gestisciAccessoTecnico_1.risorseUmane_gestisciAccessoTecnico; } });
-var risorseUmane_eliminaTecnico_1 = require("./risorseUmane-eliminaTecnico");
-Object.defineProperty(exports, "eliminaTecnico", { enumerable: true, get: function () { return risorseUmane_eliminaTecnico_1.eliminaTecnico; } });
-// --- Funzioni obsolete che verranno eliminate con questo deploy ---
-// La vecchia 'manageRapportino' non è più esportata, quindi Firebase la rimuoverà.
+var amministrazioneGestisciUtenti_1 = require("./amministrazioneGestisciUtenti");
+Object.defineProperty(exports, "amministrazione_gestisciUtenti", { enumerable: true, get: function () { return amministrazioneGestisciUtenti_1.amministrazione_gestisciUtenti; } });
+var risorseUmaneGestisciAccessoTecnico_1 = require("./risorseUmaneGestisciAccessoTecnico");
+Object.defineProperty(exports, "risorseUmane_gestisciAccessoTecnico", { enumerable: true, get: function () { return risorseUmaneGestisciAccessoTecnico_1.risorseUmane_gestisciAccessoTecnico; } });
+var risorseUmaneEliminaTecnico_1 = require("./risorseUmaneEliminaTecnico");
+Object.defineProperty(exports, "eliminaTecnico", { enumerable: true, get: function () { return risorseUmaneEliminaTecnico_1.eliminaTecnico; } });
+var forceAdmin_1 = require("./forceAdmin");
+Object.defineProperty(exports, "forceAdmin", { enumerable: true, get: function () { return forceAdmin_1.forceAdmin; } });
 //# sourceMappingURL=index.js.map

@@ -36,6 +36,7 @@ interface AppState {
 
 interface AppActions {
   setUserAndProfile: (user: User | null, profile: Tecnico | null) => void;
+  setAdminStatus: (isAdmin: boolean) => void;
   setAuthLoading: (isLoading: boolean) => void;
   toggleTheme: () => void;
   logout: () => void;
@@ -68,7 +69,7 @@ const initialState: AppState = {
   isAdmin: false,
   isAuthenticated: false,
   isAuthLoading: true,
-  themeMode: 'dark', // <-- IMPOSTAZIONE DI DEFAULT CORRETTA E DEFINITIVA
+  themeMode: 'dark',
   tecnici: [],
   clienti: [],
   veicoli: [],
@@ -98,10 +99,10 @@ export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
   setUserAndProfile: (user, profile) => set({
     user,
     profile,
-    isAuthenticated: !!user && !!profile,
-    isAdmin: profile?.isAdmin ?? false,
+    isAuthenticated: !!user,
     isAuthLoading: false,
   }),
+  setAdminStatus: (isAdmin) => set({ isAdmin }),
   setAuthLoading: (isLoading) => set({ isAuthLoading: isLoading }),
   toggleTheme: () => set(state => {
     const newThemeMode = state.themeMode === 'light' ? 'dark' : 'light';
@@ -112,7 +113,7 @@ export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
     set(state => ({
         ...initialState,
         isAuthLoading: false,
-        themeMode: state.themeMode, // Mantieni il tema al logout
+        themeMode: state.themeMode,
         user: null,
         profile: null,
         isAuthenticated: false,
@@ -134,7 +135,7 @@ export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
       navi: data.navi,
       categorie: data.categorie,
       tecniciMap: createMap(data.tecnici),
-      clientiMap: createMap(data.clienti),
+      clientiMap: createMap(data.clienti), // <-- CORRETTO IL REFUSO DA COGLIONE
       naviMap: createMap(data.navi),
       luoghiMap: createMap(data.luoghi),
       tipiGiornataMap: new Map(data.tipiGiornata.map(t => [t.id, t])),

@@ -1,0 +1,26 @@
+/* Stile globale per tutto il documento */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden; /* Previene lo scroll orizzontale inutile */
+}
+
+/* Fa in modo che il body possa scrollare se il contenuto eccede */
+body {
+  overflow-y: auto;
+}
+
+/* Nasconde la scrollbar per i browser basati su WebKit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent; /* Rende lo sfondo trasparente */
+}
+
+/* Nasconde la scrollbar per Firefox e IE/Edge */
+* {
+  scrollbar-width: none;   /* Per Firefox */
+  -ms-overflow-style: none;  /* Per Internet Explorer e Edge (vecchie versioni) */
+}

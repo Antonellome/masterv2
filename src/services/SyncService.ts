@@ -1,6 +1,6 @@
 
 import { collection, getDocs, query, where, Timestamp, runTransaction, doc, getDoc } from 'firebase/firestore';
-import { db as firestore } from '../firebase';
+import { db as firestore } from '@/config/firebase';
 import { db, bulkPutGeneric } from '@/db/db';
 import { anagraficheConfig } from '@/config/anagrafiche.config';
 

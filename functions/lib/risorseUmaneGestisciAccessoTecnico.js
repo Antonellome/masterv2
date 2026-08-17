@@ -84,4 +84,4 @@ exports.risorseUmane_gestisciAccessoTecnico = functions.region("europe-west1").h
         throw new functions.https.HttpsError("internal", `Si è verificato un errore interno: ${error.message}`);
     }
 });
-//# sourceMappingURL=risorseUmane-gestisciAccessoTecnico.js.map
+//# sourceMappingURL=risorseUmaneGestisciAccessoTecnico.js.map
