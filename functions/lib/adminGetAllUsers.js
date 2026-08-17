@@ -1,0 +1,80 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.admin_getAllUsers = void 0;
+const functions = __importStar(require("firebase-functions"));
+const admin = __importStar(require("firebase-admin"));
+const logger = __importStar(require("firebase-functions/logger"));
+/**
+ * Cloud Function per recuperare SOLO gli utenti amministrativi (staff).
+ * Filtra gli utenti di Firebase Auth per restituire solo quelli con il claim `livello: 'staff'`.
+ */
+exports.admin_getAllUsers = functions.region("europe-west1").https.onCall(async (data, context) => {
+    var _a;
+    // 1. Controllo di sicurezza: solo gli admin possono chiamare questa funzione.
+    if (!context.auth || context.auth.token.admin !== true) {
+        logger.error(`Tentativo non autorizzato di elencare lo staff da UID: ${(_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid}`);
+        throw new functions.https.HttpsError("permission-denied", "Operazione consentita solo agli amministratori.");
+    }
+    logger.info(`Richiesta elenco staff da admin: ${context.auth.token.email}`);
+    try {
+        const staffUsers = [];
+        let nextPageToken;
+        // Cicla attraverso tutti gli utenti paginati per trovarli tutti
+        do {
+            const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
+            listUsersResult.users.forEach(userRecord => {
+                const customClaims = (userRecord.customClaims || {});
+                // ** LA CORREZIONE CHIAVE: FILTRA PER CLAIM `livello` **
+                if (customClaims.livello === 'staff') {
+                    staffUsers.push({
+                        id: userRecord.uid,
+                        email: userRecord.email || "N/D",
+                        nome: userRecord.displayName || "Non specificato",
+                        ruolo: customClaims.admin === true ? "admin" : "user",
+                    });
+                }
+            });
+            nextPageToken = listUsersResult.pageToken;
+        } while (nextPageToken);
+        logger.info(`Restituiti ${staffUsers.length} utenti staff.`);
+        return staffUsers;
+    }
+    catch (error) {
+        logger.error("Errore durante il recupero dell'elenco dello staff:", error);
+        throw new functions.https.HttpsError("internal", `Impossibile recuperare l'elenco dello staff: ${error.message}`);
+    }
+});
+//# sourceMappingURL=adminGetAllUsers.js.map

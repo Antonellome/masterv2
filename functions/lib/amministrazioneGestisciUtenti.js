@@ -38,81 +38,70 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.onCall(async (data, context) => {
-    var _a, _b;
-    // --- NUOVO CONTROLLO AUTORIZZAZIONE BASATO SU CUSTOM CLAIMS ---
+    var _a;
+    // --- CONTROLLO AUTORIZZAZIONE ---
     if (!context.auth || context.auth.token.admin !== true) {
         logger.error(`Tentativo non autorizzato da UID: ${(_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid}`);
         throw new functions.https.HttpsError("permission-denied", "Solo un amministratore può eseguire questa operazione.");
     }
-    // --- FINE CONTROLLO AUTORIZZAZIONE ---
-    const { action } = data;
-    const adminEmail = context.auth.token.email;
-    logger.info(`Azione '${action}' richiesta da admin: ${adminEmail}`);
+    const { action, uid, nome, email, password, role, makeAdmin } = data;
     try {
         switch (action) {
-            case 'createUser':
-                if (!data.email || !data.password || !data.nome) {
-                    throw new functions.https.HttpsError("invalid-argument", "Email, password e nome sono richiesti.");
+            case 'createUser': {
+                if (!email || !nome) {
+                    throw new functions.https.HttpsError("invalid-argument", "Email e nome sono richiesti per la creazione.");
                 }
-                const userRecord = await admin.auth().createUser({ email: data.email, password: data.password, displayName: data.nome });
-                logger.info(`Utente creato in Auth con UID: ${userRecord.uid}`);
-                await admin.firestore().collection('utenti_master').doc(userRecord.uid).set({
-                    nome: data.nome,
-                    email: data.email,
-                    telefono: 'N/D',
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                const userRecord = await admin.auth().createUser({ email, password, displayName: nome });
+                const isAdmin = makeAdmin === true;
+                await admin.auth().setCustomUserClaims(userRecord.uid, {
+                    livello: 'staff',
+                    admin: isAdmin
                 });
-                logger.info(`Documento creato in utenti_master per UID: ${userRecord.uid}`);
-                // Imposta il ruolo iniziale come 'user' (claim nullo o false)
-                await admin.auth().setCustomUserClaims(userRecord.uid, { admin: false });
-                logger.info(`Custom claim impostato per UID: ${userRecord.uid} (admin: false)`);
-                return { status: "success", message: `Utente ${data.nome} creato.`, uid: userRecord.uid };
-            case 'updateUser':
-                if (!data.uid || !data.nome) {
-                    throw new functions.https.HttpsError("invalid-argument", "UID e nome sono richiesti.");
+                logger.info(`Utente ${nome} (${userRecord.uid}) creato come staff. Admin: ${isAdmin}.`);
+                return { status: "success", message: "Utente creato con successo." };
+            }
+            case 'updateUser': {
+                if (!uid || !nome) {
+                    throw new functions.https.HttpsError("invalid-argument", "UID e nome sono richiesti per l'aggiornamento.");
                 }
-                await admin.auth().updateUser(data.uid, { displayName: data.nome });
-                await admin.firestore().collection('utenti_master').doc(data.uid).update({ nome: data.nome, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-                logger.info(`Utente ${data.uid} aggiornato.`);
-                return { status: "success", message: "Utente aggiornato." };
-            case 'deleteUser':
-                if (!data.uid) {
-                    throw new functions.https.HttpsError("invalid-argument", "L'UID è richiesto.");
+                // **FIX**: Aggiorna anche il Display Name in Firebase Authentication
+                await admin.auth().updateUser(uid, { displayName: nome });
+                logger.info(`Display Name per l'utente ${uid} aggiornato a: ${nome}.`);
+                return { status: "success", message: "Nome utente aggiornato con successo." };
+            }
+            case 'deleteUser': {
+                if (!uid) {
+                    throw new functions.https.HttpsError("invalid-argument", "L'UID è richiesto per l'eliminazione.");
                 }
-                if (data.uid === context.auth.uid) {
+                if (uid === context.auth.uid) {
                     throw new functions.https.HttpsError("permission-denied", "Un admin non può eliminare se stesso.");
                 }
-                await admin.auth().deleteUser(data.uid);
-                await admin.firestore().collection('utenti_master').doc(data.uid).delete();
-                // La collezione 'admins' non è più necessaria.
-                logger.info(`Utente ${data.uid} eliminato da Auth e Firestore.`);
-                return { status: "success", message: "Utente eliminato." };
-            case 'toggleRole':
-                if (!data.uid || !data.role) {
+                await admin.auth().deleteUser(uid);
+                logger.info(`Utente ${uid} eliminato da Firebase Authentication.`);
+                return { status: "success", message: "Utente eliminato con successo." };
+            }
+            case 'toggleRole': {
+                if (!uid || !role) {
                     throw new functions.https.HttpsError("invalid-argument", "UID e ruolo sono richiesti.");
                 }
-                if (data.uid === context.auth.uid) {
+                if (uid === context.auth.uid) {
                     throw new functions.https.HttpsError("permission-denied", "Non puoi modificare il tuo stesso ruolo.");
                 }
-                const isAdmin = data.role === 'admin';
-                await admin.auth().setCustomUserClaims(data.uid, { admin: isAdmin });
-                if (isAdmin) {
-                    logger.info(`Utente ${data.uid} promosso ad admin.`);
-                }
-                else {
-                    logger.info(`Privilegi admin revocati per l'utente ${data.uid}.`);
-                }
-                return { status: "success", message: "Ruolo utente aggiornato con Custom Claims." };
+                // **FIX CRITICO**: Preserva i claims esistenti
+                const user = await admin.auth().getUser(uid);
+                const currentClaims = user.customClaims || {};
+                const newIsAdmin = role === 'admin';
+                await admin.auth().setCustomUserClaims(uid, Object.assign(Object.assign({}, currentClaims), { admin: newIsAdmin }));
+                logger.info(`Ruolo per l'utente ${uid} aggiornato. Nuovo stato admin: ${newIsAdmin}.`);
+                return { status: "success", message: "Ruolo utente aggiornato." };
+            }
             default:
                 logger.warn(`Azione non riconosciuta: '${action}'.`);
                 throw new functions.https.HttpsError("unimplemented", `L'azione '${action}' non è supportata.`);
         }
     }
     catch (error) {
-        logger.error(`Errore durante l'azione '${action}' per UID ${data.uid || 'N/D'}:`, error);
-        if ((_b = error.code) === null || _b === void 0 ? void 0 : _b.startsWith('auth/')) {
-            throw new functions.https.HttpsError("already-exists", error.message);
-        }
+        logger.error(`Errore durante l'azione '${action}' per UID ${uid || 'N/D'}:`, error);
         throw new functions.https.HttpsError("internal", `Errore interno: ${error.message}`);
     }
 });

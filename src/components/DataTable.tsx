@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
@@ -77,7 +78,7 @@ export default function DataTable<T extends BaseEntity>({ data, headCells, title
                 >
                     {title}
                 </Typography>
-                <TableContainer>
+                <TableContainer sx={{ overflowX: 'auto' }} className="no-scrollbar">
                     <Table sx={{ minWidth: 750 }} aria-labelledby="tableTitle">
                         <TableHead>
                             <TableRow>

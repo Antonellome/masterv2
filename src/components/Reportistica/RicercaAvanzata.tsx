@@ -347,7 +347,8 @@ const RicercaAvanzata: React.FC = () => {
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-            <Box sx={{ height: 'calc(100vh - 120px)', width: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1, sm: 2 }, gap: 2 }}>
+            {/* FIX: Sostituito height hardcoded con 100% per un layout fluido */}
+            <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1, sm: 2 }, gap: 2 }}>
                 <Paper elevation={2} sx={{ p: 2, flexShrink: 0 }}>
                     <Typography variant="h6" sx={{ mb: 2 }}>Filtri Ricerca</Typography>
                      <Grid container spacing={2} alignItems="center">

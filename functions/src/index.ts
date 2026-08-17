@@ -3,6 +3,11 @@ import * as admin from "firebase-admin";
 
 admin.initializeApp();
 
+// ===================================================================
+// !! NUOVA FUNZIONE DI MIGRAZIONE UNA TANTUM !!
+export { migraStaffUnaTantum } from './migraStaffUnaTantum';
+// ===================================================================
+
 // --- Funzioni CRUD Generiche (NUOVA ARCHITETTURA) ---
 export { createDocument, updateDocument, deleteDocument } from './genericCrud';
 
@@ -17,3 +22,5 @@ export { amministrazione_gestisciUtenti } from './amministrazioneGestisciUtenti'
 export { risorseUmane_gestisciAccessoTecnico } from './risorseUmaneGestisciAccessoTecnico';
 export { eliminaTecnico } from './risorseUmaneEliminaTecnico';
 export { forceAdmin } from './forceAdmin';
+export { admin_getAllUsers } from './adminGetAllUsers';
+export { riparaScuderi } from './riparaScuderi';

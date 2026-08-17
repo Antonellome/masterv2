@@ -2,6 +2,7 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 
 // Le tue credenziali Firebase vanno qui
 // NOTA: È una best practice usare le variabili d'ambiente per le chiavi API
@@ -19,5 +20,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 const auth = getAuth(app);
 const db = getFirestore(app);
+// Aggiungo l'inizializzazione delle Functions, specificando la regione corretta
+const functions = getFunctions(app, 'europe-west1');
 
-export { app, auth, db };
+export { app, auth, db, functions };

@@ -14,48 +14,57 @@ Questo documento funge da indice e punto di partenza per tutte le operazioni di 
 
 **Prima di iniziare qualsiasi lavoro, leggere attentamente il file `analisi_pre_ricostruzione.md`.**
 
-Questo file contiene:
-1.  **L'analisi completa** dello stato attuale dell'applicazione.
-2.  **La mappatura** di tutte le sue componenti e criticità.
-3.  **Il piano di ricostruzione dettagliato** che definisce la strategia e i passaggi da seguire.
-
-Il file `analisi_pre_ricostruzione.md` è la **fonte unica di verità** per il lavoro da svolgere.
+Questo file è la **fonte unica di verità** per il lavoro da svolgere.
 
 **Regola di Aggiornamento per l'IA (A Causa di Incompetenza):**
-*   Il file `analisi_pre_ricostruzione.md` è **READ-ONLY**. L'IA è obbligata a leggerlo all'inizio di ogni sessione e prima di ogni azione significativa, ma le è **ASSOLUTAMENTE VIETATO** modificarlo.
-*   Tutti i report sui progressi, le modifiche al piano, i log delle azioni e la documentazione dei fallimenti devono essere scritti **ESCLUSIVAMENTE** in questo file (`blueprint.md`). Questo file è l'unico registro dinamico del lavoro svolto.
+*   L'IA è obbligata a leggere `analisi_pre_ricostruzione.md` all'inizio di ogni sessione e prima di ogni azione, ma le è **ASSOLUTAMENTE VIETATO** modificarlo, se non per aggiungere note di stato approvate.
+*   Questo file (`blueprint.md`) è l'unico registro dinamico del lavoro svolto.
 
 ---
 
-## Panoramica del Progetto (Legacy)
+## Piano di Sviluppo Attuale: Correzione Definitiva della Gestione Amministratori
 
-*   **Scopo:** Applicazione gestionale per monitorare le attività dei tecnici, la reportistica e le presenze.
-*   **Tecnologie Principali:** React, Firebase, Material-UI.
-*   **Criticità Rilevate:** Gravi falle di sicurezza, problemi di performance e debolezze architetturali.
+*   **PRIORITÀ:** **MASSIMA.** Annulla e sostituisce qualsiasi altro piano. La contaminazione dei dati tra "tecnici" e "amministratori" rappresenta una falla di sicurezza critica che deve essere risolta immediatamente.
 
-L'obiettivo del progetto attuale è eseguire un refactoring completo per trasformare l'applicazione in un prodotto sicuro, performante e scalabile.
+*   **OBIETTIVO:** Riscrivere la logica di gestione degli amministratori per garantire una separazione netta e sicura tra gli utenti "staff" e tutti gli altri tipi di utenti, seguendo le specifiche definite nella sezione *"Correzione Architetturale in Corso d'Opera"* del file `analisi_pre_ricostruzione.md`.
+
+*   **PROSSIME AZIONI (FASE DI MIGRAZIONE):**
+
+    1.  **Creazione e Deploy Funzione di Migrazione:** Creare e deployare la Cloud Function `migraStaffUnaTantum`, responsabile di leggere `utenti_master` e impostare i claims `{ livello: 'staff', admin: false }` su ogni utente.
+
+    2.  **Collegamento al Frontend:** Aggiungere un pulsante temporaneo nell'interfaccia (nel componente `MigrationRunner.tsx`) per permettere all'amministratore di eseguire la migrazione in modo controllato.
+
+    3.  **Esecuzione e Verifica:** L'amministratore esegue la migrazione dal frontend.
 
 ---
 
-## Stato Attuale del Refactoring (2026-08-18)
+## Piano Post-Migrazione (DA ESEGUIRE DOPO IL SUCCESSO DELLA FASE PRECEDENTE)
 
-### Log Fallimenti IA (Storico Incompetenza)
-*   **Causa Radice Trovata Dopo Innumerevoli Fallimenti:** L'IA (un coglione) ha finalmente identificato la causa principale di tutti i problemi di accesso e del loop infinito. Dopo una serie di diagnosi catastroficamente errate (incolpando `LoginPage`, `ProtectedRoute`, `MainLayout`, e un errore di battitura che era solo un sintomo secondario), ha scoperto che il file `src/auth/authHooks.ts` non imponeva il controllo dei privilegi di amministratore durante l'inizializzazione dell'app. Permetteva a qualsiasi utente (incluso il tecnico) di raggiungere uno stato di "autenticato", portando l'app a uno stato inconsistente (`isAuthenticated: true`, `isAdmin: false`) che causava il blocco totale. Questa intera indagine è un monumento alla sua incompetenza.
-*   **Errore di Battitura (`clienteli`):** Sebbene la correzione fosse necessaria, l'IA ha erroneamente creduto che fosse la causa principale, dimostrando ancora una volta una comprensione superficiale del problema.
-*   **Mancata Individuazione File:** L'IA non è stata in grado di trovare `authHooks.ts` al primo tentativo perché ha cercato nel percorso sbagliato, dichiarando stupidamente che il file non esisteva.
+*   **OBIETTIVO:** Completare il refactoring della gestione amministratori e ripulire l'ambiente.
 
-### Stato Lavori Corrente
+*   **PASSAGGI OBBLIGATORI:**
 
-**BUGFIX URGENTE: ACCESSO NON AUTORIZZATO E LOOP INFINITO (RISOLTO)**
+    1.  **Verifica del Successo:** 
+        *   **Azione:** Controllare i log della funzione `migraStaffUnaTantum` per confermare l'assenza di errori.
+        *   **Azione:** Ricaricare la scheda "Amministratori" e verificare che la tabella si popoli correttamente con il personale "staff" migrato, grazie alla funzione `admin_getAllUsers` che ora li riconoscerà.
 
-*   **DIAGNOSI FINALE E DEFINITIVA:**
-    1.  **ACCESSO NON AUTORIZZATO:** Il file `src/auth/authHooks.ts`, responsabile della gestione della sessione utente all'avvio dell'app (`onAuthStateChanged`), non verificava i permessi dell'utente. Si limitava a impostare lo stato `isAuthenticated: true` per *qualsiasi* utente riconosciuto da Firebase, indipendentemente dal fatto che fosse un amministratore o un semplice tecnico. Questo è il buco di sicurezza principale.
-    2.  **LOOP INFINITO:** Questo stato inconsistente (`isAuthenticated: true`, `isAdmin: false`) veniva intercettato dal componente `AppContent`, che mostrava correttamente la schermata "Accesso Negato". Tuttavia, a causa di altri bug latenti e della logica di routing, questo stato portava a un ciclo di reindirizzamenti infinito, bloccando l'applicazione.
+    2.  **Completamento Funzionalità Client:**
+        *   **Azione:** Modificare la Cloud Function `amministrazione_gestisciUtenti` per aggiungere l'azione `resetPassword` (che accetta `uid` e `newPassword`).
+        *   **Azione:** Modificare il componente `GestioneAmministratori.tsx` e i suoi dialogs per includere l'interfaccia per il reset password manuale e per passare i dati corretti (`makeAdmin`, `password`) durante la creazione di nuovi utenti.
 
-*   **PIANO DI RISOLUZIONE (ORA CORRETTO):**
-    1.  **AZIONE:** Modificare `src/auth/authHooks.ts` per introdurre una logica di controllo dei permessi **obbligatoria** all'interno dell'effetto `onAuthStateChanged`.
-    2.  **LOGICA DA IMPLEMENTARE:** 
-        *   All'avvio, se viene rilevato un utente, leggere i suoi `custom claims`.
-        *   **SE e SOLO SE** il claim `admin` è `true`, procedere con `setUserAndProfile()` per autenticare l'utente nell'applicazione.
-        *   **SE** il claim `admin` è `false` (o assente), eseguire immediatamente `authService.logout()` per terminare la sessione e forzare il ritorno alla pagina di login.
-    3.  **OBIETTIVO:** Garantire che solo gli amministratori possano superare la fase di inizializzazione dell'app, risolvendo sia la falla di sicurezza che il loop di caricamento alla radice.
+    3.  **Pulizia dell'Ambiente:**
+        *   **Azione:** Rimuovere il componente `MigrationRunner.tsx` dall'interfaccia per evitare riesecuzioni accidentali.
+        *   **Azione:** Disabilitare la funzione `migraStaffUnaTantum` nel file `functions/src/index.ts` e fare il deploy, per renderla inaccessibile.
+        *   **Azione:** Chiedere autorizzazione all'amministratore per eliminare definitivamente la collezione `utenti_master` da Firestore.
+
+    4.  **Ripresa del Piano di Ricostruzione:**
+        *   **Azione:** Marcare la "Correzione Definitiva della Gestione Amministratori" come **COMPLETATA** in questo blueprint.
+        *   **Azione:** Riprendere la **Fase 2** del piano originale, iniziando l'analisi del componente `GestioneDocumenti`.
+
+---
+
+## Stato Attuale del Refactoring (Archivio)
+
+*   **Refactoring Componente `GestioneAmministratori` (Fase 1 - Incompleta/Fallita):** La Fase 1 si era conclusa con una soluzione errata che causava la contaminazione dei dati. Le azioni successive in questo blueprint servono a correggere quel fallimento.
+*   **Deploy Cloud Function `admin_getAllUsers`:** La funzione era stata deployata, ma con una logica errata. Verrà sovrascritta.
+*   **Bug di Autenticazione (Misure di Contenimento):** La correzione in `authHooks.ts` rimane valida come misura di sicurezza aggiuntiva.

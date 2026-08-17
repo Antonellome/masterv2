@@ -54,7 +54,7 @@ const pageTitles: { [key: string]: string } = {
     '/reportistica': 'Reportistica',
     '/tecnici': 'Tecnici',
     '/presenze': 'Presenze', 
-    '/anagrafiche': 'Anagrafiche',
+    '/anagrafiche': 'Anagrafica',
     '/documenti': 'Documenti',
     '/scadenze': 'Scadenze',
     '/notifications': 'Notifiche',
@@ -158,7 +158,8 @@ const MainLayout = () => {
 
             <Box component="main" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh' }}>
                 <Toolbar sx={{ minHeight: `${appBarHeight} !important` }} />
-                <Box sx={{ flexGrow: 1, p: 3, overflowY: 'auto', overflowX: 'auto' }}>
+                 {/* FIX GLOBALE: Cambiato da overflowY a overflow per abilitare lo scroll in entrambe le direzioni */}
+                <Box sx={{ flexGrow: 1, p: 3, overflow: 'auto' }}>
                     <Outlet />
                 </Box>
             </Box>

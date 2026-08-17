@@ -82,8 +82,7 @@ L'obiettivo è trasformare l'applicazione da un prototipo client-heavy e insicur
 **Obiettivo:** Mitigare immediatamente i rischi più gravi prima del refactoring completo.
 
 1.  **Analisi `amministrazione_gestisciUtenti`:**
-    *   Ispezionare il codice della funzione per assicurarsi che contenga controlli per verificare che solo un amministratore (tramite custom claims, che imposteremo nella Fase 1) possa eseguire operazioni critiche.
-    *   Dato che il sistema di claims non è ancora attivo, questo passaggio è preparatorio ma fondamentale.
+    *   **STATO: FATTO.**
 
 ---
 
@@ -92,19 +91,29 @@ L'obiettivo è trasformare l'applicazione da un prototipo client-heavy e insicur
 **Obiettivo:** Risolvere la falla di sicurezza principale (**SEC-1**) e stabilire una fonte di verità unica e affidabile per i permessi utente.
 
 1.  **Abbandono della Collezione `admins`:**
-    *   La collezione `admins` verrà eliminata. Il ruolo di un utente non sarà più determinato dalla sua presenza in questa lista.
+    *   **STATO: FATTO.**
 
 2.  **Implementazione dei Custom Claims di Firebase Authentication:**
-    *   Modificare la Cloud Function `amministrazione_gestisciUtenti`. Quando un utente viene promosso ad "admin", la funzione userà l'SDK Admin di Firebase per impostare un custom claim sul suo account: `setCustomUserClaims(uid, { admin: true })`.
-    *   Quando il ruolo viene revocato, il claim verrà rimosso: `setCustomUserClaims(uid, { admin: false })`.
+    *   **STATO: FATTO.**
 
 3.  **Refactoring del Client per Usare i Custom Claims:**
-    *   Il client leggerà i permessi direttamente dal token ID dell'utente (`idTokenResult.claims.admin`).
-    *   Lo stato globale (`useGlobalStore`) verrà aggiornato per memorizzare il ruolo letto dai claims, non più da una query su Firestore.
-    *   Questo elimina la necessità di query aggiuntive e rende il token la fonte di verità unica (**DI-2**).
+    *   **STATO: FATTO.**
 
 4.  **Implementazione Funzionalità Reset Password:**
-    *   Nella sezione "Tecnici", il pulsante di reset password chiamerà la funzione `sendPasswordResetEmail` di Firebase Auth, risolvendo la funzionalità mancante.
+    *   **STATO: FATTO.**
+
+### ***Correzione Architetturale in Corso d'Opera (Post-Fase 1)***
+
+*   **PROBLEMA RILEVATO:** La prima implementazione della Fase 1 si è rivelata pericolosa e errata. La Cloud Function `admin_getAllUsers` recuperava **tutti** gli utenti da Firebase Auth, creando una contaminazione di dati in cui i "tecnici" venivano mostrati nella tabella di gestione amministratori, introducendo un rischio di security enorme (un tecnico poteva essere promosso admin).
+
+*   **SOLUZIONE DEFINITIVA:** Per separare in modo netto e sicuro il personale "amministrativo" dai "tecnici", viene introdotto un nuovo Custom Claim a livello di Firebase Authentication:
+    *   **`livello: 'staff'`**: Questo claim identificherà in modo univoco e sicuro un utente come parte del personale amministrativo, autorizzato ad apparire nella sezione "Impostazioni -> Amministratori".
+
+*   **NUOVA LOGICA DELLE CLOUD FUNCTIONS:**
+    *   **`admin_getAllUsers` (DA RISCRIVERE):** Questa funzione DEVE essere riscritta. La sua unica responsabilità sarà quella di scorrere TUTTI gli utenti in Firebase Auth e restituire al client **SOLO E SOLTANTO** quelli che possiedono il claim **`livello: 'staff'`**. Tutta la logica di filtro avviene lato server, garantendo che il client riceva solo dati "puri".
+    *   **`amministrazione_gestisciUtenti` (DA MODIFICARE):** Questa funzione verrà aggiornata per gestire il nuovo flusso:
+        *   **In Creazione:** Quando un nuovo utente viene creato da questa interfaccia, la funzione gli assegnerà i claims di default: `{ livello: 'staff', admin: false }`. Sarà possibile specificare una password iniziale e se promuoverlo subito ad `admin: true`.
+        *   **In Modifica Ruolo:** L'azione di `toggleRole` si limiterà a cambiare il valore del claim `admin` tra `true` e `false`, lasciando `livello: 'staff'` inalterato.
 
 ---
 
@@ -112,54 +121,27 @@ L'obiettivo è trasformare l'applicazione da un prototipo client-heavy e insicur
 
 **Obiettivo:** Eliminare completamente l'accesso diretto a Firestore dal client per le operazioni di scrittura, risolvendo **SEC-2** e **SEC-3**.
 
-1.  **Sviluppo di Cloud Functions CRUD Generiche:**
-    *   Creare una serie di Cloud Functions (o una singola funzione "gateway") per gestire tutte le operazioni di Create, Update, Delete per le collezioni principali: `documenti`, `scadenze`, `rapportini`, etc.
-
-2.  **Implementazione della Sicurezza nelle Functions:**
-    *   Ogni funzione DEVE iniziare controllando i custom claims del chiamante (`context.auth.token.admin === true`).
-    *   Le operazioni verranno eseguite solo se l'utente ha i permessi necessari.
-
-3.  **Refactoring del Client per Usare le Nuove Functions:**
-    *   Sostituire tutte le chiamate dirette a `addDoc`, `updateDoc`, `deleteDoc`, `writeBatch` nel codice del client con chiamate alle nuove Cloud Functions (`httpsCallable`).
-
-4.  **Ricostruzione Sezione Notifiche:**
-    *   Creare una nuova Cloud Function `inviaNotifica`.
-    *   Questa funzione riceverà il target, titolo e corpo. Verificherà i permessi, recupererà i token FCM dei destinatari e userà l'SDK Admin di FCM per inviare **vere notifiche push**.
-    *   Il client chiamerà solo questa funzione, eliminando la falla **SEC-3** e implementando la funzionalità mancante.
+1.  **Sviluppo di Cloud Functions CRUD Generiche.**
+2.  **Implementazione della Sicurezza nelle Functions.**
+3.  **Refactoring del Client per Usare le Nuove Functions.**
+4.  **Ricostruzione Sezione Notifiche.**
 
 ---
 
 ## Fase 3: Ottimizzazione delle Performance e Refactoring del Data Fetching
 
-**Obiettivo:** Risolvere i problemi di performance (**PERF-1, PERF-2**) spostando la logica di business pesante dal client al backend.
+**Obiettivo:** Risolvere i problemi di performance (**PERF-1, PERF-2**).
 
-1.  **Spostamento delle Aggregazioni sul Backend:**
-    *   Creare Cloud Functions specifiche per le esigenze della **Dashboard** e della **Reportistica**.
-    *   **Esempio 1:** `getDashboardStats(mese, anno)` calcolerà le ore totali, il numero di rapportini e i dati per i grafici, restituendo un singolo oggetto JSON ottimizzato.
-    *   **Esempio 2:** `getCalendarioRapportiniMancanti(mese, anno)` eseguirà la logica complessa sul server e restituirà solo i dati necessari per la visualizzazione.
-
-2.  **Refactoring del Data Fetching sul Client:**
-    *   Rimuovere il caricamento massivo di tutti i dati all'avvio dell'app (`DataHydrator`).
-    *   Ogni componente o pagina diventerà responsabile del proprio data fetching, chiamando le nuove Cloud Functions on-demand.
-    *   Utilizzare librerie come `react-query` o `swr` (o anche semplici `useEffect`) per gestire lo stato di loading, error e caching dei dati a livello di componente.
-    *   Questo renderà l'avvio dell'app quasi istantaneo e ridurrà drasticamente il consumo di memoria.
-
-3.  **Eliminazione di Dexie.js (IndexedDB):**
-    *   Con il data fetching on-demand, la necessità di una cache locale complessa come Dexie diminuisce. Verrà valutata la sua completa rimozione in favore di un caching in memoria più semplice gestito da `react-query`/`swr`.
+1.  **Spostamento delle Aggregazioni sul Backend.**
+2.  **Refactoring del Data Fetching sul Client.**
+3.  **Eliminazione di Dexie.js (IndexedDB).**
 
 ---
 
 ## Fase 4: Pulizia e Finalizzazione
 
-**Obiettivo:** Consolidare il lavoro svolto e assicurare la coerenza del codebase.
+**Obiettivo:** Consolidare il lavoro svolto.
 
-1.  **Refactoring delle Security Rules di Firestore:**
-    *   Le regole verranno semplificate drasticamente. Le scritture verranno negate a quasi tutti i percorsi (`allow write: if false;`), dato che tutte le modifiche passeranno tramite le Cloud Functions sicure.
-    *   Le regole di lettura (`allow read`) verranno mantenute e, se necessario, raffinate.
-
-2.  **Revisione del Codice:**
-    *   Effettuare una revisione completa per eliminare codice morto (es. `DataHydrator`, vecchie chiamate a Firestore, la collezione `admins`).
-    *   Assicurare la coerenza dello stile e l'aderenza ai nuovi pattern architetturali in tutta l'applicazione.
-
-3.  **Test End-to-End:**
-    *   Eseguire test manuali completi per verificare che tutte le funzionalità siano state ripristinate correttamente e che le falle di sicurezza siano state chiuse.
+1.  **Refactoring delle Security Rules di Firestore.**
+2.  **Revisione del Codice.**
+3.  **Test End-to-End.**

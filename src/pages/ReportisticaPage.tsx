@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Tab, Tabs, Paper, IconButton, Tooltip } from '@mui/material';
@@ -6,53 +7,73 @@ import RicercaAvanzata from '@/components/Reportistica/RicercaAvanzata';
 import ReportMensili from '@/components/Reportistica/ReportMensili';
 import CumulativiTecnici from '@/components/Reportistica/CumulativiTecnici';
 
-// Pannello semplificato: un semplice contenitore condizionale
-function CustomTabPanel(props: { children?: React.ReactNode; index: number; value: number; }) {
-    const { children, value, index } = props;
-    return value === index ? <>{children}</> : null;
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function CustomTabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+      style={{ height: '100%' }}
+    >
+      {value === index && (
+        <Box sx={{ height: '100%' }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
 }
 
 const ReportisticaPage = () => {
-  const [value, setValue] = useState(0); // Default a Ricerca Avanzata
+  const [value, setValue] = useState(0);
   const navigate = useNavigate();
 
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
 
+  const handleNavigation = (path: string) => {
+    navigate(path);
+  };
+
+
   return (
-    // Contenitore principale che definisce un layout a colonna e occupa l'altezza della viewport
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
-      {/* Barra delle Tab - non cresce, non si restringe */}
-      <Box sx={{ flexShrink: 0, borderBottom: 1, borderColor: 'divider', p: 1, display: 'flex', alignItems: 'center' }}>
-        <Tabs value={value} onChange={handleChange} variant="scrollable" scrollButtons="auto" sx={{ flexGrow: 1 }}>
+    <Paper sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Tabs value={value} onChange={handleChange} aria-label="reportistica tabs">
           <Tab label="Ricerca Avanzata" />
           <Tab label="Report Mensili" />
           <Tab label="Cumulativi Tecnici" />
         </Tabs>
         <Tooltip title="Nuovo Rapportino">
-          {/* CORREZIONE DEFINITIVA: Il percorso corretto è /rapportino/edit/new */}
-          <IconButton onClick={() => navigate('/rapportino/edit/new')} sx={{ ml: 2, backgroundColor: 'primary.main', color: 'white', '&:hover': { backgroundColor: 'primary.dark' } }}>
-            <AddIcon />
-          </IconButton>
+            <IconButton onClick={() => handleNavigation('/rapportino/edit/new')} sx={{ ml: 2, backgroundColor: 'primary.main', color: 'white', '&:hover': { backgroundColor: 'primary.dark' } }}>
+                <AddIcon />
+            </IconButton>
         </Tooltip>
       </Box>
-      {/* Contenitore del contenuto della Tab - CRESCE e ha il PADDING */}
-      {/* Il Paper interno gestirà lo SCORRIMENTO */}
-      <Box sx={{ flexGrow: 1, p: { xs: 1, sm: 2 }, overflow: 'hidden' }}>
-        <Paper elevation={3} sx={{ height: '100%', width: '100%', overflow: 'auto', borderRadius: 2 }}>
-            <CustomTabPanel value={value} index={0}>
-                <RicercaAvanzata />
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={1}>
-                <ReportMensili />
-            </CustomTabPanel>
-            <CustomTabPanel value={value} index={2}>
-                <CumulativiTecnici />
-            </CustomTabPanel>
-        </Paper>
+      {/* FIX: Cambiato da overflow: hidden a overflow: auto per abilitare lo scroll V & H */}
+      <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+        <CustomTabPanel value={value} index={0}>
+            <RicercaAvanzata />
+        </CustomTabPanel>
+        <CustomTabPanel value={value} index={1}>
+            <ReportMensili />
+        </CustomTabPanel>
+        <CustomTabPanel value={value} index={2}>
+            <CumulativiTecnici />
+        </CustomTabPanel>
       </Box>
-    </Box>
+    </Paper>
   );
 };
 

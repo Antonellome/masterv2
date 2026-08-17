@@ -33,9 +33,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.forceAdmin = exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = void 0;
+exports.riparaScuderi = exports.admin_getAllUsers = exports.forceAdmin = exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = exports.migraStaffUnaTantum = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
+// ===================================================================
+// !! NUOVA FUNZIONE DI MIGRAZIONE UNA TANTUM !!
+var migraStaffUnaTantum_1 = require("./migraStaffUnaTantum");
+Object.defineProperty(exports, "migraStaffUnaTantum", { enumerable: true, get: function () { return migraStaffUnaTantum_1.migraStaffUnaTantum; } });
+// ===================================================================
 // --- Funzioni CRUD Generiche (NUOVA ARCHITETTURA) ---
 var genericCrud_1 = require("./genericCrud");
 Object.defineProperty(exports, "createDocument", { enumerable: true, get: function () { return genericCrud_1.createDocument; } });
@@ -58,4 +63,8 @@ var risorseUmaneEliminaTecnico_1 = require("./risorseUmaneEliminaTecnico");
 Object.defineProperty(exports, "eliminaTecnico", { enumerable: true, get: function () { return risorseUmaneEliminaTecnico_1.eliminaTecnico; } });
 var forceAdmin_1 = require("./forceAdmin");
 Object.defineProperty(exports, "forceAdmin", { enumerable: true, get: function () { return forceAdmin_1.forceAdmin; } });
+var adminGetAllUsers_1 = require("./adminGetAllUsers");
+Object.defineProperty(exports, "admin_getAllUsers", { enumerable: true, get: function () { return adminGetAllUsers_1.admin_getAllUsers; } });
+var riparaScuderi_1 = require("./riparaScuderi");
+Object.defineProperty(exports, "riparaScuderi", { enumerable: true, get: function () { return riparaScuderi_1.riparaScuderi; } });
 //# sourceMappingURL=index.js.map
