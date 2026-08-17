@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useMemo } from 'react';
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -7,8 +8,11 @@ import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
 import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
 import { v4 as uuidv4 } from 'uuid';
+import { useGlobalStore } from '@/stores/globalStore';
 
 const GestioneTecnici = () => {
+    const areAnagraficheLoading = useGlobalStore((state) => state.areAnagraficheLoading);
+
     const tecnici = useLiveQuery(() => db.tecnici.orderBy('cognome').toArray());
     const ditte = useLiveQuery(() => db.ditte.orderBy('nome').toArray());
     const categorie = useLiveQuery(() => db.categorie.orderBy('nome').toArray());
@@ -40,19 +44,19 @@ const GestioneTecnici = () => {
         setIsSaving(true);
         try {
             const now = new Date();
-            if (formData.id) { // Modifica
+            if (formData.id) { 
                 await db.tecnici.update(formData.id, {
                     ...formData,
                     isDirty: true,
                     updatedAt: now,
                 });
                 showSnackbar('Tecnico aggiornato con successo. La modifica sarà sincronizzata.', 'success');
-            } else { // Creazione
+            } else { 
                 const newId = uuidv4();
                 const newTecnico: Tecnico = {
                     ...formData,
                     id: newId,
-                    uid: newId, // L'UID Firebase verrà assegnato dal backend, per ora usiamo un ID locale
+                    uid: newId, 
                     attivo: true,
                     appAccess: false,
                     createdAt: now,
@@ -119,8 +123,8 @@ const GestioneTecnici = () => {
     const ditteMap = useMemo(() => new Map(ditte?.map(d => [d.id, d.nome])), [ditte]);
     const categorieMap = useMemo(() => new Map(categorie?.map(c => [c.id, c.nome])), [categorie]);
 
-    if (!tecnici || !ditte || !categorie) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
+    if (areAnagraficheLoading || !tecnici || !ditte || !categorie) {
+        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}><CircularProgress /></Box>;
     }
     
     if (error) {
@@ -128,19 +132,21 @@ const GestioneTecnici = () => {
     }
 
     return (
-        <>
-            <TecniciList
-                tecnici={tecnici}
-                ditteMap={ditteMap}
-                categorieMap={categorieMap}
-                onAdd={handleAdd}
-                onEdit={handleEdit}
-                onDelete={(_e, id) => handleDelete(id)}
-                onStatusChange={handleStatusChange} 
-                onViewDetails={() => { /* Funzionalità futura */ }}
-                isSaving={isSaving}
-                updatingId={updatingId}
-            />
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <Box sx={{ flexGrow: 1, minHeight: 0, height: '100%' }}>
+                <TecniciList
+                    tecnici={tecnici}
+                    ditteMap={ditteMap}
+                    categorieMap={categorieMap}
+                    onAdd={handleAdd}
+                    onEdit={handleEdit}
+                    onDelete={(_e, id) => handleDelete(id)}
+                    onStatusChange={handleStatusChange} 
+                    onViewDetails={() => { /* Funzionalità futura */ }}
+                    isSaving={isSaving}
+                    updatingId={updatingId}
+                />
+            </Box>
             <TecnicoForm
                 open={formOpen}
                 onClose={() => setFormOpen(false)}
@@ -162,7 +168,7 @@ const GestioneTecnici = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
-        </>
+        </Box>
     );
 };
 

@@ -1,48 +1,97 @@
 
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '@/firebase';
+import { functions } from '@/firebase'; // Assicura che questo punti alla tua istanza di functions
 import type { Rapportino } from '@/models/definitions';
 
-// Definiamo un tipo per l'input della funzione, che è un Rapportino parziale
-// senza i campi gestiti dal server (come id, createdAt, updatedAt)
+// Definisce l'input parziale per creare/aggiornare un rapportino.
 type RapportinoInputData = Partial<Omit<Rapportino, 'id' | 'createdAt' | 'updatedAt'>>;
 
-const createRapportinoCloud = httpsCallable<RapportinoInputData, { id: string }>(functions, 'createRapportino');
-const updateRapportinoCloud = httpsCallable<{ id: string; data: RapportinoInputData }, void>(functions, 'updateRapportino');
-const deleteRapportinoCloud = httpsCallable<{ id: string }, void>(functions, 'deleteRapportino');
+// Definisce la struttura del payload per la nostra funzione UNIFICATA
+interface ManageRapportinoPayload {
+  action: 'create' | 'update' | 'delete';
+  id?: string; // Obbligatorio per update e delete
+  data?: RapportinoInputData; // Obbligatorio per create e update
+}
 
+// Definisce la struttura della risposta attesa
+interface ManageRapportinoResponse {
+  success: boolean;
+  message?: string;
+  rapportinoId?: string; 
+}
+
+// La singola funzione callable che punta al nostro nuovo endpoint UNIFICATO
+const manageRapportino = httpsCallable<ManageRapportinoPayload, ManageRapportinoResponse>(functions, 'manageRapportino');
+
+/**
+ * Servizio Cloud per la gestione centralizzata dei rapportini.
+ * Utilizza una singola Cloud Function (manageRapportino) con diverse azioni.
+ */
 export const rapportinoCloudService = {
-  create: async (data: RapportinoInputData) => {
-    console.log("Invio a Cloud Function 'createRapportino':", data);
+  /**
+   * Crea un nuovo rapportino.
+   * @param data L'oggetto rapportino da creare.
+   * @returns L'ID del rapportino creato.
+   */
+  create: async (data: RapportinoInputData): Promise<string> => {
+    console.log("Invio a 'manageRapportino' [create]:", data);
     try {
-      const result = await createRapportinoCloud(data);
-      console.log("Risposta da 'createRapportino':", result.data.id);
-      return result.data.id;
-    } catch (error) {
-      console.error("Errore durante la chiamata a createRapportino:", error);
-      throw new Error("La creazione del rapportino sul server è fallita.");
+      const result = await manageRapportino({
+        action: 'create',
+        data: data,
+      });
+
+      if (result.data.success && result.data.rapportinoId) {
+        return result.data.rapportinoId;
+      } else {
+        throw new Error(result.data.message || "La funzione cloud non ha restituito un ID per il rapportino.");
+      }
+    } catch (error: any) {
+      console.error("Errore durante la chiamata a 'manageRapportino' [create]:", error);
+      throw new Error(`Creazione rapportino fallita: ${error.message}`);
     }
   },
 
-  update: async (id: string, data: RapportinoInputData) => {
-    console.log(`Invio a Cloud Function 'updateRapportino' (id: ${id}):`, data);
+  /**
+   * Aggiorna un rapportino esistente.
+   * @param id L'ID del rapportino da aggiornare.
+   * @param data I campi del rapportino da aggiornare.
+   */
+  update: async (id: string, data: RapportinoInputData): Promise<void> => {
+    console.log(`Invio a 'manageRapportino' [update] (id: ${id}):`, data);
     try {
-      await updateRapportinoCloud({ id, data });
-      console.log("Risposta da 'updateRapportino' ricevuta.");
-    } catch (error) {
-      console.error("Errore durante la chiamata a updateRapportino:", error);
-      throw new Error("L'aggiornamento del rapportino sul server è fallito.");
+      const result = await manageRapportino({
+        action: 'update',
+        id: id,
+        data: data,
+      });
+
+      if (!result.data.success) {
+        throw new Error(result.data.message || "L'aggiornamento è fallito senza un messaggio specifico.");
+      }
+    } catch (error: any) {
+      console.error(`Errore durante la chiamata a 'manageRapportino' [update]:`, error);
+      throw new Error(`Aggiornamento rapportino (id: ${id}) fallito: ${error.message}`);
     }
   },
 
-  delete: async (id: string) => {
-    console.log(`Invio a Cloud Function 'deleteRapportino' (id: ${id})`);
+  /**
+   * Elimina un rapportino (soft delete).
+   * @param id L'ID del rapportino da eliminare.
+   */
+  delete: async (id: string): Promise<void> => {
+    console.log(`Invio a 'manageRapportino' [delete] (id: ${id})`);
      try {
-      await deleteRapportinoCloud({ id });
-      console.log("Risposta da 'deleteRapportino' ricevuta.");
-    } catch (error) {
-      console.error("Errore durante la chiamata a deleteRapportino:", error);
-      throw new Error("L'eliminazione del rapportino sul server è fallita.");
+       const result = await manageRapportino({
+         action: 'delete',
+         id: id,
+       });
+       if (!result.data.success) {
+         throw new Error(result.data.message || "L'eliminazione è fallita senza un messaggio specifico.");
+       }
+    } catch (error: any) {
+      console.error(`Errore durante la chiamata a 'manageRapportino' [delete]:`, error);
+      throw new Error(`Eliminazione rapportino (id: ${id}) fallita: ${error.message}`);
     }
   }
 };

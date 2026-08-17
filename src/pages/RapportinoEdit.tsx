@@ -19,6 +19,7 @@ import type { Rapportino, TipoGiornata, Tecnico } from '@/models/definitions';
 
 dayjs.locale('it');
 
+// --------- INIZIO SOTTOCOMPONENTI (rimangono invariati) ------------
 const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly }) => {
     const oreOptions = useMemo(() => Array.from({ length: 49 }, (_, i) => i * 0.5), []);
     const handleValueChange = (field: keyof DettaglioOreData, value: any) => {
@@ -88,8 +89,11 @@ const emptyDettaglioOre: DettaglioOreData = {
     pausa: 60,
     ore: 8
 };
+// --------- FINE SOTTOCOMPONENTI ------------
+
 
 const RapportinoEdit: React.FC = () => {
+    // --- INIZIO STATO E HOOKS (rimangono invariati) ---
     const navigate = useNavigate();
     const { id: reportId } = useParams<{ id: string }>();
     const isEditMode = Boolean(reportId);
@@ -137,7 +141,9 @@ const RapportinoEdit: React.FC = () => {
     const [editingTecnico, setEditingTecnico] = useState<DettaglioOreData | null>(null);
     const [tempDettaglioOre, setTempDettaglioOre] = useState<DettaglioOreData | null>(null);
     const [firma, setFirma] = useState<string | null>(null);
+    // --- FINE STATO E HOOKS ---
 
+    // --- INIZIO LOGICA E HANDLERS (rimangono invariati) ---
     const handleTecnicoResponsabileChange = (_: any, nuovoTecnico: Tecnico | null) => {
         const nuovoId = nuovoTecnico?.id || null;
         setTecnicoResponsabileId(nuovoId);
@@ -381,112 +387,130 @@ const RapportinoEdit: React.FC = () => {
     const altriTecniciSelezionati = useMemo(() => sortedTecnici.filter(t => dettaglioOre.some(d => d.tecnicoId === t.id && d.tecnicoId !== tecnicoResponsabileId)), [dettaglioOre, sortedTecnici, tecnicoResponsabileId]);
     const altriTecniciOpzioni = useMemo(() => sortedTecnici.filter(t => t.id !== tecnicoResponsabileId), [sortedTecnici, tecnicoResponsabileId]);
 
+    // --- FINE LOGICA E HANDLERS ---
+    
     if (pageLoading || collectionsLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>;
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-            <Box sx={{ p: { xs: 2, sm: 3 }, mx: 'auto', maxWidth: 900 }}>
-                <Paper elevation={3} sx={{ p: { xs: 2, sm: 3 } }}>
-                    <Typography variant="h4" component="h1" gutterBottom>{isEditMode ? 'Dettaglio' : 'Nuovo'} Rapportino</Typography>
-                    <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 2 }}>
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} md={4}>
-                                <Autocomplete
-                                    options={opzioniTecnici}
-                                    getOptionLabel={(option) => `${option.cognome || ''} ${option.nome || ''}`.trim()}
-                                    value={tecnicoResponsabileSelezionato}
-                                    onChange={handleTecnicoResponsabileChange}
-                                    isOptionEqualToValue={(option, value) => option.id === value.id}
-                                    disabled={isSaving}
-                                    renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />}
-                                />
+            {/* 1. Contenitore Principale FLEX a colonna, occupa tutta l'altezza */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 3 }}>
+
+                {/* 2. Titolo STATICO, non si espande */}
+                <Typography variant="h4" component="h1" gutterBottom sx={{ flexShrink: 0 }}>
+                    {isEditMode ? 'Dettaglio' : 'Nuovo'} Rapportino
+                </Typography>
+
+                {/* 3. Area SCROLLABILE, si espande per riempire lo spazio */}
+                <Box sx={{ flexGrow: 1, overflow: 'auto', pr: 2 }}>
+                    <Paper elevation={3} sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                            {/* ...tutto il contenuto del form va qui dentro... */}
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} md={4}>
+                                    <Autocomplete
+                                        options={opzioniTecnici}
+                                        getOptionLabel={(option) => `${option.cognome || ''} ${option.nome || ''}`.trim()}
+                                        value={tecnicoResponsabileSelezionato}
+                                        onChange={handleTecnicoResponsabileChange}
+                                        isOptionEqualToValue={(option, value) => option.id === value.id}
+                                        disabled={isSaving}
+                                        renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        label="Ordine di Lavoro"
+                                        value={ordineLavoro}
+                                        onChange={e => setOrdineLavoro(e.target.value)}
+                                        fullWidth
+                                        disabled={isSaving}
+                                    />
+                                </Grid>
                             </Grid>
-                            <Grid item xs={12} md={4}>
-                                <DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} />
-                            </Grid>
-                            <Grid item xs={12} md={4}>
-                                <TextField
-                                    label="Ordine di Lavoro"
-                                    value={ordineLavoro}
-                                    onChange={e => setOrdineLavoro(e.target.value)}
-                                    fullWidth
-                                    disabled={isSaving}
-                                />
-                            </Grid>
-                        </Grid>
-                        <FormControl fullWidth required>
-                            <InputLabel>Tipo Giornata</InputLabel>
-                            <Select value={giornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>
-                                {tipiGiornataLavorativi.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
-                            </Select>
-                        </FormControl>
-                        <FormControlLabel
-                            control={
-                                <Switch
-                                    checked={includeTrasferta}
-                                    onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        setIncludeTrasferta(checked);
-                                        if (!checked) setTrasfertaId('');
-                                    }}
-                                />
-                            }
-                            label="Aggiungi Trasferta"
-                            disabled={isSaving}
-                        />
-                        {includeTrasferta && (
                             <FormControl fullWidth required>
-                                <InputLabel>Tipo di Trasferta</InputLabel>
-                                <Select
-                                    value={trasfertaId}
-                                    label="Tipo di Trasferta"
-                                    onChange={e => setTrasfertaId(e.target.value)}
-                                    disabled={isSaving}
-                                >
-                                    {tipiGiornataTrasferta.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
+                                <InputLabel>Tipo Giornata</InputLabel>
+                                <Select value={giornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>
+                                    {tipiGiornataLavorativi.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
                                 </Select>
                             </FormControl>
-                        )}
-                        {isLavorativo && (
-                             <fieldset disabled={!tecnicoResponsabileId || isSaving} style={{border: 'none', padding: 0, margin: 0}}>
-                                <Divider sx={{ my: 1 }}><Typography variant="overline">Dettaglio Ore Lavoro</Typography></Divider>
-                                <OreLavoroSingoloTecnico datiOre={responsabileDettaglio} onUpdate={handleMasterOreUpdate} isReadOnly={!tecnicoResponsabileId || isSaving} />
-                                
-                                <Autocomplete multiple options={altriTecniciOpzioni} getOptionLabel={o => `${o.cognome} ${o.nome}`} value={altriTecniciSelezionati} onChange={handleAltriTecniciChange} renderInput={params => <TextField {...params} label="Aggiungi altri tecnici" />} />
-                                {dettaglioOre.filter(d => d.tecnicoId !== tecnicoResponsabileId).map(dett => (
-                                     <Paper key={dett.tecnicoId} variant="outlined" sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                                        <Box><Typography fontWeight="bold">{dett.nome}</Typography><Chip label={`${dett.ore || 0}h`} size="small" /></Box>
-                                        <Box>
-                                            <IconButton size="small" onClick={() => handleOpenModal(dett)}><EditIcon /></IconButton>
-                                            <IconButton size="small" onClick={() => removeTecnico(dett.tecnicoId)}><DeleteIcon /></IconButton>
-                                        </Box>
-                                    </Paper>
-                                ))}
-                                <Divider sx={{ my: 1 }}><Typography variant="overline">Dettagli Intervento</Typography></Divider>
-                                <Autocomplete options={sortedNavi} getOptionLabel={o => o.nome || ''} value={sortedNavi.find(n => n.id === naveId) || null} onChange={(_, v) => setNaveId(v?.id || null)} renderInput={params => <TextField {...params} label="Nave" />} />
-                                <Autocomplete options={sortedLuoghi} getOptionLabel={o => o.nome || ''} value={sortedLuoghi.find(l => l.id === luogoId) || null} onChange={(_, v) => setLuogoId(v?.id || null)} renderInput={params => <TextField {...params} label="Luogo" />} />
-                                <Autocomplete options={sortedVeicoli} getOptionLabel={o => `${o.targa || ''} - ${o.nome || ''}`} value={sortedVeicoli.find(v => v.id === veicoloId) || null} onChange={(_, v) => setVeicoloId(v?.id || null)} renderInput={params => <TextField {...params} label="Veicolo" />} />
-                                <TextField label="Breve Descrizione" value={descrizioneBreve} onChange={e => setDescrizioneBreve(e.target.value)} fullWidth />
-                                <TextField label="Materiali Impiegati" value={materialiImpiegati} onChange={e => setMaterialiImpiegati(e.target.value)} fullWidth multiline rows={2} />
-                                <TextField label="Lavoro Eseguito" value={lavoroEseguito} onChange={e => setLavoroEseguito(e.target.value)} fullWidth multiline rows={4} required/>
-
-                                {isEditMode && firma && (
-                                    <>
-                                        <Divider sx={{ my: 2 }}><Typography variant="overline">Firma Cliente</Typography></Divider>
-                                        <Paper variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
-                                            <img src={firma} alt="Firma del cliente" style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} />
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={includeTrasferta}
+                                        onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            setIncludeTrasferta(checked);
+                                            if (!checked) setTrasfertaId('');
+                                        }}
+                                    />
+                                }
+                                label="Aggiungi Trasferta"
+                                disabled={isSaving}
+                            />
+                            {includeTrasferta && (
+                                <FormControl fullWidth required>
+                                    <InputLabel>Tipo di Trasferta</InputLabel>
+                                    <Select
+                                        value={trasfertaId}
+                                        label="Tipo di Trasferta"
+                                        onChange={e => setTrasfertaId(e.target.value)}
+                                        disabled={isSaving}
+                                    >
+                                        {tipiGiornataTrasferta.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                            )}
+                            {isLavorativo && (
+                                <fieldset disabled={!tecnicoResponsabileId || isSaving} style={{border: 'none', padding: 0, margin: 0}}>
+                                    <Divider sx={{ my: 1 }}><Typography variant="overline">Dettaglio Ore Lavoro</Typography></Divider>
+                                    <OreLavoroSingoloTecnico datiOre={responsabileDettaglio} onUpdate={handleMasterOreUpdate} isReadOnly={!tecnicoResponsabileId || isSaving} />
+                                    
+                                    <Autocomplete multiple options={altriTecniciOpzioni} getOptionLabel={o => `${o.cognome} ${o.nome}`} value={altriTecniciSelezionati} onChange={handleAltriTecniciChange} renderInput={params => <TextField {...params} label="Aggiungi altri tecnici" />} />
+                                    {dettaglioOre.filter(d => d.tecnicoId !== tecnicoResponsabileId).map(dett => (
+                                        <Paper key={dett.tecnicoId} variant="outlined" sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+                                            <Box><Typography fontWeight="bold">{dett.nome}</Typography><Chip label={`${dett.ore || 0}h`} size="small" /></Box>
+                                            <Box>
+                                                <IconButton size="small" onClick={() => handleOpenModal(dett)}><EditIcon /></IconButton>
+                                                <IconButton size="small" onClick={() => removeTecnico(dett.tecnicoId)}><DeleteIcon /></IconButton>
+                                            </Box>
                                         </Paper>
-                                    </>
-                                )}
-                            </fieldset>
-                        )}
-                        <Grid container spacing={2} justifyContent="flex-end" sx={{ mt: 2 }}>
-                            <Grid item><Button variant="outlined" size="large" onClick={handleCancel} disabled={isSaving}>Annulla</Button></Grid>
-                            <Grid item><Button variant="contained" color="primary" size="large" onClick={handleSubmit} disabled={isSaving}>{isSaving ? <CircularProgress size={24} /> : (isEditMode ? 'Aggiorna' : 'Salva')}</Button></Grid>
-                        </Grid>
-                    </Box>
-                </Paper>
+                                    ))}
+                                    <Divider sx={{ my: 1 }}><Typography variant="overline">Dettagli Intervento</Typography></Divider>
+                                    <Autocomplete options={sortedNavi} getOptionLabel={o => o.nome || ''} value={sortedNavi.find(n => n.id === naveId) || null} onChange={(_, v) => setNaveId(v?.id || null)} renderInput={params => <TextField {...params} label="Nave" />} />
+                                    <Autocomplete options={sortedLuoghi} getOptionLabel={o => o.nome || ''} value={sortedLuoghi.find(l => l.id === luogoId) || null} onChange={(_, v) => setLuogoId(v?.id || null)} renderInput={params => <TextField {...params} label="Luogo" />} />
+                                    <Autocomplete options={sortedVeicoli} getOptionLabel={o => `${o.targa || ''} - ${o.nome || ''}`} value={sortedVeicoli.find(v => v.id === veicoloId) || null} onChange={(_, v) => setVeicoloId(v?.id || null)} renderInput={params => <TextField {...params} label="Veicolo" />} />
+                                    <TextField label="Breve Descrizione" value={descrizioneBreve} onChange={e => setDescrizioneBreve(e.target.value)} fullWidth />
+                                    <TextField label="Materiali Impiegati" value={materialiImpiegati} onChange={e => setMaterialiImpiegati(e.target.value)} fullWidth multiline rows={2} />
+                                    <TextField label="Lavoro Eseguito" value={lavoroEseguito} onChange={e => setLavoroEseguito(e.target.value)} fullWidth multiline rows={4} required/>
+
+                                    {isEditMode && firma && (
+                                        <>
+                                            <Divider sx={{ my: 2 }}><Typography variant="overline">Firma Cliente</Typography></Divider>
+                                            <Paper variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+                                                <img src={firma} alt="Firma del cliente" style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} />
+                                            </Paper>
+                                        </>
+                                    )}
+                                </fieldset>
+                            )}
+                        </Box>
+                    </Paper>
+                </Box>
+
+                {/* 4. Pulsanti STATICI, non si espandono */}
+                <Box sx={{ pt: 2, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                    <Button variant="outlined" size="large" onClick={handleCancel} disabled={isSaving}>Annulla</Button>
+                    <Button sx={{ml: 1}} variant="contained" color="primary" size="large" onClick={handleSubmit} disabled={isSaving}>
+                        {isSaving ? <CircularProgress size={24} /> : (isEditMode ? 'Aggiorna' : 'Salva')}
+                    </Button>
+                </Box>
             </Box>
+
+            {/* Dialog rimane fuori dal flusso principale */}
             <Dialog open={isModalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
                 <DialogTitle>Modifica orario di {editingTecnico?.nome}</DialogTitle>
                 <DialogContent>

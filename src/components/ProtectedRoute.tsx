@@ -1,10 +1,9 @@
 
 import { Navigate, Outlet } from 'react-router-dom';
-import { useGlobalStore } from '@/stores/globalStore'; // <-- 1. IMPORTIAMO ZUSTAND
+import { useGlobalStore } from '@/stores/globalStore';
 import { Box, CircularProgress } from '@mui/material';
 
 const ProtectedRoute = () => {
-  // 2. UTILIZZIAMO useGlobalStore INVECE DI useAuth
   const user = useGlobalStore((state) => state.user);
   const isAuthLoading = useGlobalStore((state) => state.isAuthLoading);
 
@@ -20,7 +19,13 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return <Outlet />;
+  // Qui è dove la magia accade. Questo Box fornisce il contenitore a piena altezza
+  // che mancava a MainLayout e a tutte le pagine figlie.
+  return (
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Outlet />
+    </Box>
+  );
 };
 
 export default ProtectedRoute;

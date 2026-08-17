@@ -13,7 +13,7 @@ const getInitialMode = (): 'light' | 'dark' => {
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     return prefersDark ? 'dark' : 'light';
   }
-  return 'light'; // Default per SSR o ambienti non-browser
+  return 'dark'; // Default per SSR o ambienti non-browser
 };
 
 

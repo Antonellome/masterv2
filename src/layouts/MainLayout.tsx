@@ -1,17 +1,23 @@
 
-import { Box, Typography } from '@mui/material';
+import { Outlet } from 'react-router-dom';
 import SideNav from '@/components/SideNav';
+import { Box } from '@mui/material';
 
-interface MainLayoutProps {
-  children: React.ReactNode;
-}
-
-const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
+const MainLayout: React.FC = () => {
   return (
-    <Box sx={{ display: 'flex' }}>
+    // QUI L'ERRORE. DEVE ESSERE 100% PER EREDITARE, NON 100vh.
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       <SideNav />
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        {children}
+      <Box 
+        component="main" 
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%', 
+        }}
+      >
+        <Outlet />
       </Box>
     </Box>
   );

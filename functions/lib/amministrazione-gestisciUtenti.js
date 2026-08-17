@@ -38,13 +38,19 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.onCall(async (data, context) => {
-    var _a, _b, _c;
-    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'admin') {
-        logger.error(`Tentativo non autorizzato da UID: ${((_b = context.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'Nessuno'}`);
+    var _a;
+    // --- CONTROLLO AUTORIZZAZIONE BASATO SU FIRESTORE ---
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "L'utente non è autenticato.");
+    }
+    const adminUid = context.auth.uid;
+    const adminDoc = await admin.firestore().collection('admins').doc(adminUid).get();
+    if (!adminDoc.exists) {
+        logger.error(`Tentativo non autorizzato da UID: ${adminUid}`);
         throw new functions.https.HttpsError("permission-denied", "Solo un amministratore può eseguire questa operazione.");
     }
+    // --- FINE CONTROLLO AUTORIZZAZIONE ---
     const { action } = data;
-    const adminUid = context.auth.uid;
     logger.info(`Azione '${action}' richiesta da admin: ${context.auth.token.email}`);
     try {
         switch (action) {
@@ -84,7 +90,6 @@ exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.
                 await admin.firestore().collection('admins').doc(data.uid).delete();
                 logger.info(`Utente ${data.uid} eliminato.`);
                 return { status: "success", message: "Utente eliminato." };
-            // --- NUOVA AZIONE CENTRALIZZATA PER GESTIRE I RUOLI ---
             case 'toggleRole':
                 if (!data.uid || !data.role) {
                     throw new functions.https.HttpsError("invalid-argument", "UID e ruolo sono richiesti.");
@@ -115,8 +120,7 @@ exports.amministrazione_gestisciUtenti = functions.region("europe-west1").https.
     }
     catch (error) {
         logger.error(`Errore durante l'azione '${action}' per UID ${data.uid || 'N/D'}:`, error);
-        // Rilancia errori specifici per una gestione più chiara nel frontend
-        if ((_c = error.code) === null || _c === void 0 ? void 0 : _c.startsWith('auth/')) {
+        if ((_a = error.code) === null || _a === void 0 ? void 0 : _a.startsWith('auth/')) {
             throw new functions.https.HttpsError("already-exists", error.message);
         }
         throw new functions.https.HttpsError("internal", `Errore interno: ${error.message}`);

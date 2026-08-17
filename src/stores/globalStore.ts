@@ -9,6 +9,7 @@ interface AppState {
   isAdmin: boolean;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
+  themeMode: 'dark' | 'light';
   tecnici: Tecnico[];
   clienti: Cliente[];
   veicoli: Veicolo[];
@@ -36,6 +37,7 @@ interface AppState {
 interface AppActions {
   setUserAndProfile: (user: User | null, profile: Tecnico | null) => void;
   setAuthLoading: (isLoading: boolean) => void;
+  toggleTheme: () => void;
   logout: () => void;
   setAnagrafiche: (data: {
     tecnici: Tecnico[],
@@ -66,6 +68,7 @@ const initialState: AppState = {
   isAdmin: false,
   isAuthenticated: false,
   isAuthLoading: true,
+  themeMode: 'dark', // <-- IMPOSTAZIONE DI DEFAULT CORRETTA E DEFINITIVA
   tecnici: [],
   clienti: [],
   veicoli: [],
@@ -100,20 +103,20 @@ export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
     isAuthLoading: false,
   }),
   setAuthLoading: (isLoading) => set({ isAuthLoading: isLoading }),
+  toggleTheme: () => set(state => {
+    const newThemeMode = state.themeMode === 'light' ? 'dark' : 'light';
+    localStorage.setItem('themeMode', newThemeMode);
+    return { themeMode: newThemeMode };
+  }),
   logout: () => {
     set(state => ({
         ...initialState,
         isAuthLoading: false,
-        tecnici: state.tecnici,
-        clienti: state.clienti,
-        veicoli: state.veicoli,
-        cantieri: state.cantieri,
-        ditte: state.ditte,
-        tipiGiornata: state.tipiGiornata,
-        luoghi: state.luoghi,
-        navi: state.navi,
-        categorie: state.categorie,
-        documenti: state.documenti,
+        themeMode: state.themeMode, // Mantieni il tema al logout
+        user: null,
+        profile: null,
+        isAuthenticated: false,
+        isAdmin: false,
     }));
   },
   setAnagrafiche: (data) => {
@@ -129,7 +132,7 @@ export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
       tipiGiornata: data.tipiGiornata,
       luoghi: data.luoghi,
       navi: data.navi,
-      categorie: data.categorie, // <-- CORREZIONE APPLICATA
+      categorie: data.categorie,
       tecniciMap: createMap(data.tecnici),
       clientiMap: createMap(data.clienti),
       naviMap: createMap(data.navi),

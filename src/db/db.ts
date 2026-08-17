@@ -24,7 +24,7 @@ export interface SyncStatus {
 
 // Nomi delle tabelle allineati con Firestore
 export class MySubClassedDexie extends Dexie {
-  eventi!: Table<EventoGiornaliero>;
+  eventi_giornalieri!: Table<EventoGiornaliero>; // <-- AGGIUNTA TABELLA NUOVA
   notifiche!: Table<Notifica>;
   user_profile!: Table<UserProfile>;
   tecnici!: Table<Tecnico>;
@@ -43,8 +43,10 @@ export class MySubClassedDexie extends Dexie {
   constructor() {
     super('gestionaleLavoro');
 
-    this.version(7).stores({
-      eventi: 'id, dataInizio, tecnicoId, isDirty, tipo',
+    // VERSIONE 8: Aggiunta la nuova tabella eventi_giornalieri
+    this.version(8).stores({
+      eventi_giornalieri: 'id, tecnicoId, timestampReale, tipo', // <-- DEFINIZIONE NUOVA TABELLA
+      // Le altre tabelle rimangono invariate, quindi Dexie le copierà dalla versione precedente
       notifiche: 'id, read, createdAt',
       user_profile: 'uid',
       tecnici: 'id, nome, cognome, attivo, isDirty',
@@ -61,8 +63,9 @@ export class MySubClassedDexie extends Dexie {
       documenti: 'id, nome, tecnicoId, isDirty'
     });
 
-    this.version(6).stores({
-      eventi: 'id, dataInizio, tecnicoId, isDirty, tipo',
+    this.version(7).stores({
+      // La tabella 'eventi' non è più necessaria, verrà rimossa nella v8
+      // eventi: 'id, dataInizio, tecnicoId, isDirty, tipo', 
       notifiche: 'id, read, createdAt',
       user_profile: 'uid',
       tecnici: 'id, nome, cognome, attivo, isDirty',
@@ -75,42 +78,17 @@ export class MySubClassedDexie extends Dexie {
       veicoli: 'id, nome, isDirty',
       cantieri: 'id, nome, clienteId, isDirty',
       sync_status: 'id',
-      rapportini: 'id, data, tecnicoId, isDirty'
-    });
-
-    this.version(5).stores({
-        eventi: 'id, dataInizio, tecnicoId, isDirty, tipo',
-        notifiche: 'id, read, createdAt',
-        user_profile: 'uid',
-        tecnici: 'id, nome, cognome, attivo',
-        navi: 'id, nome, clienteId',
-        luoghi: 'id, nome',
-        clienti: 'id, nome',
-        categorie: 'id, nome',
-        ditte: 'id, nome',
-        tipigiornata: 'id, nome',
-        veicoli: 'id, nome',
-        cantieri: 'id, nome, clienteId',
-        sync_status: 'id',
-        rapportini: 'id, data, tecnicoId, isDirty'
+      rapportini: 'id, data, tecnicoId, isDirty',
+      documenti: 'id, nome, tecnicoId, isDirty'
+    }).upgrade(tx => {
+      // Rimuoviamo la vecchia tabella 'eventi' se esiste
+      return tx.table('eventi').clear();
     });
     
-    this.version(4).stores({
-      eventi: 'id, dataInizio, tecnicoId, isDirty, tipo',
-      notifiche: 'id, read, createdAt',
-      user_profile: 'uid',
-      tecnici: 'id, nome, cognome, attivo',
-      navi: 'id, nome, clienteId',
-      luoghi: 'id, nome',
-      clienti: 'id, nome',
-      categorie: 'id, nome',
-      ditte: 'id, nome',
-      tipiGiornata: 'id, nome',
-      veicoli: 'id, nome',
-      cantieri: 'id, nome, clienteId',
-      sync_status: 'id',
-      rapportini: 'id, data, tecnicoId' 
-    });
+    // Le versioni precedenti rimangono per la cronologia delle migrazioni
+    this.version(6).stores({});
+    this.version(5).stores({});
+    this.version(4).stores({});
   }
 }
 
@@ -128,6 +106,7 @@ export const bulkPutGeneric = async (tableName: string, data: any[]) => {
   }
 };
 
+// Funzione di caricamento dati da aggiornare per includere la nuova tabella
 export const loadAllData = async () => {
   try {
     const [
@@ -136,14 +115,14 @@ export const loadAllData = async () => {
       veicoli,
       cantieri,
       ditte,
-      tipiGiornata, // <-- AGGIUNTO ANCHE QUI
+      tipiGiornata,
       luoghi,
       navi,
       categorie,
       rapportini,
-      syncStatus,
-      checkins,
-      documenti
+      eventiGiornalieri, // <-- CARICA ANCHE I NUOVI DATI
+      documenti,
+      syncStatus
     ] = await db.transaction('r', db.tables, async () => {
       const anagrafichePromises = [
         db.tecnici.toArray(),
@@ -151,17 +130,17 @@ export const loadAllData = async () => {
         db.veicoli.toArray(),
         db.cantieri.toArray(),
         db.ditte.toArray(),
-        db.tipiGiornata.toArray(), // <-- AGGIUNTO QUI
+        db.tipiGiornata.toArray(),
         db.luoghi.toArray(),
         db.navi.toArray(),
         db.categorie.toArray(),
       ];
       const rapportiniPromise = db.rapportini.toArray();
-      const syncStatusPromise = db.sync_status.get('lastFullSync');
-      const checkinsPromise = db.eventi.where({ tipo: 'checkin' }).toArray();
+      const eventiGiornalieriPromise = db.eventi_giornalieri.toArray(); // <-- CARICA DALLA NUOVA TABELLA
       const documentiPromise = db.documenti.toArray();
+      const syncStatusPromise = db.sync_status.get('lastFullSync');
 
-      const results = await Promise.all([...anagrafichePromises, rapportiniPromise, syncStatusPromise, checkinsPromise, documentiPromise]);
+      const results = await Promise.all([...anagrafichePromises, rapportiniPromise, eventiGiornalieriPromise, documentiPromise, syncStatusPromise]);
       return results;
     });
 
@@ -171,7 +150,7 @@ export const loadAllData = async () => {
       veicoli,
       cantieri,
       ditte,
-      tipiGiornata, // <-- AGGIUNTO QUI
+      tipiGiornata,
       luoghi,
       navi,
       categorie,
@@ -182,7 +161,7 @@ export const loadAllData = async () => {
     return {
       anagrafiche,
       rapportini,
-      checkins,
+      eventiGiornalieri, // <-- RESTITUISCI I NUOVI DATI
       documenti,
       lastUpdated,
     };
@@ -191,7 +170,7 @@ export const loadAllData = async () => {
     return {
       anagrafiche: { tecnici: [], clienti: [], veicoli: [], cantieri: [], ditte: [], tipiGiornata: [], luoghi: [], navi: [], categorie: [] },
       rapportini: [],
-      checkins: [],
+      eventiGiornalieri: [], // <-- RESTITUISCI ARRAY VUOTO IN CASO DI ERRORE
       documenti: [],
       lastUpdated: null,
     };

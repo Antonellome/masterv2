@@ -4,11 +4,11 @@ Questo documento è la fonte di verità definitiva e inequivocabile per l'applic
 
 ## Destinazione dei Dati
 
-*   **Collezione Firestore:** `eventi_giornalieri`
+*   **Collezione Firestore:** `checkin_giornalieri`
 
 ## Struttura del Singolo Documento di Evento
 
-Ogni azione eseguita nella pagina di check-in crea un nuovo documento nella collezione `eventi_giornalieri` con la seguente, esatta struttura:
+Ogni azione eseguita nella pagina di check-in crea un nuovo documento nella collezione `checkin_giornalieri` con la seguente, esatta struttura:
 
 ```json
 {
@@ -33,12 +33,12 @@ Ogni azione eseguita nella pagina di check-in crea un nuovo documento nella coll
     *   `"check_out_luogo"`
 *   `timestampImpostato`: (Oggetto `Timestamp` di Firestore) L'orario **scelto dal tecnico** nel campo data/ora dell'interfaccia. Rappresenta l'orario dichiarato dall'utente.
 *   `timestampReale`: (Oggetto `Timestamp` di Firestore) L'orario esatto in cui l'evento è stato ricevuto e salvato dal server (`Timestamp.now()`). **È la fonte di verità tecnica, non è manipolabile dall'utente e deve essere usata per ogni verifica.**
-*   `naveId`: (Stringa, Opzionale) Presente **solo** se l'evento è di tipo `check_in_luogo` o `check_out_luogo` e il tecnico ha selezionato una **nave** dal menu a tendina. Se non selezionata, il campo è assente.
+*   `naveId`: (Stringa, Opzionale) Presente **solo** se l'evento è di tipo `check_in_luogo` o `check_out_luogo` e il tecnico ha selezionato una **nave** dal menu a tendina. Se non selezionato, il campo è assente.
 *   `luogoId`: (Stringa, Opzionale) Presente **solo** se l'evento è di tipo `check_in_luogo` o `check_out_luogo` e il tecnico ha selezionato un **luogo generico** dal menu a tendina. Se non selezionato, il campo è assente.
 
 ### Guida all'Implementazione per l'App Master
 
-1.  **Leggere i Dati:** L'app Master deve leggere i documenti dalla collezione `eventi_giornalieri`.
+1.  **Leggere i Dati:** L'app Master deve leggere i documenti dalla collezione `checkin_giornalieri`.
 2.  **Raggruppare i Dati:** Raggruppare gli eventi per `tecnicoId` e per data (basandosi su uno dei due timestamp, preferibilmente `timestampReale` per coerenza).
 3.  **Visualizzare i Dati:** Per ogni singolo evento, la pagina di visualizzazione delle presenze sull'app Master **DEVE OBBLIGATORIAMENTE** mostrare:
     *   Il nome del tecnico (`tecnicoName`).

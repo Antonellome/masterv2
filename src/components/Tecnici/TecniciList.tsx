@@ -2,7 +2,8 @@
 import {
     DataGrid, GridColDef, GridToolbarContainer, GridToolbarColumnsButton, 
     GridToolbarFilterButton, GridToolbarDensitySelector, GridToolbarExport, 
-    GridColumnVisibilityModel, GridToolbarQuickFilter, GridRenderCellParams
+    GridColumnVisibilityModel, GridToolbarQuickFilter, GridRenderCellParams,
+    GridValueGetterParams
 } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import type { Tecnico } from '@/models/definitions';
@@ -19,7 +20,7 @@ import { exportSingleTecnico } from '@/utils/exportUtils';
 
 function CustomToolbar({ onAdd }: { onAdd: () => void }) {
     return (
-        <GridToolbarContainer>
+        <GridToolbarContainer sx={{ px: 2, pt: 1 }}>
             <GridToolbarColumnsButton />
             <GridToolbarFilterButton />
             <GridToolbarDensitySelector />
@@ -79,17 +80,23 @@ const TecniciList: React.FC<TecniciListProps> = ({
         },
         { field: 'cognome', headerName: 'Cognome', flex: 1, renderCell: (params) => (<Link component="button" variant="body2" onClick={() => onViewDetails(params.row as Tecnico)} sx={{ textAlign: 'left', fontWeight: 'bold' }}>{params.value}</Link>)}, 
         { field: 'nome', headerName: 'Nome', flex: 1 },
-        { 
-            field: 'dittaId', 
-            headerName: 'Ditta', 
-            flex: 1, 
-            renderCell: (params: GridRenderCellParams<Tecnico, string>) => ditteMap.get(params.value || '') || 'N/A'
+        {
+            field: 'dittaId',
+            headerName: 'Ditta',
+            flex: 1,
+            valueGetter: (params: GridValueGetterParams<Tecnico>) => {
+                if (!params.row) return 'N/A';
+                return ditteMap.get(params.row.dittaId || '') || 'N/A';
+            },
         },
-        { 
-            field: 'categoriaId', 
-            headerName: 'Categoria', 
-            flex: 1, 
-            renderCell: (params: GridRenderCellParams<Tecnico, string>) => categorieMap.get(params.value || '') || 'N/A'
+        {
+            field: 'categoriaId',
+            headerName: 'Categoria',
+            flex: 1,
+            valueGetter: (params: GridValueGetterParams<Tecnico>) => {
+                if (!params.row) return 'N/A';
+                return categorieMap.get(params.row.categoriaId || '') || 'N/A';
+            },
         },
         { field: 'email', headerName: 'Email', flex: 1.5 },
         { field: 'telefono', headerName: 'Telefono', flex: 1 },
@@ -140,21 +147,30 @@ const TecniciList: React.FC<TecniciListProps> = ({
     });
 
     return (
-        <Box sx={{ height: '100%', width: '100%' }}>
-            <DataGrid
-                rows={tecnici || []}
-                columns={allColumns}
-                sx={{ width: '100%', '& .MuiDataGrid-cell': { py: 0.5 }, '& .MuiDataGrid-columnHeaderTitle': { fontWeight: 'bold' } }}
-                localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-                columnVisibilityModel={columnVisibilityModel}
-                onColumnVisibilityModelChange={(newModel) => setColumnVisibilityModel(newModel)}
-                density="compact"
-                initialState={{ pagination: { paginationModel: { page: 0, pageSize: 100 } } }}
-                pageSizeOptions={[25, 50, 100]}
-                slots={{ toolbar: () => <CustomToolbar onAdd={onAdd} /> }}
-                disableRowSelectionOnClick
-            />
-        </Box>
+        <DataGrid
+            rows={tecnici || []}
+            columns={allColumns}
+            sx={{
+                height: '100%', 
+                width: '100%', 
+                border: 0,
+                '& .MuiDataGrid-cell': { py: 0.5 }, 
+                '& .MuiDataGrid-columnHeaderTitle': { fontWeight: 'bold' },
+                '& .MuiDataGrid-virtualScroller': {
+                    '&::-webkit-scrollbar': { display: 'none' },
+                    'scrollbarWidth': 'none', 
+                    msOverflowStyle: 'none',  
+                },
+            }}
+            localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
+            columnVisibilityModel={columnVisibilityModel}
+            onColumnVisibilityModelChange={(newModel) => setColumnVisibilityModel(newModel)}
+            density="compact"
+            initialState={{ pagination: { paginationModel: { page: 0, pageSize: 100 } } }}
+            pageSizeOptions={[25, 50, 100]}
+            slots={{ toolbar: () => <CustomToolbar onAdd={onAdd} /> }}
+            disableRowSelectionOnClick
+        />
     );
 };
 

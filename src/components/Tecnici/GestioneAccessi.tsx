@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress, Switch, Tooltip, Backdrop, IconButton, Snackbar, Alert } from '@mui/material';
 import { DataGrid, GridColDef, GridRowParams, GridToolbar } from '@mui/x-data-grid';
@@ -8,6 +9,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { Tecnico } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
+import { useGlobalStore } from '@/stores/globalStore'; // <-- IMPORTATO useGlobalStore
 
 interface DialogState {
   open: boolean;
@@ -17,6 +19,9 @@ interface DialogState {
 }
 
 const GestioneAccessi = () => {
+  // Recupera lo stato di caricamento dallo store globale
+  const areAnagraficheLoading = useGlobalStore((state) => state.areAnagraficheLoading);
+
   const tecnici = useLiveQuery(() => 
     db.tecnici.orderBy('cognome').toArray()
   , []);
@@ -132,8 +137,9 @@ const GestioneAccessi = () => {
     setDialog({ ...dialog, open: false });
   };
 
-  if (!tecnici) {
-    return <CircularProgress sx={{ display: 'block', margin: 'auto' }} />;
+  // CONTROLLO DI CARICAMENTO ROBUSTO
+  if (areAnagraficheLoading || !tecnici) {
+    return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   }
 
   return (

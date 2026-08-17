@@ -1,36 +1,10 @@
 
 import React, { useState } from 'react';
-import { Box, Tabs, Tab, Typography } from '@mui/material';
+import { Box, Tabs, Tab } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import GestioneTecnici from '@/components/Tecnici/GestioneTecnici';
 import GestioneAccessi from '@/components/Tecnici/GestioneAccessi';
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tecnici-tabpanel-${index}`}
-      aria-labelledby={`tecnici-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ pt: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
 
 const TecniciPage = () => {
   const [value, setValue] = useState(0);
@@ -40,32 +14,25 @@ const TecniciPage = () => {
   };
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3, pt: 2 }}>
         <Tabs value={value} onChange={handleChange} aria-label="Tabs gestione tecnici">
           <Tab 
             label="Anagrafica Tecnici" 
             icon={<PeopleIcon />} 
             iconPosition="start" 
-            id="tecnici-tab-0" 
-            aria-controls="tecnici-tabpanel-0" 
           />
           <Tab 
             label="Accesso App Tecnici" 
             icon={<LockOpenIcon />} 
             iconPosition="start" 
-            id="tecnici-tab-1" 
-            aria-controls="tecnici-tabpanel-1" 
           />
         </Tabs>
       </Box>
-      
-      <TabPanel value={value} index={0}>
-        <GestioneTecnici />
-      </TabPanel>
-      <TabPanel value={value} index={1}>
-        <GestioneAccessi />
-      </TabPanel>
+      <Box sx={{ flex: 1, p: 3, minHeight: 0, height: '100%' }}>
+        {value === 0 && <GestioneTecnici />}
+        {value === 1 && <GestioneAccessi />}
+      </Box>
     </Box>
   );
 };
