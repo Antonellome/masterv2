@@ -13,8 +13,24 @@ export { createDocument, updateDocument, deleteDocument } from './genericCrud';
 
 // --- FUNZIONI DI BUSINESS SPECIFICHE ---
 
-// Rapportini - API HTTP Completa per App Tecnici e App Master
-export { createRapportino, updateRapportino, deleteRapportino } from './rapportini';
+// Rapportini - API HTTP Completa
+export { 
+    createRapportino, 
+    updateRapportino, 
+    deleteRapportino, 
+    getAllRapportiniForSync
+} from './rapportini';
+
+// Anagrafiche - API HTTP Completa (NUOVA AGGIUNTA FASE D)
+export { 
+    creaAnagrafica, 
+    syncAllAnagrafiche, 
+    aggiornaAnagrafica, 
+    eliminaAnagrafica 
+} from './anagrafiche';
+
+// Check-in - API Sicura per le Presenze (NUOVA AGGIUNTA FASE F2)
+export { createCheckin } from './checkin';
 
 // Gestione Tecnici e Utenti
 export { createTecnico } from './createTecnico';

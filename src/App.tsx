@@ -29,7 +29,7 @@ const RapportinoPrintPage = lazy(() => import('@/pages/RapportinoPrint'));
 const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 
-// Componente per la schermata di Accesso Negato con pulsante LOGOUT
+// Componente per la schermata di Accesso Negato
 const AccessDenied = () => {
   const handleLogout = async () => {
     try {
@@ -56,6 +56,8 @@ const AccessDenied = () => {
   );
 };
 
+// Il componente UpdateNotifier è stato RIMOSSO.
+
 const AppContent = () => {
   const isAuthLoading = useGlobalStore((state) => state.isAuthLoading);
   const isAuthenticated = useGlobalStore((state) => state.isAuthenticated);
@@ -65,9 +67,7 @@ const AppContent = () => {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
-        <Typography sx={{ mt: 2 }}>
-          Verifica autorizzazioni...
-        </Typography>
+        <Typography sx={{ mt: 2 }}>Verifica autorizzazioni...</Typography>
       </Box>
     );
   }
@@ -79,6 +79,7 @@ const AppContent = () => {
   return (
     <>
       {isAuthenticated && isAdmin && <DataHydrator />}
+      {/* La chiamata a UpdateNotifier è stata RIMOSSA. */}
       
       <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>}>
         <Routes>

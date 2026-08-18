@@ -1,23 +1,26 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/db';
 import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
 import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
 import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
 import { v4 as uuidv4 } from 'uuid';
 import { useGlobalStore } from '@/stores/globalStore';
+import { db } from '@/db/db';
 
 const GestioneTecnici = () => {
-    const areAnagraficheLoading = useGlobalStore((state) => state.areAnagraficheLoading);
+    // --- FIX DEFINITIVO --- 
+    // Sottoscrizione corretta allo store globale. Invece di cercare un oggetto
+    // 'anagrafiche' inesistente, selezioniamo direttamente gli array necessari.
+    const { tecnici, ditte, categorie, areAnagraficheLoading } = useGlobalStore(state => ({
+        tecnici: state.tecnici,
+        ditte: state.ditte,
+        categorie: state.categorie,
+        areAnagraficheLoading: state.areAnagraficheLoading
+    }));
 
-    const tecnici = useLiveQuery(() => db.tecnici.orderBy('cognome').toArray());
-    const ditte = useLiveQuery(() => db.ditte.orderBy('nome').toArray());
-    const categorie = useLiveQuery(() => db.categorie.orderBy('nome').toArray());
-
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null); // Mantenuto per errori specifici del componente
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -44,19 +47,19 @@ const GestioneTecnici = () => {
         setIsSaving(true);
         try {
             const now = new Date();
-            if (formData.id) { 
+            if (formData.id) {
                 await db.tecnici.update(formData.id, {
                     ...formData,
                     isDirty: true,
                     updatedAt: now,
                 });
                 showSnackbar('Tecnico aggiornato con successo. La modifica sarà sincronizzata.', 'success');
-            } else { 
+            } else {
                 const newId = uuidv4();
                 const newTecnico: Tecnico = {
                     ...formData,
                     id: newId,
-                    uid: newId, 
+                    uid: newId,
                     attivo: true,
                     appAccess: false,
                     createdAt: now,
@@ -85,9 +88,9 @@ const GestioneTecnici = () => {
         if (!tecnicoToDelete) return;
         setUpdatingId(tecnicoToDelete);
         try {
-            await db.tecnici.update(tecnicoToDelete, { 
-                attivo: false, 
-                isDirty: true, 
+            await db.tecnici.update(tecnicoToDelete, {
+                attivo: false,
+                isDirty: true,
                 updatedAt: new Date(),
             });
             showSnackbar('Tecnico disattivato. La modifica sarà sincronizzata.', 'success');
@@ -100,13 +103,13 @@ const GestioneTecnici = () => {
             setUpdatingId(null);
         }
     }, [tecnicoToDelete]);
-    
+
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
         setUpdatingId(id);
         try {
-            await db.tecnici.update(id, { 
-                attivo: newStatus, 
-                isDirty: true, 
+            await db.tecnici.update(id, {
+                attivo: newStatus,
+                isDirty: true,
                 updatedAt: new Date(),
             });
             showSnackbar(`Stato del tecnico aggiornato. La modifica sarà sincronizzata.`, 'success');
@@ -119,29 +122,29 @@ const GestioneTecnici = () => {
     }, []);
 
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
-    
+
     const ditteMap = useMemo(() => new Map(ditte?.map(d => [d.id, d.nome])), [ditte]);
     const categorieMap = useMemo(() => new Map(categorie?.map(c => [c.id, c.nome])), [categorie]);
 
-    if (areAnagraficheLoading || !tecnici || !ditte || !categorie) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}><CircularProgress /></Box>;
+    if (areAnagraficheLoading) {
+        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
     }
-    
+
     if (error) {
         return <Typography color="error">{`Si è verificato un errore: ${error}`}</Typography>;
     }
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <Box sx={{ flexGrow: 1, minHeight: 0, height: '100%' }}>
+            <Box sx={{ flexGrow: 1, minHeight: 0 }}>
                 <TecniciList
-                    tecnici={tecnici}
+                    tecnici={tecnici || []}
                     ditteMap={ditteMap}
                     categorieMap={categorieMap}
                     onAdd={handleAdd}
                     onEdit={handleEdit}
                     onDelete={(_e, id) => handleDelete(id)}
-                    onStatusChange={handleStatusChange} 
+                    onStatusChange={handleStatusChange}
                     onViewDetails={() => { /* Funzionalità futura */ }}
                     isSaving={isSaving}
                     updatingId={updatingId}
@@ -152,8 +155,8 @@ const GestioneTecnici = () => {
                 onClose={() => setFormOpen(false)}
                 onSave={handleSave}
                 tecnico={selectedTecnico}
-                ditte={ditte}
-                categorie={categorie}
+                ditte={ditte || []}
+                categorie={categorie || []}
                 isSaving={isSaving}
             />
             <ConfirmationDialog

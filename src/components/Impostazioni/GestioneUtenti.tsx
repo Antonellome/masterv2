@@ -2,27 +2,39 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import {
-    Box, Typography, Alert, CircularProgress, Switch, Tooltip, Button
+    Box, Typography, Alert, CircularProgress, Switch, Tooltip
 } from '@mui/material';
 import {
     DataGrid, GridColDef,
     GridToolbarContainer, GridToolbarColumnsButton, GridToolbarFilterButton, GridToolbarDensitySelector, GridToolbarExport, GridToolbarQuickFilter
 } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
-import ScienceIcon from '@mui/icons-material/Science';
 import UserActionsCell from './UserActionsCell';
 
-// Interfaccia per l'oggetto Utente dalla Cloud Function
-export interface AuthUser {
+// =======================================================================================
+// !! CORREZIONE CRITICA BASATA SU analisi_pre_ricostruzione.md !!
+// Questa interfaccia riflette la VERA struttura dati dei Custom Claims.
+// La distinzione tra 'livello' e 'admin' è fondamentale.
+// =======================================================================================
+export interface StaffUser {
     uid: string;
     email: string;
-    role: 'admin' | 'tecnico' | 'Nessuno';
+    claims: {
+        livello?: 'staff';
+        admin?: boolean;
+    };
     disabled: boolean;
 }
 
-// Inizializzazione delle Cloud Functions
+// =======================================================================================
+// !! CORREZIONE CRITICA !!
+// Puntiamo alle funzioni backend CORRETTE e definite nel piano di refactoring.
+// =======================================================================================
 const functions = getFunctions(undefined, 'europe-west1');
-const manageUsers = httpsCallable(functions, 'manageUsers');
+// Funzione per leggere SOLO il personale con livello='staff'
+const getUsersFunction = httpsCallable(functions, 'admin_getAllUsers');
+// Funzione per MODIFICARE gli utenti staff
+const manageUserFunction = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 
 // Toolbar custom per la DataGrid
 function CustomToolbar() {
@@ -39,25 +51,22 @@ function CustomToolbar() {
 }
 
 const GestioneUtenti: React.FC = () => {
-    const [users, setUsers] = useState<AuthUser[]>([]);
+    const [users, setUsers] = useState<StaffUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
-    const [pingResult, setPingResult] = useState<string | null>(null);
 
+    // Carica solo gli utenti con `livello: 'staff'` come specificato nel piano
     const fetchUsers = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const result: HttpsCallableResult<{ users: AuthUser[] }> = await manageUsers({ 
-                action: 'list', 
-                payload: { role: '!tecnico' } 
-            });
+            const result: HttpsCallableResult<{ users: StaffUser[] }> = await getUsersFunction();
             setUsers(result.data.users);
         } catch (err: any) {
             console.error("Errore caricamento utenti:", err);
-            setError(err.message || "Impossibile caricare l'elenco degli utenti.");
+            setError(err.message || "Impossibile caricare l'elenco dello staff.");
         } finally {
             setLoading(false);
         }
@@ -67,11 +76,12 @@ const GestioneUtenti: React.FC = () => {
         fetchUsers();
     }, [fetchUsers]);
 
-    const handleApiCall = async (uid: string, action: 'setRole' | 'toggle' | 'deleteUser', payload: any, successMessage: string) => {
+    // Funzione centralizzata per chiamare il backend, allineata a `amministrazione_gestisciUtenti`
+    const handleApiCall = async (uid: string, action: 'toggleRole' | 'deleteUser', payload: any, successMessage: string) => {
         setActionLoading(prev => ({ ...prev, [uid]: true }));
         setFeedback(null);
         try {
-            await manageUsers({ action, payload });
+            await manageUserFunction({ action, ...payload });
             setFeedback({ type: 'success', message: successMessage });
             return true;
         } catch (error: any) {
@@ -83,18 +93,16 @@ const GestioneUtenti: React.FC = () => {
         }
     };
 
-    const handleRoleChange = async (uid: string, currentRole: AuthUser['role']) => {
-        const newRole = currentRole === 'admin' ? 'Nessuno' : 'admin';
-        const success = await handleApiCall(uid, 'setRole', { uid, newRole }, `Ruolo per l'utente aggiornato a ${newRole}.`);
-        if (success) {
-            setUsers(prevUsers => prevUsers.map(u => u.uid === uid ? { ...u, role: newRole } : u));
-        }
-    };
+    // Logica per cambiare il ruolo, conforme alle specifiche
+    const handleRoleChange = async (uid: string, claims: StaffUser['claims']) => {
+        const currentIsAdmin = claims?.admin === true;
+        const newRole = currentIsAdmin ? 'user' : 'admin'; // L'API si aspetta 'admin' o 'user'
 
-    const handleToggleUserStatus = async (uid: string, currentStatus: boolean) => {
-        const success = await handleApiCall(uid, 'toggle', { uid, disabled: !currentStatus }, `Stato utente aggiornato.`);
+        const success = await handleApiCall(uid, 'toggleRole', { uid, role: newRole }, `Ruolo per l'utente aggiornato.`);
         if (success) {
-            setUsers(prevUsers => prevUsers.map(u => u.uid === uid ? { ...u, disabled: !currentStatus } : u));
+            setUsers(prevUsers => prevUsers.map(u => 
+                u.uid === uid ? { ...u, claims: { ...u.claims, admin: !currentIsAdmin } } : u
+            ));
         }
     };
 
@@ -106,31 +114,27 @@ const GestioneUtenti: React.FC = () => {
             }
         }
     };
-
-    const handlePingTest = async () => {
-        setPingResult("Invio ping...");
-        try {
-            const result: HttpsCallableResult<{ message: string }> = await manageUsers({ action: 'ping' });
-            setPingResult(`Risposta dal backend: ${result.data.message}`);
-        } catch (err: any) {
-            console.error("Errore PING:", err);
-            setPingResult(`Errore PING: ${err.message}`);
-        }
+    
+    // Funzione non implementata come da analisi
+    const handleToggleUserStatus = async (uid: string, currentStatus: boolean) => {
+        console.warn("La funzione per abilitare/disabilitare non è implementata nel backend target.");
+        setFeedback({type: 'error', message: 'Funzionalità di abilitazione/disabilitazione non ancora disponibile.'})
     };
 
-    const columns: GridColDef<AuthUser>[] = [
+    const columns: GridColDef<StaffUser>[] = [
         {
-            field: 'role',
+            field: 'admin',
             headerName: 'Amministratore',
             width: 150,
             align: 'center',
             headerAlign: 'center',
             renderCell: (params) => (
-                <Tooltip title={params.row.role === 'admin' ? 'Rimuovi ruolo Admin' : 'Imposta come Admin'}>
+                <Tooltip title={params.row.claims?.admin ? 'Rimuovi privilegi di Amministratore' : 'Promuovi ad Amministratore'}>
                     <Switch
-                        checked={params.row.role === 'admin'}
-                        onChange={() => handleRoleChange(params.row.uid, params.row.role)}
+                        checked={params.row.claims?.admin === true}
+                        onChange={() => handleRoleChange(params.row.uid, params.row.claims)}
                         disabled={actionLoading[params.row.uid]}
+                        color="warning"
                     />
                 </Tooltip>
             )
@@ -147,8 +151,8 @@ const GestioneUtenti: React.FC = () => {
             renderCell: (params) => (
                 <UserActionsCell 
                     user={params.row}
-                    onToggleStatus={handleToggleUserStatus}
-                    onDelete={handleDeleteUser}
+                    onToggleStatus={() => handleToggleUserStatus(params.row.uid, params.row.disabled)}
+                    onDelete={() => handleDeleteUser(params.row.uid)}
                     isLoading={actionLoading[params.row.uid]}
                 />
             )
@@ -158,25 +162,11 @@ const GestioneUtenti: React.FC = () => {
     return (
         <Box sx={{ width: '100%' }}>
             <Typography variant="h6" component="h2" gutterBottom>
-                Gestione Utenti e Ruoli
+                Gestione Personale Amministrativo
             </Typography>
-
-            {/* --- PING TEST UI --- */}
-            <Box sx={{ border: '1px solid #f0ad4e', p: 2, mb: 2, borderRadius: 1, backgroundColor: '#fcf8e3' }}>
-                <Typography variant="h6" gutterBottom>Test di Connessione Backend</Typography>
-                <Button
-                    variant="contained"
-                    color="warning"
-                    startIcon={<ScienceIcon />}
-                    onClick={handlePingTest}
-                >
-                    Ping Test
-                </Button>
-                {pingResult && <Typography sx={{ mt: 1, fontFamily: 'monospace' }}>{pingResult}</Typography>}
-            </Box>
             
             <Typography variant="body2" display="block" sx={{ mb: 2, color: 'text.secondary' }}>
-                Da qui puoi promuovere un utente ad Amministratore, abilitarlo, disabilitarlo o eliminarlo. Gli amministratori hanno accesso completo al sistema.
+                Questa tabella mostra solo gli utenti con il livello 'staff'. Da qui puoi promuoverli ad Amministratore, garantendo accesso completo al sistema.
             </Typography>
             
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

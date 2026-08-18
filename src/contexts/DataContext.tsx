@@ -15,7 +15,6 @@ import {
     TipoGiornata,
     Veicolo
 } from '@/models/definitions';
-// CORREZIONE: Importiamo gli strumenti corretti per leggere dal DB locale
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/db';
 
@@ -43,16 +42,15 @@ interface DataContextType {
     naviMap: { [id: string]: Nave };
     luoghiMap: { [id: string]: Luogo };
     tipiGiornataMap: { [id: string]: TipoGiornata };
+    veicoliMap: { [id: string]: Veicolo }; // Aggiunto veicoliMap per completezza
     loading: boolean;
-    error: any; // Mantenuto per compatibilità, ma meno rilevante con useLiveQuery
+    error: any; 
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
 
-    // --- SOSTITUZIONE LOGICA DI FETCH ---
-    // Usiamo useLiveQuery per leggere in tempo reale dal database locale Dexie.
     const tecnici = useLiveQuery(() => db.tecnici.toArray());
     const clienti = useLiveQuery(() => db.clienti.toArray());
     const ditte = useLiveQuery(() => db.ditte.toArray());
@@ -62,18 +60,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const tipiGiornata = useLiveQuery(() => db.tipiGiornata.toArray());
     const veicoli = useLiveQuery(() => db.veicoli.toArray());
 
-    // Con useLiveQuery, 'undefined' indica che la query iniziale è in corso.
+    // Lo stato di caricamento dipende solo dalla query iniziale di Dexie
     const loading = [tecnici, clienti, ditte, navi, luoghi, categorie, tipiGiornata, veicoli].some(data => data === undefined);
-    // --- FINE SOSTITUZIONE ---
 
-    // La creazione delle mappe non cambia, ora usa i dati reattivi di useLiveQuery
     const tecniciMap = useMemo(() => createMap(tecnici), [tecnici]);
     const clientiMap = useMemo(() => createMap(clienti), [clienti]);
     const naviMap = useMemo(() => createMap(navi), [navi]);
     const luoghiMap = useMemo(() => createMap(luoghi), [luoghi]);
     const tipiGiornataMap = useMemo(() => createMap(tipiGiornata), [tipiGiornata]);
+    const veicoliMap = useMemo(() => createMap(veicoli), [veicoli]); // Aggiunto veicoliMap
 
-    // Il valore fornito dal context
     const value = useMemo(() => ({
         tecnici: tecnici || [],
         clienti: clienti || [],
@@ -88,11 +84,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         naviMap,
         luoghiMap,
         tipiGiornataMap,
+        veicoliMap, // Aggiunto veicoliMap
         loading,
-        error: null, // useLiveQuery non espone un errore in questo modo, quindi lo impostiamo a null.
+        error: null, 
     }), [
         tecnici, clienti, ditte, navi, luoghi, categorie, tipiGiornata, veicoli, 
-        tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, 
+        tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, veicoliMap,
         loading
     ]);
 
@@ -103,7 +100,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     );
 };
 
-// Hook per consumare il context, rinominato per chiarezza
 export const useAnagraficaData = () => {
     const context = useContext(DataContext);
     if (context === undefined) {

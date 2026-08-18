@@ -148,19 +148,14 @@ const TecniciList: React.FC<TecniciListProps> = ({
 
     return (
         <DataGrid
+            // SOLUZIONE DEFINITIVA: autoHeight risolve il problema di layout.
+            autoHeight 
             rows={tecnici || []}
             columns={allColumns}
             sx={{
-                height: '100%', 
-                width: '100%', 
                 border: 0,
                 '& .MuiDataGrid-cell': { py: 0.5 }, 
-                '& .MuiDataGrid-columnHeaderTitle': { fontWeight: 'bold' },
-                '& .MuiDataGrid-virtualScroller': {
-                    '&::-webkit-scrollbar': { display: 'none' },
-                    'scrollbarWidth': 'none', 
-                    msOverflowStyle: 'none',  
-                },
+                '& .MuiDataGride-columnHeaderTitle': { fontWeight: 'bold' },
             }}
             localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
             columnVisibilityModel={columnVisibilityModel}

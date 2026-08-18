@@ -18,8 +18,8 @@ import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
-import { db as firestoreDb } from '@/config/firebase';
-import { doc, deleteDoc } from 'firebase/firestore';
+// ** MODIFICA APPORTATA: Import per le Firebase Functions **
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { generateRapportinoPdf } from '@/utils/pdfGenerator';
 import PdfPreviewDialog from '@/components/common/PdfPreviewDialog';
@@ -28,7 +28,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 dayjs.locale('it');
 
-// --- INTERFACES & HELPERS ---
+// --- INTERFACES & HELPERS (invariate) ---
 interface FlatRapportino {
     id: string;
     dataFormatted: string;
@@ -275,23 +275,38 @@ const RicercaAvanzata: React.FC = () => {
 
     const handleDeleteRequest = useCallback((id: string) => setRowToDelete(id), []);
     
+    // =======================================================================================
+    // ** FUNZIONE DI CANCELLAZIONE REFACTORING CON FIREBASE SDK **
+    // Usa httpsCallable per una chiamata sicura e robusta.
+    // =======================================================================================
     const handleConfirmDelete = async () => {
         if (!rowToDelete) return;
-        try {
-            await deleteDoc(doc(firestoreDb, 'rapportini', rowToDelete));
-            await db.rapportini.delete(rowToDelete);
-            setSnackbar({ open: true, message: 'Rapportino eliminato con successo.', severity: 'success' });
-        } catch (error) {
-            console.error("Errore eliminazione:", error);
-            setSnackbar({ open: true, message: "Errore durante l'eliminazione del rapportino.", severity: 'error' });
-        }
+        const id = rowToDelete;
         setRowToDelete(null);
+
+        try {
+            // 1. Inizializza il servizio Functions e ottieni un riferimento alla funzione
+            const functions = getFunctions();
+            const deleteRapportino = httpsCallable(functions, 'deleteRapportino');
+
+            // 2. Chiama la funzione con i dati necessari. L'autenticazione è gestita in automatico.
+            await deleteRapportino({ id: id });
+
+            // 3. Se la chiamata ha successo, aggiorna lo stato locale per un feedback immediato
+            await db.rapportini.delete(id);
+            setSnackbar({ open: true, message: 'Rapportino eliminato con successo.', severity: 'success' });
+
+        } catch (error: any) {
+            console.error("Errore eliminazione via Cloud Function:", error);
+            // Estrai un messaggio di errore più leggibile dall'oggetto errore di Firebase
+            const errorMessage = error.message || "Errore sconosciuto durante l'eliminazione.";
+            setSnackbar({ open: true, message: errorMessage, severity: 'error' });
+        }
     };
     
     const handleRowClick = (params: GridRowParams) => {
-        if (params.field !== 'actions') {
-            navigate(`/rapportino/edit/${params.id}`);
-        }
+        if (params.field === 'actions') return;
+        navigate(`/rapportino/edit/${params.id}`);
     };
 
     const handleFilterChange = useCallback(<K extends keyof FilterState>(filterName: K, value: FilterState[K]) => {
@@ -347,7 +362,6 @@ const RicercaAvanzata: React.FC = () => {
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-            {/* FIX: Sostituito height hardcoded con 100% per un layout fluido */}
             <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1, sm: 2 }, gap: 2 }}>
                 <Paper elevation={2} sx={{ p: 2, flexShrink: 0 }}>
                     <Typography variant="h6" sx={{ mb: 2 }}>Filtri Ricerca</Typography>

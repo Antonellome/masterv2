@@ -11,12 +11,11 @@ import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import AddIcon from '@mui/icons-material/Add';
 
-// AGGIORNAMENTO: Importiamo gli hook corretti
-import { useCollectionData } from '@/hooks/useCollectionData';
-import { useAnagraficaData } from '@/contexts/DataContext';
+// --- ARCHITETTURA NUOVA: UNICA FONTE DI VERITÀ ---
+import { useGlobalStore } from '@/stores/globalStore';
 
-import { Rapportino, Tecnico, Nave, Luogo, Cliente, TipoGiornata } from '@/models/definitions';
-import RapportiniTable from '@/components/Rapportini/RapportiniTable'; // Importiamo la nuova tabella
+import { Rapportino } from '@/models/definitions';
+import RapportiniTable from '@/components/Rapportini/RapportiniTable';
 
 dayjs.locale('it');
 
@@ -33,12 +32,25 @@ interface FilterState {
 const RapportiniListPage = () => {
     const navigate = useNavigate();
     
-    // --- NUOVA GESTIONE DATI ---
-    // 1. Carichiamo i rapportini dal DB locale (Dexie)
-    const { data: rapportini, loading: loadingRapportini, error: errorRapportini } = useCollectionData<Rapportino>('rapportini');
-    // 2. Carichiamo le anagrafiche dal Context (che ora usa Dexie)
-    const { tecnici, clienti, navi, luoghi, tipiGiornata, loading: loadingAnagrafiche, error: errorAnagrafiche } = useAnagraficaData();
-    // --- FINE NUOVA GESTIONE DATI ---
+    // --- NUOVA GESTIONE DATI UNIFICATA ---
+    // Dati e stato di caricamento provengono ora dallo store globale (Zustand)
+    const {
+        rapportini,
+        tecnici,
+        clienti,
+        navi,
+        luoghi,
+        tipiGiornata,
+        areAnagraficheLoading: loading, // Usiamo lo stato di caricamento globale
+    } = useGlobalStore(state => ({
+        rapportini: state.rapportini,
+        tecnici: state.tecnici,
+        clienti: state.clienti,
+        navi: state.navi,
+        luoghi: state.luoghi,
+        tipiGiornata: state.tipiGiornata,
+        areAnagraficheLoading: state.areAnagraficheLoading,
+    }));
 
     const [filters, setFilters] = useState<FilterState>({
         dataDa: dayjs().startOf('month'), 
@@ -61,7 +73,8 @@ const RapportiniListPage = () => {
         if (!rapportini) return [];
 
         return rapportini.filter(r => {
-            const rapportinoDate = dayjs(r.dataInizio.toDate());
+            // La data viene ora salvata come stringa ISO 8601, non serve .toDate()
+            const rapportinoDate = dayjs(r.dataInizio);
             if (filters.dataDa && rapportinoDate.isBefore(filters.dataDa, 'day')) return false;
             if (filters.dataA && rapportinoDate.isAfter(filters.dataA, 'day')) return false;
             if (filters.tecnicoId && !r.presenze?.includes(filters.tecnicoId)) return false;
@@ -76,13 +89,13 @@ const RapportiniListPage = () => {
     const handleEdit = useCallback((rapportino: Rapportino) => {
         navigate(`/rapportino/edit/${rapportino.id}`);
     }, [navigate]);
+    
+    // L'errore viene gestito globalmente, per ora qui non serve.
+    // const error = errorRapportini || errorAnagrafiche;
 
-    const loading = loadingRapportini || loadingAnagrafiche;
-    const error = errorRapportini || errorAnagrafiche;
-
-    if (error) {
-        return <Alert severity="error">Si è verificato un errore nel caricamento dei dati: {error.message}</Alert>;
-    }
+    // if (error) {
+    //     return <Alert severity="error">Si è verificato un errore nel caricamento dei dati: {error.message}</Alert>;
+    // }
 
     return (
       <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">

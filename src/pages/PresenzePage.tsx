@@ -1,36 +1,57 @@
 
-import { useMemo } from 'react';
-import { Typography, Box, CircularProgress } from '@mui/material';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/db';
-import { useAnagraficaData } from '@/contexts/DataContext';
+import { useEffect, useMemo } from 'react';
+import { Typography, Box, CircularProgress, Alert } from '@mui/material';
 import { Timestamp } from 'firebase/firestore';
-import PresenzeList from '@/components/Presenze/PresenzeList'; // <-- IMPORTA IL NUOVO COMPONENTE
+
+import { useCheckinStore } from '@/store/useCheckinStore';
+import { useGlobalStore } from '@/stores/globalStore';
+import PresenzeList from '@/components/Presenze/PresenzeList';
 
 const PresenzePage = () => {
-    // Caricamento dei dati dalle anagrafiche e dagli eventi
-    const { naviMap, luoghiMap, loading: anagraficheLoading } = useAnagraficaData();
-    const eventi = useLiveQuery(() => db.checkin_giornalieri.toArray(), []);
+    const { checkins, loading: checkinsLoading, error, subscribeToCheckins } = useCheckinStore();
+    const { navi, luoghi, loading: anagraficheLoading } = useGlobalStore();
 
-    const loading = anagraficheLoading || !eventi;
+    useEffect(() => {
+        const unsubscribe = subscribeToCheckins();
+        return () => unsubscribe();
+    }, [subscribeToCheckins]);
 
-    // Memoizzazione delle righe per ottimizzare le performance
+    const naviMap = useMemo(() => new Map(navi.map(n => [n.id, n])), [navi]);
+    const luoghiMap = useMemo(() => new Map(luoghi.map(l => [l.id, l])), [luoghi]);
+
     const rows = useMemo(() => {
-        if (!eventi) return [];
-        return eventi.map(evento => ({
-            id: evento.id,
-            tecnicoName: evento.tecnicoName || 'Non specificato',
-            tipo: evento.tipo,
-            luogo: evento.naveId ? naviMap.get(evento.naveId)?.nome : (evento.luogoId ? luoghiMap.get(evento.luogoId)?.nome : '--'),
-            timestampReale: evento.timestampReale,
-        }));
-    }, [eventi, naviMap, luoghiMap]);
+        return checkins.map(evento => {
+            // Funzione helper per la conversione sicura dei timestamp
+            const toDate = (ts: any) => ts instanceof Timestamp ? ts.toDate() : ts;
 
-    // Se i dati non sono ancora pronti, mostra un caricamento
-    if (loading) {
+            return {
+                id: evento.id,
+                tecnicoName: evento.tecnicoName || 'N/D',
+                tipo: evento.tipo,
+                luogo: evento.naveId 
+                    ? naviMap.get(evento.naveId)?.nome 
+                    : (evento.luogoId ? luoghiMap.get(evento.luogoId)?.nome : '--'),
+                // Aggiungo ENTRAMBI i timestamp al set di dati per la riga
+                timestampReale: toDate(evento.timestampReale),
+                timestampImpostato: toDate(evento.timestampImpostato),
+            };
+        });
+    }, [checkins, naviMap, luoghiMap]);
+
+    const isLoading = checkinsLoading || anagraficheLoading;
+
+    if (isLoading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}>
                 <CircularProgress />
+            </Box>
+        );
+    }
+
+    if (error) {
+        return (
+            <Box sx={{ p: 4 }}>
+                <Alert severity="error">{error}</Alert>
             </Box>
         );
     }
@@ -40,8 +61,7 @@ const PresenzePage = () => {
             <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
                 Registro Presenze Tecnici
             </Typography>
-            {/* Renderizza il componente di presentazione passando i dati */}
-            <PresenzeList rows={rows} loading={loading} />
+            <PresenzeList rows={rows} loading={isLoading} />
         </Box>
     );
 };

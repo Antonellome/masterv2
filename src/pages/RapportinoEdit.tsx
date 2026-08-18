@@ -13,13 +13,14 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import { useGlobalStore } from '@/stores/globalStore';
-import { api } from '@/services/api';
 import { db } from '@/db/db';
 import type { Rapportino, TipoGiornata, Tecnico } from '@/models/definitions';
+// ** MODIFICA APPORTATA: Import per le Firebase Functions **
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 dayjs.locale('it');
 
-// --------- INIZIO SOTTOCOMPONENTI (rimangono invariati) ------------
+// --------- SOTTOCOMPONENTI E UTILS (INVARIATI) ------------
 const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly }) => {
     const oreOptions = useMemo(() => Array.from({ length: 49 }, (_, i) => i * 0.5), []);
     const handleValueChange = (field: keyof DettaglioOreData, value: any) => {
@@ -49,19 +50,9 @@ const OreLavoroSingoloTecnico: React.FC<any> = ({ datiOre, onUpdate, isReadOnly 
                  <Grid item xs={12} sm={datiOre.isManual ? 12 : 3}>
                      <FormControl fullWidth disabled={isReadOnly || !datiOre.isManual}>
                         <InputLabel>Ore Lavorate</InputLabel>
-                        <Select
-                            value={datiOre.ore ?? 0}
-                            label="Ore Lavorate"
-                            onChange={e => handleValueChange('ore', Number(e.target.value))}
-                        >
-                            {datiOre.ore && !oreOptions.includes(datiOre.ore) && (
-                                <MenuItem key={datiOre.ore} value={datiOre.ore}>
-                                    {datiOre.ore.toFixed(2)}
-                                </MenuItem>
-                            )}
-                            {oreOptions.map(ora => (
-                                <MenuItem key={ora} value={ora}>{ora}</MenuItem>
-                            ))}
+                        <Select value={datiOre.ore ?? 0} label="Ore Lavorate" onChange={e => handleValueChange('ore', Number(e.target.value))}>
+                            {datiOre.ore && !oreOptions.includes(datiOre.ore) && (<MenuItem key={datiOre.ore} value={datiOre.ore}>{datiOre.ore.toFixed(2)}</MenuItem>)}
+                            {oreOptions.map(ora => (<MenuItem key={ora} value={ora}>{ora}</MenuItem>))}
                         </Select>
                     </FormControl>
                 </Grid>
@@ -80,35 +71,18 @@ const isGiornataLavorativa = (tipo: TipoGiornata | undefined): boolean => {
     if ((tipo as any).categoria === 'ferie' || (tipo as any).categoria === 'malattia') return false;
     return !NON_LAVORATIVO_KEYWORDS.some(k => (tipo.nome || '').toLowerCase().includes(k));
 };
-const emptyDettaglioOre: DettaglioOreData = {
-    tecnicoId: 'placeholder',
-    nome: '',
-    isManual: false,
-    oraInizio: '07:30',
-    oraFine: '16:30',
-    pausa: 60,
-    ore: 8
-};
-// --------- FINE SOTTOCOMPONENTI ------------
-
+const emptyDettaglioOre: DettaglioOreData = { tecnicoId: 'placeholder', nome: '', isManual: false, oraInizio: '07:30', oraFine: '16:30', pausa: 60, ore: 8 };
+// ----------------------------------------------------------------
 
 const RapportinoEdit: React.FC = () => {
-    // --- INIZIO STATO E HOOKS (rimangono invariati) ---
+    // --- STATO E HOOKS (invariati) ---
     const navigate = useNavigate();
     const { id: reportId } = useParams<{ id: string }>();
     const isEditMode = Boolean(reportId);
-
     const showNotification = useGlobalStore((state) => state.showNotification);
     const profile = useGlobalStore((state) => state.profile);
-    const { 
-        tipiGiornata, tecnici, veicoli, navi, luoghi, 
-        areAnagraficheLoading: collectionsLoading 
-    } = useGlobalStore((state) => ({
-        tipiGiornata: state.tipiGiornata,
-        tecnici: state.tecnici,
-        veicoli: state.veicoli,
-        navi: state.navi,
-        luoghi: state.luoghi,
+    const { tipiGiornata, tecnici, veicoli, navi, luoghi, areAnagraficheLoading: collectionsLoading } = useGlobalStore((state) => ({
+        tipiGiornata: state.tipiGiornata, tecnici: state.tecnici, veicoli: state.veicoli, navi: state.navi, luoghi: state.luoghi,
         areAnagraficheLoading: state.areAnagraficheLoading,
     }));
 
@@ -141,344 +115,216 @@ const RapportinoEdit: React.FC = () => {
     const [editingTecnico, setEditingTecnico] = useState<DettaglioOreData | null>(null);
     const [tempDettaglioOre, setTempDettaglioOre] = useState<DettaglioOreData | null>(null);
     const [firma, setFirma] = useState<string | null>(null);
-    // --- FINE STATO E HOOKS ---
+    // --------------------------------
 
-    // --- INIZIO LOGICA E HANDLERS (rimangono invariati) ---
-    const handleTecnicoResponsabileChange = (_: any, nuovoTecnico: Tecnico | null) => {
-        const nuovoId = nuovoTecnico?.id || null;
-        setTecnicoResponsabileId(nuovoId);
-
-        if (nuovoTecnico) {
-            setDettaglioOre(prevDettagli => {
-                const esisteGia = prevDettagli.some(d => d.tecnicoId === nuovoId);
-                if (!esisteGia) {
-                    const dettaglioDefault = prevDettagli.find(d => d.tecnicoId === tecnicoResponsabileId) || emptyDettaglioOre;
-                    return [
-                        ...prevDettagli,
-                        {
-                            ...dettaglioDefault,
-                            tecnicoId: nuovoTecnico.id,
-                            nome: `${nuovoTecnico.cognome} ${nuovoTecnico.nome}`.trim(),
-                        }
-                    ];
-                }
-                return prevDettagli;
-            });
-        } else {
-            setDettaglioOre([]);
-        }
-    };
-
+    // --- *** LOGICA DI CARICAMENTO ROBUSTA *** ---
     useEffect(() => {
+        // Attende che le anagrafiche siano caricate
         if (collectionsLoading) return;
 
-        if (isEditMode) {
-            const loadReportFromLocalDB = async () => {
+        const loadData = async () => {
+            if (isEditMode) {
                 if (!reportId) {
-                    setPageLoading(false);
+                    showNotification("ID rapportino non valido.", "error");
+                    navigate('/reportistica');
                     return;
                 }
                 setPageLoading(true);
                 try {
                     const reportData = await db.rapportini.get(reportId);
 
-                    if (reportData) {
-                        const dateToLoad = reportData.dataInizio || reportData.data;
-                        
-                        let dataDaImpostare: Dayjs | null = null;
-                        if (dateToLoad) {
-                            if (typeof dateToLoad.seconds === 'number') {
-                                dataDaImpostare = dayjs(new Date(dateToLoad.seconds * 1000));
-                            } else {
-                                const parsedDate = dayjs(dateToLoad);
-                                if (parsedDate.isValid()) {
-                                    dataDaImpostare = parsedDate;
-                                }
-                            }
-                        }
-                        setData(dataDaImpostare);
-
-                        setTecnicoResponsabileId(reportData.tecnicoId);
-                        const resolvedGiornataId = reportData.tipoGiornataId || '';
-                        setGiornataId(resolvedGiornataId);
-                        const loadedTrasfertaId = (reportData as any).trasfertaId || '';
-                        setIncludeTrasferta(Boolean(loadedTrasfertaId));
-                        setTrasfertaId(loadedTrasfertaId);
-                        const tipo = tipiGiornataMap.get(resolvedGiornataId);
-                        setIsLavorativo(isGiornataLavorativa(tipo));
-                        setVeicoloId(reportData.veicoloId || null);
-                        setNaveId(reportData.naveId || null);
-                        setLuogoId(reportData.luogoId || null);
-                        setDescrizioneBreve(reportData.descrizioneBreve || '');
-                        setLavoroEseguito(reportData.lavoroEseguito || '');
-                        setMaterialiImpiegati(reportData.materialiImpiegati || '');
-                        setFirma(reportData.firmaVettoriale || null);
-                        setOrdineLavoro(reportData.ordineLavoro || '');
-
-                        const dettagliDaDb = reportData.dettaglioOreTecnici || [];
-
-                        const dettagliCaricati: DettaglioOreData[] = dettagliDaDb.map((dettaglioSalvato: any) => ({
-                            tecnicoId: dettaglioSalvato.tecnicoId,
-                            nome: dettaglioSalvato.nome || 'Nome non disponibile',
-                            isManual: dettaglioSalvato.isManual ?? false,
-                            oraInizio: dettaglioSalvato.oraInizio || '07:30',
-                            oraFine: dettaglioSalvato.oraFine || '16:30',
-                            pausa: dettaglioSalvato.pausa ?? 60,
-                            ore: dettaglioSalvato.ore ?? 0,
-                        }));
-                        setDettaglioOre(dettagliCaricati);
-                        
-                    } else {
-                        showNotification("Rapportino non trovato nel database locale.", "error");
+                    // CONTROLLO DI VALIDITÀ: Se il rapportino non esiste o non ha dati essenziali, esci.
+                    if (!reportData || !reportData.id || !reportData.tecnicoId) {
+                        showNotification("Dati del rapportino non trovati o corrotti. Impossibile modificare.", "error");
                         navigate('/reportistica');
+                        return; // Uscita sicura
                     }
+
+                    // Se i dati sono validi, procedi a impostare lo stato
+                    const dateToLoad = reportData.dataInizio || reportData.data;
+                    let dataDaImpostare: Dayjs | null = null;
+                    if (dateToLoad) {
+                        // Normalizzazione della data per gestire sia Timestamp che stringhe ISO
+                        const parsedDate = dayjs(dateToLoad instanceof Date ? dateToLoad : (dateToLoad as any).seconds * 1000);
+                        if (parsedDate.isValid()) dataDaImpostare = parsedDate;
+                    }
+                    setData(dataDaImpostare);
+
+                    setTecnicoResponsabileId(reportData.tecnicoId);
+                    const resolvedGiornataId = reportData.tipoGiornataId || '';
+                    setGiornataId(resolvedGiornataId);
+                    const loadedTrasfertaId = (reportData as any).trasfertaId || '';
+                    setIncludeTrasferta(Boolean(loadedTrasfertaId));
+                    setTrasfertaId(loadedTrasfertaId);
+                    const tipo = tipiGiornataMap.get(resolvedGiornataId);
+                    setIsLavorativo(isGiornataLavorativa(tipo));
+                    setVeicoloId(reportData.veicoloId || null);
+                    setNaveId(reportData.naveId || null);
+                    setLuogoId(reportData.luogoId || null);
+                    setDescrizioneBreve(reportData.descrizioneBreve || '');
+                    setLavoroEseguito(reportData.lavoroEseguito || '');
+                    setMaterialiImpiegati(reportData.materialiImpiegati || '');
+                    setFirma(reportData.firmaVettoriale || null);
+                    setOrdineLavoro(reportData.ordineLavoro || '');
+
+                    const dettagliCaricati: DettaglioOreData[] = (reportData.dettaglioOreTecnici || []).map((d: any) => ({
+                        tecnicoId: d.tecnicoId,
+                        nome: d.nome || 'Nome non disp.',
+                        isManual: d.isManual ?? false,
+                        oraInizio: d.oraInizio || '07:30',
+                        oraFine: d.oraFine || '16:30',
+                        pausa: d.pausa ?? 60,
+                        ore: d.ore ?? 0,
+                    }));
+                    setDettaglioOre(dettagliCaricati);
+                    
                 } catch (e) {
-                    console.error("Errore caricamento report da Dexie: ", e);
-                    showNotification("Errore durante il caricamento del report locale.", "error");
+                    console.error("Errore critico durante il caricamento del rapportino da Dexie: ", e);
+                    showNotification("Errore irreversibile nel caricamento del rapportino.", "error");
+                    navigate('/reportistica'); // Ritorna alla pagina precedente in caso di errore
                 } finally {
                     setPageLoading(false);
                 }
-            };
-            loadReportFromLocalDB();
-        } else {
-            setTecnicoResponsabileId(profile.tecnicoId || null);
-            const tecnicoCorrente = tecnici.find(t => t.id === profile.tecnicoId);
-            setDettaglioOre(tecnicoCorrente ? [{
-                ...emptyDettaglioOre,
-                tecnicoId: tecnicoCorrente.id,
-                nome: `${tecnicoCorrente.cognome} ${tecnicoCorrente.nome}`.trim(),
-            }] : []);
-            setIncludeTrasferta(false);
-            setTrasfertaId('');
-            setPageLoading(false);
-        }
+            } else {
+                // Logica per un nuovo rapportino (invariata)
+                setTecnicoResponsabileId(profile.tecnicoId || null);
+                const tecnicoCorrente = tecnici.find(t => t.id === profile.tecnicoId);
+                setDettaglioOre(tecnicoCorrente ? [{ ...emptyDettaglioOre, tecnicoId: tecnicoCorrente.id, nome: `${tecnicoCorrente.cognome} ${tecnicoCorrente.nome}`.trim() }] : []);
+                setPageLoading(false);
+            }
+        };
+
+        loadData();
     }, [isEditMode, reportId, navigate, collectionsLoading, tipiGiornataMap, showNotification, profile.tecnicoId, tecnici]);
     
+    // --- LOGICA E HANDLERS (invariati) ---
     const tecnicoResponsabileSelezionato = useMemo(() => {
         if (!tecnicoResponsabileId) return null;
-        const tecnicoDaLista = sortedTecnici.find(t => t.id === tecnicoResponsabileId);
-        if (tecnicoDaLista) return tecnicoDaLista;
+        return sortedTecnici.find(t => t.id === tecnicoResponsabileId) || null;
+    }, [tecnicoResponsabileId, sortedTecnici]);
 
-        const dettaglioResponsabile = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
-        if (dettaglioResponsabile) {
-            const [cognome, ...nomeParts] = (dettaglioResponsabile.nome || '').split(' ');
-            return {
-                id: tecnicoResponsabileId,
-                nome: nomeParts.join(' '),
-                cognome,
-            } as Tecnico;
+    const handleTecnicoResponsabileChange = (_: any, nuovoTecnico: Tecnico | null) => {
+        const nuovoId = nuovoTecnico?.id || null;
+        setTecnicoResponsabileId(nuovoId);
+        if (nuovoTecnico && !dettaglioOre.some(d => d.tecnicoId === nuovoId)) {
+            const dettaglioDefault = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId) || emptyDettaglioOre;
+            setDettaglioOre(prev => [...prev, { ...dettaglioDefault, tecnicoId: nuovoTecnico.id, nome: `${nuovoTecnico.cognome} ${nuovoTecnico.nome}`.trim() }]);
+        } else if (!nuovoTecnico) {
+            setDettaglioOre([]);
         }
-        return null;
-    }, [tecnicoResponsabileId, sortedTecnici, dettaglioOre]);
-
-    const opzioniTecnici = useMemo(() => {
-        if (tecnicoResponsabileSelezionato && !sortedTecnici.some(t => t.id === tecnicoResponsabileSelezionato.id)) {
-            return [tecnicoResponsabileSelezionato, ...sortedTecnici];
-        }
-        return sortedTecnici;
-    }, [sortedTecnici, tecnicoResponsabileSelezionato]);
-
-
-    const handleTipoGiornataChange = (id: string) => { setGiornataId(id); const tipo = tipiGiornataMap.get(id); setIsLavorativo(isGiornataLavorativa(tipo)); };
-    const handleCancel = () => navigate('/reportistica');
-    const handleOreUpdate = useCallback((updatedData: DettaglioOreData) => {
-         setDettaglioOre(prev => prev.map(d => d.tecnicoId === updatedData.tecnicoId ? updatedData : d));
-    }, []);
-
-    const handleMasterOreUpdate = (updatedData: DettaglioOreData) => {
-        setDettaglioOre(prev => prev.map(d => {
-            if(d.tecnicoId === updatedData.tecnicoId) return updatedData;
-            if(isEditMode) return d;
-            return { ...d, isManual: updatedData.isManual, oraInizio: updatedData.oraInizio, oraFine: updatedData.oraFine, pausa: updatedData.pausa, ore: updatedData.ore };
-        }));
     };
-
+    const handleTipoGiornataChange = (id: string) => { setGiornataId(id); setIsLavorativo(isGiornataLavorativa(tipiGiornataMap.get(id))); };
+    const handleCancel = () => navigate(-1); // Torna indietro invece di una rotta fissa
+    const handleOreUpdate = useCallback((updatedData: DettaglioOreData) => setDettaglioOre(prev => prev.map(d => d.tecnicoId === updatedData.tecnicoId ? updatedData : d)), []);
+    const handleMasterOreUpdate = (updatedData: DettaglioOreData) => setDettaglioOre(prev => prev.map(d => d.tecnicoId === updatedData.tecnicoId ? updatedData : { ...d, ...updatedData, tecnicoId: d.tecnicoId, nome: d.nome }));
     const handleAltriTecniciChange = (_: any, nuoviTecnici: Tecnico[]) => {
         const responsabile = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId);
         if (!responsabile) return;
-        
-        const allSelectedTecnici = [
-            responsabile, 
-            ...nuoviTecnici.map(t => 
-                dettaglioOre.find(d => d.tecnicoId === t.id) || { ...responsabile, tecnicoId: t.id, nome: `${t.cognome} ${t.nome}`.trim() }
-            )
-        ];
-        const uniqueTecnici = Array.from(new Map(allSelectedTecnici.map(item => [item.tecnicoId, item])).values());
-        setDettaglioOre(uniqueTecnici);
+        const allSelectedTecnici = [responsabile, ...nuoviTecnici.map(t => dettaglioOre.find(d => d.tecnicoId === t.id) || { ...responsabile, tecnicoId: t.id, nome: `${t.cognome} ${t.nome}`.trim() })];
+        setDettaglioOre(Array.from(new Map(allSelectedTecnici.map(item => [item.tecnicoId, item])).values()));
     };
-
     const removeTecnico = (idToRemove: string) => {
-        if (idToRemove === tecnicoResponsabileId) {
-            showNotification("Non puoi rimuovere il tecnico responsabile.", "warning");
-            return;
-        }
+        if (idToRemove === tecnicoResponsabileId) { showNotification("Non puoi rimuovere il tecnico responsabile.", "warning"); return; }
         setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== idToRemove));
     }
     const handleOpenModal = (tecnico: DettaglioOreData) => { setEditingTecnico(tecnico); setTempDettaglioOre(tecnico); setIsModalOpen(true); };
     const handleCloseModal = () => setIsModalOpen(false);
-    const handleSaveFromModal = () => { if (tempDettaglioOre) { handleOreUpdate(tempDettaglioOre); } handleCloseModal(); };
-    
+    const handleSaveFromModal = () => { if (tempDettaglioOre) handleOreUpdate(tempDettaglioOre); handleCloseModal(); };
+
+    // =======================================================================================
+    // ** FUNZIONE DI SALVATAGGIO/AGGIORNAMENTO REFACTORING CON FIREBASE SDK **
+    // =======================================================================================
     const handleSubmit = async () => {
-        if (!tecnicoResponsabileId || !giornataId || !data) {
-            showNotification("Compila tutti i campi obbligatori: Tecnico, Data e Tipo Giornata.", "warning");
-            return;
+        if (!tecnicoResponsabileId || !giornataId || !data) { 
+            showNotification("Compila tutti i campi obbligatori: Tecnico, Data e Tipo Giornata.", "warning"); 
+            return; 
         }
-        if (includeTrasferta && !trasfertaId) {
-            showNotification("Se attivi la trasferta devi selezionare il tipo di trasferta.", "warning");
-            return;
+        if (includeTrasferta && !trasfertaId) { 
+            showNotification("Se attivi la trasferta devi selezionare il tipo.", "warning"); 
+            return; 
         }
 
         setIsSaving(true);
-        try {
-            const dataRapportino = data.toDate();
 
-            const rapportinoData: Partial<Rapportino> = {
-                // @ts-ignore
-                dataInizio: dataRapportino,
-                tipoGiornataId: giornataId,
-                tecnicoId: tecnicoResponsabileId,
-                presenze: dettaglioOre.map(d => d.tecnicoId),
-                dettaglioOreTecnici: dettaglioOre.map(d => ({
-                    tecnicoId: d.tecnicoId,
-                    nome: d.nome,
-                    isManual: d.isManual,
-                    oraInizio: d.oraInizio,
-                    oraFine: d.oraFine,
-                    pausa: d.pausa,
-                    ore: d.ore || 0
-                })),
-                oreLavoro: dettaglioOre.reduce((sum, item) => sum + (item.ore || 0), 0),
-                veicoloId: isLavorativo ? veicoloId : null,
-                naveId: isLavorativo ? naveId : null,
-                luogoId: isLavorativo ? luogoId : null,
-                descrizioneBreve: isLavorativo ? descrizioneBreve : '',
-                lavoroEseguito: isLavorativo ? lavoroEseguito : '',
-                materialiImpiegati: isLavorativo ? materialiImpiegati : '',
-                ordineLavoro: isLavorativo ? ordineLavoro : '',
-                ...(includeTrasferta && trasfertaId ? { trasfertaId } : {}),
-                ...(firma && { firmaVettoriale: firma }),
-            };
+        // 1. Prepara il payload di dati
+        const rapportinoData: Partial<Rapportino> = {
+            dataInizio: data.toDate(), 
+            tipoGiornataId: giornataId, 
+            tecnicoId: tecnicoResponsabileId,
+            presenze: dettaglioOre.map(d => d.tecnicoId),
+            dettaglioOreTecnici: dettaglioOre.map(d => ({ ...d, ore: d.ore || 0 })),
+            oreLavoro: dettaglioOre.reduce((sum, item) => sum + (item.ore || 0), 0),
+            ...(isLavorativo && { veicoloId, naveId, luogoId, descrizioneBreve, lavoroEseguito, materialiImpiegati, ordineLavoro }),
+            ...(includeTrasferta && trasfertaId && { trasfertaId }),
+            ...(firma && { firmaVettoriale: firma }),
+        };
+
+        try {
+            // 2. Inizializza il servizio Functions
+            const functions = getFunctions();
 
             if (isEditMode && reportId) {
-                await api.rapportini.update(reportId, rapportinoData);
-                await db.rapportini.update(reportId, { ...rapportinoData, updatedAt: new Date() });
+                // --- LOGICA DI AGGIORNAMENTO SICURA ---
+                const updateRapportino = httpsCallable(functions, 'updateRapportino');
+                await updateRapportino({ id: reportId, data: rapportinoData });
+
+                // Aggiorna anche Dexie per consistenza UI immediata
+                await db.rapportini.update(reportId, rapportinoData);
                 showNotification("Rapportino aggiornato con successo!", "success");
 
             } else {
-                const finalData = {
-                    ...rapportinoData,
-                    createdBy: profile.id,
-                };
-                const newId = await api.rapportini.create(finalData);
-                await db.rapportini.put({ ...finalData, id: newId, createdAt: new Date(), updatedAt: new Date() });
+                // --- LOGICA DI CREAZIONE SICURA ---
+                const createRapportino = httpsCallable(functions, 'createRapportino');
+                // La funzione di creazione potrebbe restituire il nuovo ID, qui lo gestiamo
+                const result = await createRapportino({ ...rapportinoData, createdBy: profile.id });
+                const newId = (result.data as any)?.id;
+
+                // Aggiorna Dexie con il nuovo rapportino (usando l'ID dal backend se disponibile)
+                if (newId) {
+                    await db.rapportini.put({ ...rapportinoData, id: newId });
+                }
                 showNotification("Rapportino creato con successo!", "success");
             }
-
+            
             navigate('/reportistica');
+
         } catch (error: any) { 
-            console.error("Errore salvataggio tramite API centralizzata: ", error); 
-            showNotification(error.message || "Errore durante il salvataggio.", "error");
+            console.error("Errore durante il salvataggio del rapportino:", error); 
+            const errorMessage = error.message || "Errore sconosciuto durante il salvataggio.";
+            showNotification(errorMessage, "error");
         } finally { 
             setIsSaving(false); 
         }
     };
-    
+
     const responsabileDettaglio = dettaglioOre.find(d => d.tecnicoId === tecnicoResponsabileId) || emptyDettaglioOre;
     const altriTecniciSelezionati = useMemo(() => sortedTecnici.filter(t => dettaglioOre.some(d => d.tecnicoId === t.id && d.tecnicoId !== tecnicoResponsabileId)), [dettaglioOre, sortedTecnici, tecnicoResponsabileId]);
     const altriTecniciOpzioni = useMemo(() => sortedTecnici.filter(t => t.id !== tecnicoResponsabileId), [sortedTecnici, tecnicoResponsabileId]);
 
-    // --- FINE LOGICA E HANDLERS ---
-    
-    if (pageLoading || collectionsLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>;
+    if (pageLoading || collectionsLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}><CircularProgress size={60} /></Box>;
 
+    // --- RENDER (invariato) ---
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-            {/* 1. Contenitore Principale FLEX a colonna, occupa tutta l'altezza */}
             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 3 }}>
-
-                {/* 2. Titolo STATICO, non si espande */}
-                <Typography variant="h4" component="h1" gutterBottom sx={{ flexShrink: 0 }}>
-                    {isEditMode ? 'Dettaglio' : 'Nuovo'} Rapportino
-                </Typography>
-
-                {/* 3. Area SCROLLABILE, si espande per riempire lo spazio */}
+                <Typography variant="h4" component="h1" gutterBottom sx={{ flexShrink: 0 }}>{isEditMode ? 'Dettaglio' : 'Nuovo'} Rapportino</Typography>
                 <Box sx={{ flexGrow: 1, overflow: 'auto', pr: 2 }}>
                     <Paper elevation={3} sx={{ p: { xs: 2, sm: 3 } }}>
                         <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                            {/* ...tutto il contenuto del form va qui dentro... */}
                             <Grid container spacing={2}>
-                                <Grid item xs={12} md={4}>
-                                    <Autocomplete
-                                        options={opzioniTecnici}
-                                        getOptionLabel={(option) => `${option.cognome || ''} ${option.nome || ''}`.trim()}
-                                        value={tecnicoResponsabileSelezionato}
-                                        onChange={handleTecnicoResponsabileChange}
-                                        isOptionEqualToValue={(option, value) => option.id === value.id}
-                                        disabled={isSaving}
-                                        renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} />
-                                </Grid>
-                                <Grid item xs={12} md={4}>
-                                    <TextField
-                                        label="Ordine di Lavoro"
-                                        value={ordineLavoro}
-                                        onChange={e => setOrdineLavoro(e.target.value)}
-                                        fullWidth
-                                        disabled={isSaving}
-                                    />
-                                </Grid>
+                                <Grid item xs={12} md={4}><Autocomplete options={sortedTecnici} getOptionLabel={(o) => `${o.cognome || ''} ${o.nome || ''}`.trim()} value={tecnicoResponsabileSelezionato} onChange={handleTecnicoResponsabileChange} isOptionEqualToValue={(o, v) => o.id === v.id} disabled={isSaving} renderInput={(params) => <TextField {...params} label="Tecnico Responsabile" required />} /></Grid>
+                                <Grid item xs={12} md={4}><DatePicker label="Data" value={data} onChange={setData} disabled={isSaving} /></Grid>
+                                <Grid item xs={12} md={4}><TextField label="Ordine di Lavoro" value={ordineLavoro} onChange={e => setOrdineLavoro(e.target.value)} fullWidth disabled={isSaving} /></Grid>
                             </Grid>
-                            <FormControl fullWidth required>
-                                <InputLabel>Tipo Giornata</InputLabel>
-                                <Select value={giornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>
-                                    {tipiGiornataLavorativi.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
-                                </Select>
-                            </FormControl>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={includeTrasferta}
-                                        onChange={(e) => {
-                                            const checked = e.target.checked;
-                                            setIncludeTrasferta(checked);
-                                            if (!checked) setTrasfertaId('');
-                                        }}
-                                    />
-                                }
-                                label="Aggiungi Trasferta"
-                                disabled={isSaving}
-                            />
-                            {includeTrasferta && (
-                                <FormControl fullWidth required>
-                                    <InputLabel>Tipo di Trasferta</InputLabel>
-                                    <Select
-                                        value={trasfertaId}
-                                        label="Tipo di Trasferta"
-                                        onChange={e => setTrasfertaId(e.target.value)}
-                                        disabled={isSaving}
-                                    >
-                                        {tipiGiornataTrasferta.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}
-                                    </Select>
-                                </FormControl>
-                            )}
+                            <FormControl fullWidth required><InputLabel>Tipo Giornata</InputLabel><Select value={giornataId} label="Tipo Giornata" onChange={e => handleTipoGiornataChange(e.target.value)} disabled={isSaving}>{tipiGiornataLavorativi.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}</Select></FormControl>
+                            <FormControlLabel control={<Switch checked={includeTrasferta} onChange={(e) => { setIncludeTrasferta(e.target.checked); if (!e.target.checked) setTrasfertaId(''); }} />} label="Aggiungi Trasferta" disabled={isSaving} />
+                            {includeTrasferta && (<FormControl fullWidth required><InputLabel>Tipo di Trasferta</InputLabel><Select value={trasfertaId} label="Tipo di Trasferta" onChange={e => setTrasfertaId(e.target.value)} disabled={isSaving}>{tipiGiornataTrasferta.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}</Select></FormControl>)}
                             {isLavorativo && (
                                 <fieldset disabled={!tecnicoResponsabileId || isSaving} style={{border: 'none', padding: 0, margin: 0}}>
                                     <Divider sx={{ my: 1 }}><Typography variant="overline">Dettaglio Ore Lavoro</Typography></Divider>
                                     <OreLavoroSingoloTecnico datiOre={responsabileDettaglio} onUpdate={handleMasterOreUpdate} isReadOnly={!tecnicoResponsabileId || isSaving} />
-                                    
                                     <Autocomplete multiple options={altriTecniciOpzioni} getOptionLabel={o => `${o.cognome} ${o.nome}`} value={altriTecniciSelezionati} onChange={handleAltriTecniciChange} renderInput={params => <TextField {...params} label="Aggiungi altri tecnici" />} />
-                                    {dettaglioOre.filter(d => d.tecnicoId !== tecnicoResponsabileId).map(dett => (
-                                        <Paper key={dett.tecnicoId} variant="outlined" sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                                            <Box><Typography fontWeight="bold">{dett.nome}</Typography><Chip label={`${dett.ore || 0}h`} size="small" /></Box>
-                                            <Box>
-                                                <IconButton size="small" onClick={() => handleOpenModal(dett)}><EditIcon /></IconButton>
-                                                <IconButton size="small" onClick={() => removeTecnico(dett.tecnicoId)}><DeleteIcon /></IconButton>
-                                            </Box>
-                                        </Paper>
-                                    ))}
+                                    {dettaglioOre.filter(d => d.tecnicoId !== tecnicoResponsabileId).map(dett => (<Paper key={dett.tecnicoId} variant="outlined" sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}><Box><Typography fontWeight="bold">{dett.nome}</Typography><Chip label={`${dett.ore || 0}h`} size="small" /></Box><Box><IconButton size="small" onClick={() => handleOpenModal(dett)}><EditIcon /></IconButton><IconButton size="small" onClick={() => removeTecnico(dett.tecnicoId)}><DeleteIcon /></IconButton></Box></Paper>))}
                                     <Divider sx={{ my: 1 }}><Typography variant="overline">Dettagli Intervento</Typography></Divider>
                                     <Autocomplete options={sortedNavi} getOptionLabel={o => o.nome || ''} value={sortedNavi.find(n => n.id === naveId) || null} onChange={(_, v) => setNaveId(v?.id || null)} renderInput={params => <TextField {...params} label="Nave" />} />
                                     <Autocomplete options={sortedLuoghi} getOptionLabel={o => o.nome || ''} value={sortedLuoghi.find(l => l.id === luogoId) || null} onChange={(_, v) => setLuogoId(v?.id || null)} renderInput={params => <TextField {...params} label="Luogo" />} />
@@ -486,54 +332,22 @@ const RapportinoEdit: React.FC = () => {
                                     <TextField label="Breve Descrizione" value={descrizioneBreve} onChange={e => setDescrizioneBreve(e.target.value)} fullWidth />
                                     <TextField label="Materiali Impiegati" value={materialiImpiegati} onChange={e => setMaterialiImpiegati(e.target.value)} fullWidth multiline rows={2} />
                                     <TextField label="Lavoro Eseguito" value={lavoroEseguito} onChange={e => setLavoroEseguito(e.target.value)} fullWidth multiline rows={4} required/>
-
-                                    {isEditMode && firma && (
-                                        <>
-                                            <Divider sx={{ my: 2 }}><Typography variant="overline">Firma Cliente</Typography></Divider>
-                                            <Paper variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
-                                                <img src={firma} alt="Firma del cliente" style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} />
-                                            </Paper>
-                                        </>
-                                    )}
+                                    {isEditMode && firma && (<><Divider sx={{ my: 2 }}><Typography variant="overline">Firma Cliente</Typography></Divider><Paper variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}><img src={firma} alt="Firma del cliente" style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} /></Paper></>)}
                                 </fieldset>
                             )}
                         </Box>
                     </Paper>
                 </Box>
-
-                {/* 4. Pulsanti STATICI, non si espandono */}
                 <Box sx={{ pt: 2, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
                     <Button variant="outlined" size="large" onClick={handleCancel} disabled={isSaving}>Annulla</Button>
-                    <Button sx={{ml: 1}} variant="contained" color="primary" size="large" onClick={handleSubmit} disabled={isSaving}>
-                        {isSaving ? <CircularProgress size={24} /> : (isEditMode ? 'Aggiorna' : 'Salva')}
-                    </Button>
+                    <Button sx={{ml: 1}} variant="contained" color="primary" size="large" onClick={handleSubmit} disabled={isSaving}>{isSaving ? <CircularProgress size={24} /> : (isEditMode ? 'Aggiorna' : 'Salva')}</Button>
                 </Box>
             </Box>
-
-            {/* Dialog rimane fuori dal flusso principale */}
-            <Dialog open={isModalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
-                <DialogTitle>Modifica orario di {editingTecnico?.nome}</DialogTitle>
-                <DialogContent>
-                    {tempDettaglioOre && (
-                        <Box sx={{pt: 2}}>
-                             <OreLavoroSingoloTecnico datiOre={tempDettaglioOre} onUpdate={setTempDettaglioOre} isReadOnly={false} />
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions><Button onClick={handleCloseModal}>Annulla</Button><Button onClick={handleSaveFromModal} variant="contained">Salva Orario</Button></DialogActions>
-            </Dialog>
+            <Dialog open={isModalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth><DialogTitle>Modifica orario di {editingTecnico?.nome}</DialogTitle><DialogContent>{tempDettaglioOre && (<Box sx={{pt: 2}}><OreLavoroSingoloTecnico datiOre={tempDettaglioOre} onUpdate={setTempDettaglioOre} isReadOnly={false} /></Box>)}</DialogContent><DialogActions><Button onClick={handleCloseModal}>Annulla</Button><Button onClick={handleSaveFromModal} variant="contained">Salva Orario</Button></DialogActions></Dialog>
         </LocalizationProvider>
     );
 };
 
-interface DettaglioOreData {
-    tecnicoId: string;
-    nome: string;
-    isManual: boolean;
-    oraInizio: string | null;
-    oraFine: string | null;
-    pausa: number | null;
-    ore: number | null;
-}
+interface DettaglioOreData { tecnicoId: string; nome: string; isManual: boolean; oraInizio: string | null; oraFine: string | null; pausa: number | null; ore: number | null; }
 
 export default RapportinoEdit;

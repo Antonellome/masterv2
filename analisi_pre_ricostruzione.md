@@ -4,7 +4,7 @@
 
 **Regola del CIAO:** Ogni singolo messaggio in questa chat DEVE iniziare con la parola "CIAO.", senza eccezioni.
 
-**Regola della Persistenza dei File di Contesto:** I file che forniscono contesto (`app_master.md`, `blueprint.md`, e questo file) non devono **MAI** essere sovrascritti o cancellati. Devono essere **SEMPRE E SOLO AGGIORNATI** per preservare le regole, lo storico delle decisioni e le analisi passate. La cancellazione o sovrascrizione è un errore critico.
+**Regola della Persistenza dei File di Contesto:** I file che forniscono contesto (`app_master.md`, `blueprint.md`, e questo file) non devono **MAI** essere sovrascritti o cancellati. Devono essere **SEMPRE E SOLO AGGIORNATI** per preservare le regole, lo storico delle decisioni e le analisi passate. La cancellazione o sovrascritta è un errore critico.
 
 ---
 
@@ -23,7 +23,57 @@ Questo documento contiene la mappatura dettagliata dell'applicazione e l'analisi
 
 ---
 
-## Analisi Dettagliata per Sezione
+# FASE ATTUALE: Analisi Criticità e Piano di Bonifica Modulo Reportistica (Pre-Fase K)
+
+Questa sezione documenta l'analisi dettagliata e il piano d'azione per risolvere la grave crisi di dati e stabilità emersa nel modulo di reportistica, che ha reso l'applicazione inutilizzabile per la gestione dei rapportini.
+
+## Diagnosi del "Casino": Stato della Reportistica
+
+L'analisi congiunta ha portato alla luce un "campo di battaglia" di dati corrotti e un'applicazione frontend instabile, con le seguenti manifestazioni:
+
+1.  **Corruzione Massiva dei Dati nel Backend (Firestore):**
+    *   **Duplicazione dei Record:** Il precedente sistema di sincronizzazione fallato ha causato la creazione di decine di rapportini identici (fino a 20 copie dello stesso report).
+    *   **Relazioni Interrotte (Dati Orfani):** Molti rapportini hanno perso i collegamenti fondamentali con le anagrafiche. In particolare, mancano i collegamenti ai tecnici (`presenze`) e alle navi/luoghi, rendendo il dato incompleto e inutilizzabile.
+
+2.  **Instabilità Totale del Frontend:**
+    *   **Crash Sistematici:** L'applicazione va in crash continuo quando si tenta di visualizzare, modificare o eliminare un rapportino.
+    *   **Causa Radice del Crash:** Il componente responsabile della visualizzazione della tabella (`RapportiniTable.tsx`) era un "fossile" della vecchia architettura. Si aspettava un modello dati obsoleto (es. `rapportino.cliente`) e non era in grado di interpretare la nuova struttura dati (es. `rapportino.naveId`, `rapportino.presenze`). Il tentativo di accedere a proprietà di oggetti inesistenti (es. `tecnico.nome` su un tecnico `null`) causava il crash irrecuperabile.
+
+## Modello Operativo e di Permessi (Fonte di Verità)
+
+L'analisi ha chiarito la divisione fondamentale dei ruoli tra le due applicazioni del sistema, che è la chiave per la corretta implementazione delle funzionalità:
+
+*   **App Tecnici (sul campo):**
+    *   **CREAZIONE:** Può creare nuovi rapportini completi di firma cliente.
+    *   **MODIFICA:** Può modificare **solo e soltanto i rapportini da lui creati**.
+    *   **ELIMINAZIONE:** **MAI**. La funzione di eliminazione è assente e proibita.
+    *   **VISIBILITÀ:** Vede i propri rapportini e quelli in cui è stato inserito nell'elenco `presenze`.
+
+*   **App Master (Ufficio / Amministrativa - questa):**
+    *   **CREAZIONE:** Può creare rapportini per scopi amministrativi, ma **senza gestire la firma del cliente**.
+    *   **MODIFICA:** **Sì, può modificare QUALSIASI rapportino** per correggere errori o dati mancanti.
+    *   **ELIMINAZIONE:** **Sì, può eliminare QUALSIASI rapportino**, funzione fondamentale per la bonifica dei dati duplicati.
+    *   **VISIBILITÀ:** Vede TUTTI i rapportini di tutti i tecnici, firme incluse.
+
+## Piano di Bonifica Sequenziale (Formalizzato come FASE K nel Blueprint)
+
+Per uscire da questa situazione critica, è stato definito un piano d'azione in 3 fasi sequenziali:
+
+1.  **K.1 - Stabilizzazione Interfaccia:**
+    *   **Azione:** Riscrivere il componente `RapportiniTable.tsx` per renderlo robusto e "difensivo". Deve interpretare correttamente la struttura dati definita in `report_tecnici.md` e non andare in crash in presenza di dati corrotti. I dati corrotti verranno evidenziati con un indicatore visivo.
+    *   **Obiettivo:** Ottenere un'interfaccia stabile che permetta di visualizzare tutti i rapportini (corretti e corrotti) senza crash.
+
+2.  **K.2 - Bonifica Dati Backend:**
+    *   **Azione:** Sfruttando l'interfaccia stabilizzata, analizzare i dati su Firestore per identificare i rapportini duplicati e orfani. Eseguire, con conferma utente, operazioni chirurgiche di eliminazione.
+    *   **Obiettivo:** Pulire la collezione `rapportini` su Firestore, lasciando solo dati coerenti e validi.
+
+3.  **K.3 - Ripristino Funzionalità Amministrative:**
+    *   **Azione:** Attivare e implementare in modo sicuro i pulsanti "Modifica" ed "Elimina" nell'App Master, collegandoli a Cloud Functions che verifichino i permessi di amministratore.
+    *   **Obiettivo:** Fornire all'ufficio strumenti sicuri e affidabili per la gestione quotidiana dei dati.
+
+---
+
+## Analisi Dettagliata per Sezione (ARCHIVIATA)
 
 ### 1. Autenticazione (Analisi Completata)
 
@@ -69,79 +119,27 @@ Questo documento contiene la mappatura dettagliata dell'applicazione e l'analisi
 
 ---
 
-# Piano di Ricostruzione e Refactoring
+# Piani di Ricostruzione (ARCHIVIATI)
 
-Questo documento delinea la strategia e i passaggi necessari per ristrutturare l'applicazione, correggere le falle di sicurezza, migliorare le performance e stabilire un'architettura robusta e scalabile.
-
-L'obiettivo è trasformare l'applicazione da un prototipo client-heavy e insicuro a un prodotto di livello enterprise, sicuro e performante, seguendo le best practice di sviluppo con Firebase e React.
-
----
+*Questa sezione contiene i piani di ristrutturazione passati, superati dall'evoluzione della strategia e dalla scoperta di criticità più profonde.*
 
 ## Fase 0: Messa in Sicurezza delle Cloud Functions Esistenti
-
-**Obiettivo:** Mitigare immediatamente i rischi più gravi prima del refactoring completo.
-
-1.  **Analisi `amministrazione_gestisciUtenti`:**
-    *   **STATO: FATTO.**
-
----
+*   **STATO: FATTO.**
 
 ## Fase 1: Ristrutturazione del Sistema di Autenticazione e Permessi
-
-**Obiettivo:** Risolvere la falla di sicurezza principale (**SEC-1**) e stabilire una fonte di verità unica e affidabile per i permessi utente.
-
-1.  **Abbandono della Collezione `admins`:**
-    *   **STATO: FATTO.**
-
-2.  **Implementazione dei Custom Claims di Firebase Authentication:**
-    *   **STATO: FATTO.**
-
-3.  **Refactoring del Client per Usare i Custom Claims:**
-    *   **STATO: FATTO.**
-
-4.  **Implementazione Funzionalità Reset Password:**
-    *   **STATO: FATTO.**
-
-### ***Correzione Architetturale in Corso d'Opera (Post-Fase 1)***
-
-*   **PROBLEMA RILEVATO:** La prima implementazione della Fase 1 si è rivelata pericolosa e errata. La Cloud Function `admin_getAllUsers` recuperava **tutti** gli utenti da Firebase Auth, creando una contaminazione di dati in cui i "tecnici" venivano mostrati nella tabella di gestione amministratori, introducendo un rischio di security enorme (un tecnico poteva essere promosso admin).
-
-*   **SOLUZIONE DEFINITIVA:** Per separare in modo netto e sicuro il personale "amministrativo" dai "tecnici", viene introdotto un nuovo Custom Claim a livello di Firebase Authentication:
-    *   **`livello: 'staff'`**: Questo claim identificherà in modo univoco e sicuro un utente come parte del personale amministrativo, autorizzato ad apparire nella sezione "Impostazioni -> Amministratori".
-
-*   **NUOVA LOGICA DELLE CLOUD FUNCTIONS:**
-    *   **`admin_getAllUsers` (DA RISCRIVERE):** Questa funzione DEVE essere riscritta. La sua unica responsabilità sarà quella di scorrere TUTTI gli utenti in Firebase Auth e restituire al client **SOLO E SOLTANTO** quelli che possiedono il claim **`livello: 'staff'`**. Tutta la logica di filtro avviene lato server, garantendo che il client riceva solo dati "puri".
-    *   **`amministrazione_gestisciUtenti` (DA MODIFICARE):** Questa funzione verrà aggiornata per gestire il nuovo flusso:
-        *   **In Creazione:** Quando un nuovo utente viene creato da questa interfaccia, la funzione gli assegnerà i claims di default: `{ livello: 'staff', admin: false }`. Sarà possibile specificare una password iniziale e se promuoverlo subito ad `admin: true`.
-        *   **In Modifica Ruolo:** L'azione di `toggleRole` si limiterà a cambiare il valore del claim `admin` tra `true` e `false`, lasciando `livello: 'staff'` inalterato.
-
----
+*   **STATO: FATTO.**
 
 ## Fase 2: Creazione di un'API Sicura con Cloud Functions
-
-**Obiettivo:** Eliminare completamente l'accesso diretto a Firestore dal client per le operazioni di scrittura, risolvendo **SEC-2** e **SEC-3**.
-
-1.  **Sviluppo di Cloud Functions CRUD Generiche.**
-2.  **Implementazione della Sicurezza nelle Functions.**
-3.  **Refactoring del Client per Usare le Nuove Functions.**
-4.  **Ricostruzione Sezione Notifiche.**
-
----
+*   **STATO: SUPERATO** dalla strategia globale.
 
 ## Fase 3: Ottimizzazione delle Performance e Refactoring del Data Fetching
-
-**Obiettivo:** Risolvere i problemi di performance (**PERF-1, PERF-2**).
-
-1.  **Spostamento delle Aggregazioni sul Backend.**
-2.  **Refactoring del Data Fetching sul Client.**
-3.  **Eliminazione di Dexie.js (IndexedDB).**
-
----
+*   **STATO: SUPERATO** dalla strategia globale.
 
 ## Fase 4: Pulizia e Finalizzazione
+*   **STATO: SUPERATO** dalla strategia globale.
 
-**Obiettivo:** Consolidare il lavoro svolto.
+## NUOVO PIANO DI RISTRUTTURAZIONE: REPORTISTICA E SINCRONIZZAZIONE (SUPERATO)
+*   **STATO: SUPERATO** dalla strategia globale del `DataHydrator` e dalla scoperta della dualità architetturale.
 
-1.  **Refactoring delle Security Rules di Firestore.**
-2.  **Revisione del Codice.**
-3.  **Test End-to-End.**
+## AGGIORNAMENTO PIANO: Architettura Globale e Debito Tecnico (SUPERATO)
+*   **STATO: SUPERATO** e completato con l'eliminazione di Dexie e la centralizzazione su Zustand.

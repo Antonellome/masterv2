@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import { useCollection } from 'react-firebase-hooks/firestore';
 import { collection, query, where, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db } from '@/config/firebase'; // <-- PERCORSO CORRETTO
 import {
     Box,
     Typography,

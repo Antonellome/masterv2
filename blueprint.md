@@ -1,70 +1,107 @@
-# Blueprint dell'Applicazione
+# Blueprint Architetturale Unificato
 
 **IMPORTANTE: QUESTA SEZIONE NON DEVE ESSERE MAI MODIFICATA O CANCELLATA.**
 
 **Regola del CIAO:** Ogni singolo messaggio in questa chat DEVE iniziare con la parola "CIAO.", senza eccezioni.
 
-**Regola della Persistenza dei File di Contesto:** I file che forniscono contesto (`app_master.md`, `blueprint.md`, e questo file) non devono **MAI** essere sovrascritti o cancellati. Devono essere **SEMPRE E SOLO AGGIORNATI** per preservare le regole, lo storico delle decisioni e le analisi passate. La cancellazione o sovrascrizione è un errore critico.
+---
+
+## Obiettivo Strategico: Stabilità e Sicurezza
+
+L'obiettivo primario è trasformare questa applicazione da un prototipo client-heavy, insicuro e instabile a un prodotto di livello enterprise. Questo sarà raggiunto attraverso la centralizzazione della logica di business sul backend (Firebase Cloud Functions), l'adozione di un unico e affidabile sistema di gestione dello stato (Zustand) e la messa in sicurezza di ogni singola operazione di scrittura (CRUD).
 
 ---
 
-Questo documento funge da indice e punto di partenza per tutte le operazioni di sviluppo e refactoring.
+## Diagnosi Architetturale Consolidata
 
-## Istruzione Fondamentale
+L'analisi ha rivelato criticità sistemiche che minano l'intera applicazione:
 
-**Prima di iniziare qualsiasi lavoro, leggere attentamente il file `analisi_pre_ricostruzione.md`.**
+1.  **Falla di Sicurezza Fondamentale (SEC-1, SEC-2, SEC-3):** L'applicazione permetteva scritture dirette su Firestore dal client, bypassando qualsiasi controllo di sicurezza lato server. Il sistema di permessi basato sulla collezione `admins` era inaffidabile e scorretto, in favore dei **Custom Claims** di Firebase Auth, che rappresentano l'unica fonte di verità.
 
-Questo file è la **fonte unica di verità** per il lavoro da svolgere.
+2.  **Dualità dello Stato (Debito Tecnico Grave):** L'applicazione operava con due sistemi di gestione dello stato in conflitto:
+    *   **Legacy:** Un database locale su disco (Dexie.js), fonte di dati obsoleti, inconsistenti e di logica di sincronizzazione fallata.
+    *   **Moderno:** Uno store globale in-memory (Zustand), popolato all'avvio (`DataHydrator`) con dati freschi e affidabili dal server.
+    Questa divisione era la causa principale di bug, dati disallineati e instabilità generale.
 
-**Regola di Aggiornamento per l'IA (A Causa di Incompetenza):**
-*   L'IA è obbligata a leggere `analisi_pre_ricostruzione.md` all'inizio di ogni sessione e prima di ogni azione, ma le è **ASSOLUTAMENTE VIETATO** modificarlo, se non per aggiungere note di stato approvate.
-*   Questo file (`blueprint.md`) è l'unico registro dinamico del lavoro svolto.
-
----
-
-## Piano di Sviluppo Attuale: Correzione Definitiva della Gestione Amministratori
-
-*   **PRIORITÀ:** **MASSIMA.** Annulla e sostituisce qualsiasi altro piano. La contaminazione dei dati tra "tecnici" e "amministratori" rappresenta una falla di sicurezza critica che deve essere risolta immediatamente.
-
-*   **OBIETTIVO:** Riscrivere la logica di gestione degli amministratori per garantire una separazione netta e sicura tra gli utenti "staff" e tutti gli altri tipi di utenti, seguendo le specifiche definite nella sezione *"Correzione Architetturale in Corso d'Opera"* del file `analisi_pre_ricostruzione.md`.
-
-*   **PROSSIME AZIONI (FASE DI MIGRAZIONE):**
-
-    1.  **Creazione e Deploy Funzione di Migrazione:** Creare e deployare la Cloud Function `migraStaffUnaTantum`, responsabile di leggere `utenti_master` e impostare i claims `{ livello: 'staff', admin: false }` su ogni utente.
-
-    2.  **Collegamento al Frontend:** Aggiungere un pulsante temporaneo nell'interfaccia (nel componente `MigrationRunner.tsx`) per permettere all'amministratore di eseguire la migrazione in modo controllato.
-
-    3.  **Esecuzione e Verifica:** L'amministratore esegue la migrazione dal frontend.
+3.  **Architettura Client-Heavy (PERF-1, PERF-2):** Enormi quantità di logica di business (join, aggregazioni, calcoli) venivano eseguite direttamente nel browser, causando un degrado significativo delle performance, specialmente in componenti come la Dashboard e la Reportistica.
 
 ---
 
-## Piano Post-Migrazione (DA ESEGUIRE DOPO IL SUCCESSO DELLA FASE PRECEDENTE)
+## Piano di Refactoring Attivo
 
-*   **OBIETTIVO:** Completare il refactoring della gestione amministratori e ripulire l'ambiente.
+### **FASE K: Bonifica e Amministrazione Modulo Reportistica**
 
-*   **PASSAGGI OBBLIGATORI:**
+*   **STATO:** **IN CORSO.**
+*   **OBIETTIVO:** Risolvere la corruzione dei dati nel backend (rapportini duplicati, relazioni interrotte), stabilizzare l'interfaccia utente per renderla "a prova di crash", e implementare le corrette funzionalità amministrative in linea con i ruoli definiti.
 
-    1.  **Verifica del Successo:** 
-        *   **Azione:** Controllare i log della funzione `migraStaffUnaTantum` per confermare l'assenza di errori.
-        *   **Azione:** Ricaricare la scheda "Amministratori" e verificare che la tabella si popoli correttamente con il personale "staff" migrato, grazie alla funzione `admin_getAllUsers` che ora li riconoscerà.
+#### **Modello Operativo e di Permessi (Fonte di Verità)**
 
-    2.  **Completamento Funzionalità Client:**
-        *   **Azione:** Modificare la Cloud Function `amministrazione_gestisciUtenti` per aggiungere l'azione `resetPassword` (che accetta `uid` e `newPassword`).
-        *   **Azione:** Modificare il componente `GestioneAmministratori.tsx` e i suoi dialogs per includere l'interfaccia per il reset password manuale e per passare i dati corretti (`makeAdmin`, `password`) durante la creazione di nuovi utenti.
+Sulla base delle ultime direttive, sono stati definiti i seguenti ruoli e permessi, che devono guidare lo sviluppo:
 
-    3.  **Pulizia dell'Ambiente:**
-        *   **Azione:** Rimuovere il componente `MigrationRunner.tsx` dall'interfaccia per evitare riesecuzioni accidentali.
-        *   **Azione:** Disabilitare la funzione `migraStaffUnaTantum` nel file `functions/src/index.ts` e fare il deploy, per renderla inaccessibile.
-        *   **Azione:** Chiedere autorizzazione all'amministratore per eliminare definitivamente la collezione `utenti_master` da Firestore.
+1.  **App Tecnici (sul campo):**
+    *   **CREAZIONE:** Può creare nuovi rapportini completi di firma cliente.
+    *   **MODIFICA:** Può modificare **solo e soltanto i rapportini da lui creati**.
+    *   **ELIMINAZIONE:** **MAI**. La funzione di eliminazione è assente e proibita.
+    *   **VISIBILITÀ:** Vede i propri rapportini e quelli in cui è stato inserito nell'elenco `presenze`.
 
-    4.  **Ripresa del Piano di Ricostruzione:**
-        *   **Azione:** Marcare la "Correzione Definitiva della Gestione Amministratori" come **COMPLETATA** in questo blueprint.
-        *   **Azione:** Riprendere la **Fase 2** del piano originale, iniziando l'analisi del componente `GestioneDocumenti`.
+2.  **App Master (Ufficio / Amministrativa - questa):**
+    *   **CREAZIONE:** Può creare rapportini per scopi amministrativi, ma **senza gestire la firma del cliente**.
+    *   **MODIFICA:** **Sì, può modificare QUALSIASI rapportino** per correggere errori o dati mancanti.
+    *   **ELIMINAZIONE:** **Sì, può eliminare QUALSIASI rapportino**, funzione fondamentale per la bonifica dei dati duplicati.
+    *   **VISIBILITÀ:** Vede TUTTI i rapportini di tutti i tecnici, firme incluse.
+
+#### **Piano di Bonifica Sequenziale**
+
+*   **K.1 - Stabilizzazione Interfaccia:**
+    *   **AZIONE:** Riscrivere il componente `RapportiniTable.tsx` per renderlo robusto e "difensivo". Deve interpretare correttamente la struttura dati definita in `report_tecnici.md` e non andare in crash in presenza di dati corrotti (es. `naveId` o `tecnicoId` non più validi). I dati corrotti verranno evidenziati con un indicatore visivo.
+    *   **RISULTATO:** Un'interfaccia stabile che permette di visualizzare tutti i rapportini, inclusi quelli "rotti", senza crashare. Questa stabilità è il prerequisito per la fase successiva.
+
+*   **K.2 - Bonifica Dati Backend:**
+    *   **AZIONE:** Sfruttando l'interfaccia stabilizzata, analizzare i dati su Firestore per identificare i gruppi di rapportini duplicati e quelli con relazioni interrotte. Eseguire, con conferma utente, operazioni chirurgiche di eliminazione tramite script o Cloud Functions amministrative.
+    *   **RISULTATO:** La collezione `rapportini` su Firestore sarà pulita, coerente e priva di duplicati.
+
+*   **K.3 - Ripristino Funzionalità Amministrative:**
+    *   **AZIONE:** Attivare e implementare correttamente i pulsanti "Modifica" ed "Elimina" nell'interfaccia dell'App Master. Queste azioni dovranno invocare Cloud Functions sicure che verificano i permessi di amministratore dell'utente prima di eseguire l'operazione sul database.
+    *   **RISULTATO:** L'App Master disporrà di strumenti sicuri e affidabili per la gestione e la manutenzione dei dati di reportistica.
 
 ---
 
-## Stato Attuale del Refactoring (Archivio)
+## Debito Tecnico Identificato e Piano Strategico Futuro
 
-*   **Refactoring Componente `GestioneAmministratori` (Fase 1 - Incompleta/Fallita):** La Fase 1 si era conclusa con una soluzione errata che causava la contaminazione dei dati. Le azioni successive in questo blueprint servono a correggere quel fallimento.
-*   **Deploy Cloud Function `admin_getAllUsers`:** La funzione era stata deployata, ma con una logica errata. Verrà sovrascritta.
-*   **Bug di Autenticazione (Misure di Contenimento):** La correzione in `authHooks.ts` rimane valida come misura di sicurezza aggiuntiva.
+### Criticità 1: Disomogeneità delle Regioni Cloud Functions
+
+*   **STATO:** **PIANIFICATO.**
+*   **OBIETTIVO STRATEGICO:** Unificare TUTTE le Cloud Functions in un'unica regione: `europe-west1`.
+*   **PIANO A LUNGO TERMINE:** Migrazione controllata, aggiornamento coordinato dei client e decommissioning.
+
+---
+
+## Fasi di Refactoring Archiviate (COMPLETATE)
+
+### **FASE J: Risoluzione Conflitto di Regioni (Correzione Tattica)**
+*   **STATO:** COMPLETATA.
+*   **AZIONE:** Modificato `src/services/SyncService.ts` per puntare esplicitamente a `us-central1`, risolvendo l'errore `FirebaseError: internal` e sbloccando la sincronizzazione delle anagrafiche.
+
+### **Fase H: Correzione Errori di Build Residui**
+*   **STATO:** COMPLETATA.
+
+### **Fase G: Refactoring Finale della Pagina Presenze**
+*   **STATO:** COMPLETATA.
+
+### **Fase F: Eliminazione del Debito Tecnico Architetturale**
+*   **STATO:** COMPLETATA.
+
+### **Fase E: Risoluzione Errore di Avvio "Profilo non trovato"**
+*   **STATO:** COMPLETATA.
+
+### **Fase D: Sincronizzazione Anagrafiche**
+*   **STATO:** COMPLETATA.
+
+### **Fase B: Ristrutturazione della Logica di Sincronizzazione (Rapportini)**
+*   **STATO:** SUPERATA E COMPLETATA dalla strategia del `DataHydrator` globale.
+
+### **Fase A: Sicurezza e Stabilizzazione Immediata (Rapportini)**
+*   **STATO:** COMPLETATA.
+
+### **Fase 1 (pre-refactoring): Ristrutturazione del Sistema di Autenticazione e Permessi**
+*   **STATO:** COMPLETATA.

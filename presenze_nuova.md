@@ -46,4 +46,78 @@ Ogni azione eseguita nella pagina di check-in crea un nuovo documento nella coll
     *   L'eventuale nome del luogo (ottenuto usando `naveId` o `luogoId` per cercare nelle anagrafiche `navi` e `luoghi`).
     *   **Entrambi gli orari**: `timestampImpostato` e `timestampReale`. La differenza tra i due è un'informazione cruciale e deve essere immediatamente visibile.
 
-Non ci sono altri dati o campi inviati. Questa è la totalità delle informazioni trasmesse.
+---
+
+## Guida all'Integrazione per l'App Tecnici (Client-Side) - SOSTITUISCE LA SCRITTURA DIRETTA
+
+L'app dei tecnici **NON DEVE PIÙ SCRIVERE DIRETTAMENTE** nella collezione `checkin_giornalieri`. Per garantire la sicurezza e l'integrità dei dati, ogni evento di check-in/out deve essere creato invocando la **Cloud Function `createCheckin`**.
+
+### Come Chiamare la Funzione
+
+1.  **Ottenere un'istanza di Firebase Functions.**
+2.  **Ottenere un riferimento alla funzione `createCheckin`.**
+3.  **Invocare la funzione** passando un oggetto contenente i dati dell'evento.
+
+**IMPORTANTE:** Il campo `timestampReale` **non deve essere inviato**. Viene generato e aggiunto in modo sicuro dal server. L'app deve inviare solo il `timestampImpostato` (l'orario scelto dal tecnico).
+
+### Esempio di Codice (TypeScript)
+
+Questo esempio mostra come implementare la logica di salvataggio all'interno dell'app Tecnici.
+
+```typescript
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { getAuth } from "firebase/auth";
+
+// Dati dell'evento da inviare (esempio)
+const eventoDaSalvare = {
+  tecnicoId: "kZCSQlaFpJO4nr4sHcVy1zuLkQJ3", // DEVE corrispondere all'UID dell'utente loggato
+  tecnicoName: "Mario Rossi",
+  tipo: "check_in_luogo",
+  timestampImpostato: new Date().toISOString(), // L'orario scelto dal tecnico, in formato ISO string
+  naveId: "ID_DELLA_NAVE_SELEZIONATA"
+  // luogoId verrebbe usato in alternativa a naveId
+};
+
+// Funzione per eseguire il salvataggio
+async function salvaCheckin() {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  if (!user) {
+    console.error("Nessun utente autenticato.");
+    return;
+  }
+  
+  // Verifica di sicurezza lato client (la funzione lo verificherà di nuovo lato server)
+  if (user.uid !== eventoDaSalvare.tecnicoId) {
+      console.error("Errore: Stai cercando di salvare dati per un altro utente!");
+      return;
+  }
+
+  try {
+    const functions = getFunctions(); // Ottieni l'istanza delle functions
+    const createCheckin = httpsCallable(functions, 'createCheckin'); // Ottieni il riferimento alla funzione
+
+    console.log("Invio dati alla Cloud Function:", eventoDaSalvare);
+    
+    const result = await createCheckin(eventoDaSalvare);
+    
+    console.log("Check-in creato con successo! ID Documento:", result.data.id);
+    // Puoi usare l'ID restituito se necessario
+
+  } catch (error) {
+    console.error("Errore durante la chiamata alla Cloud Function 'createCheckin':", error);
+    // Gestisci l'errore, mostrandolo all'utente se appropriato
+  }
+}
+
+// Esegui la funzione
+salvaCheckin();
+```
+
+### Riepilogo dei Cambiamenti per l'App Tecnici:
+
+1.  **Rimuovere** qualsiasi codice che usa `addDoc` o `setDoc` sulla collezione `checkin_giornalieri`.
+2.  **Implementare** la chiamata alla Cloud Function `createCheckin` come mostrato nell'esempio.
+3.  **Assicurarsi** che il `tecnicoId` inviato sia sempre l'UID dell'utente attualmente loggato.
+4.  **Inviare** `timestampImpostato` ma **NON** `timestampReale`.

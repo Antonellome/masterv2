@@ -2,7 +2,6 @@
 import { useEffect } from 'react';
 import { useGlobalStore } from '@/stores/globalStore';
 import { authService } from './authService';
-import { firestoreService } from '@/services/firestoreService';
 
 /**
  * Hook per inizializzare e sincronizzare lo stato di autenticazione.
@@ -30,8 +29,8 @@ export const useAuthInitializer = () => {
                     if (isAdmin) {
                         // 2.1. L'utente è un admin: procedi
                         console.log("[AuthInitializer] ACCESSO CONSENTITO. L'utente è un admin.");
-                        const profile = await firestoreService.fetchUserProfile(user.uid);
-                        setUserAndProfile(user, profile);
+                        // RIMOSSA CHIAMATA LEGACY A firestoreService.fetchUserProfile
+                        setUserAndProfile(user, null);
                     } else {
                         // 2.2. L'utente NON è un admin: espulsione immediata
                         console.warn("[AuthInitializer] ACCESSO NEGATO. L'utente non è un admin. Logout forzato.");

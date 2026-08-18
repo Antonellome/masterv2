@@ -159,6 +159,21 @@ export interface Rapportino extends BaseEntity {
   data?: any; 
 }
 
+/**
+ * Rappresenta un singolo evento di check-in/out generato dall'app Tecnici.
+ * La struttura è definita e governata dal file `presenze_nuova.md`.
+ */
+export interface Checkin extends BaseEntity {
+  tecnicoId: string;
+  tecnicoName: string;
+  tipo: "inizio_giornata" | "fine_giornata" | "check_in_luogo" | "check_out_luogo";
+  timestampImpostato: Timestamp | Date;
+  timestampReale: Timestamp | Date;
+  naveId?: string;
+  luogoId?: string;
+}
+
+
 // --- IMPOSTAZIONI E PROFILI ---
 
 export interface Impostazioni extends BaseEntity {
@@ -271,7 +286,7 @@ export interface Scadenza {
   campoOriginale: string; 
 }
 
-export type EventoGiornaliero = Rapportino;
+export type EventoGiornaliero = Rapportino | Checkin;
 
 export interface AnagraficaConfig {
     [key: string]: {

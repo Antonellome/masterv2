@@ -29,7 +29,13 @@ const TecniciPage = () => {
           />
         </Tabs>
       </Box>
-      <Box sx={{ flex: 1, p: 3, minHeight: 0, height: '100%' }}>
+      {/* 
+        Container per il contenuto dei tab. 
+        Rimuovendo `height: '100%'` si risolve il problema di layout della DataGrid.
+        `flex: 1` è sufficiente per far sì che il box occupi tutto lo spazio verticale rimanente.
+        `minHeight: 0` è una best practice per prevenire problemi di overflow in layout flex.
+      */}
+      <Box sx={{ flex: 1, p: 3, minHeight: 0 }}>
         {value === 0 && <GestioneTecnici />}
         {value === 1 && <GestioneAccessi />}
       </Box>

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.riparaScuderi = exports.admin_getAllUsers = exports.forceAdmin = exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = exports.migraStaffUnaTantum = void 0;
+exports.riparaScuderi = exports.admin_getAllUsers = exports.forceAdmin = exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.createCheckin = exports.eliminaAnagrafica = exports.aggiornaAnagrafica = exports.syncAllAnagrafiche = exports.creaAnagrafica = exports.getAllRapportiniForSync = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = exports.migraStaffUnaTantum = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 // ===================================================================
@@ -47,11 +47,21 @@ Object.defineProperty(exports, "createDocument", { enumerable: true, get: functi
 Object.defineProperty(exports, "updateDocument", { enumerable: true, get: function () { return genericCrud_1.updateDocument; } });
 Object.defineProperty(exports, "deleteDocument", { enumerable: true, get: function () { return genericCrud_1.deleteDocument; } });
 // --- FUNZIONI DI BUSINESS SPECIFICHE ---
-// Rapportini - API HTTP Completa per App Tecnici e App Master
+// Rapportini - API HTTP Completa
 var rapportini_1 = require("./rapportini");
 Object.defineProperty(exports, "createRapportino", { enumerable: true, get: function () { return rapportini_1.createRapportino; } });
 Object.defineProperty(exports, "updateRapportino", { enumerable: true, get: function () { return rapportini_1.updateRapportino; } });
 Object.defineProperty(exports, "deleteRapportino", { enumerable: true, get: function () { return rapportini_1.deleteRapportino; } });
+Object.defineProperty(exports, "getAllRapportiniForSync", { enumerable: true, get: function () { return rapportini_1.getAllRapportiniForSync; } });
+// Anagrafiche - API HTTP Completa (NUOVA AGGIUNTA FASE D)
+var anagrafiche_1 = require("./anagrafiche");
+Object.defineProperty(exports, "creaAnagrafica", { enumerable: true, get: function () { return anagrafiche_1.creaAnagrafica; } });
+Object.defineProperty(exports, "syncAllAnagrafiche", { enumerable: true, get: function () { return anagrafiche_1.syncAllAnagrafiche; } });
+Object.defineProperty(exports, "aggiornaAnagrafica", { enumerable: true, get: function () { return anagrafiche_1.aggiornaAnagrafica; } });
+Object.defineProperty(exports, "eliminaAnagrafica", { enumerable: true, get: function () { return anagrafiche_1.eliminaAnagrafica; } });
+// Check-in - API Sicura per le Presenze (NUOVA AGGIUNTA FASE F2)
+var checkin_1 = require("./checkin");
+Object.defineProperty(exports, "createCheckin", { enumerable: true, get: function () { return checkin_1.createCheckin; } });
 // Gestione Tecnici e Utenti
 var createTecnico_1 = require("./createTecnico");
 Object.defineProperty(exports, "createTecnico", { enumerable: true, get: function () { return createTecnico_1.createTecnico; } });

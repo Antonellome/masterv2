@@ -28,6 +28,7 @@ interface AppState {
   luoghiMap: Map<string, string>;
   tipiGiornataMap: Map<string, TipoGiornata>;
   areAnagraficheLoading: boolean;
+  isSyncInProgress: boolean; // <-- STATO GLOBALE DI SICUREZZA
   lastUpdated: Date | null;
   conflicts: string[];
   notification: { open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' };
@@ -55,6 +56,7 @@ interface AppActions {
   setCheckins: (checkins: Checkin[]) => void;
   setDocumenti: (documenti: Documento[]) => void;
   setAnagraficheLoading: (loading: boolean) => void;
+  setIsSyncInProgress: (isSyncing: boolean) => void; // <-- AZIONE DI SICUREZZA
   setLastUpdated: (date?: Date) => void;
   setConflicts: (conflicts: string[]) => void;
   showNotification: (message: string, severity: AppState['notification']['severity']) => void;
@@ -88,6 +90,7 @@ const initialState: AppState = {
   luoghiMap: new Map(),
   tipiGiornataMap: new Map(),
   areAnagraficheLoading: true,
+  isSyncInProgress: false, // <-- VALORE INIZIALE CORRETTO
   lastUpdated: null,
   conflicts: [],
   notification: { open: false, message: '', severity: 'info' },
@@ -135,7 +138,7 @@ export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
       navi: data.navi,
       categorie: data.categorie,
       tecniciMap: createMap(data.tecnici),
-      clientiMap: createMap(data.clienti), // <-- CORRETTO IL REFUSO DA COGLIONE
+      clientiMap: createMap(data.clienti),
       naviMap: createMap(data.navi),
       luoghiMap: createMap(data.luoghi),
       tipiGiornataMap: new Map(data.tipiGiornata.map(t => [t.id, t])),
@@ -146,6 +149,7 @@ export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
   setCheckins: (checkins) => set({ checkins }),
   setDocumenti: (documenti) => set({ documenti }),
   setAnagraficheLoading: (loading) => set({ areAnagraficheLoading: loading }),
+  setIsSyncInProgress: (isSyncing) => set({ isSyncInProgress: isSyncing }), // <-- IMPLEMENTAZIONE CORRETTA
   setLastUpdated: (date = new Date()) => set({ lastUpdated: date }),
   setConflicts: (conflicts) => set({ conflicts: [...get().conflicts, ...conflicts] }),
   showNotification: (message, severity) => set({ notification: { open: true, message, severity } }),

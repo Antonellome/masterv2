@@ -17,6 +17,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Disabilita il service worker in modalità sviluppo per evitare errori di "fetch"
+      // durante il controllo automatico degli aggiornamenti. Questo non influenzerà
+      // il comportamento dell'app in produzione (quando si esegue il build).
+      devOptions: {
+        enabled: false,
+      },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'logo png trasp.png'],
       manifest: {
         name: 'R.I.S.O. Master Office',

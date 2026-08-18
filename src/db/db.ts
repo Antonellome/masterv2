@@ -14,7 +14,8 @@ import type {
     Notifica, 
     UserProfile,
     Cantiere,
-    Documento
+    Documento,
+    Checkin // <-- Importo la definizione corretta
 } from '../models/definitions';
 
 export interface SyncStatus {
@@ -24,7 +25,8 @@ export interface SyncStatus {
 
 // Nomi delle tabelle allineati con Firestore
 export class MySubClassedDexie extends Dexie {
-  eventi_giornalieri!: Table<EventoGiornaliero>; // <-- AGGIUNTA TABELLA NUOVA
+  eventi_giornalieri!: Table<EventoGiornaliero>;
+  checkin_giornalieri!: Table<Checkin>; // <-- Aggiungo la tabella mancante
   notifiche!: Table<Notifica>;
   user_profile!: Table<UserProfile>;
   tecnici!: Table<Tecnico>;
@@ -42,6 +44,12 @@ export class MySubClassedDexie extends Dexie {
 
   constructor() {
     super('gestionaleLavoro');
+
+    // VERSIONE 9: Aggiunta tabella checkin_giornalieri per fixare crash pagina presenze
+    this.version(9).stores({
+        checkin_giornalieri: 'id, tecnicoId, timestampReale, tipo'
+        // Dexie copia automaticamente le definizioni dalla versione precedente
+    })
 
     // VERSIONE 8: Aggiunta la nuova tabella eventi_giornalieri
     this.version(8).stores({
@@ -64,8 +72,6 @@ export class MySubClassedDexie extends Dexie {
     });
 
     this.version(7).stores({
-      // La tabella 'eventi' non è più necessaria, verrà rimossa nella v8
-      // eventi: 'id, dataInizio, tecnicoId, isDirty, tipo', 
       notifiche: 'id, read, createdAt',
       user_profile: 'uid',
       tecnici: 'id, nome, cognome, attivo, isDirty',
@@ -81,11 +87,9 @@ export class MySubClassedDexie extends Dexie {
       rapportini: 'id, data, tecnicoId, isDirty',
       documenti: 'id, nome, tecnicoId, isDirty'
     }).upgrade(tx => {
-      // Rimuoviamo la vecchia tabella 'eventi' se esiste
       return tx.table('eventi').clear();
     });
     
-    // Le versioni precedenti rimangono per la cronologia delle migrazioni
     this.version(6).stores({});
     this.version(5).stores({});
     this.version(4).stores({});
@@ -120,7 +124,8 @@ export const loadAllData = async () => {
       navi,
       categorie,
       rapportini,
-      eventiGiornalieri, // <-- CARICA ANCHE I NUOVI DATI
+      eventiGiornalieri, 
+      checkinGiornalieri, // <-- CARICA ANCHE I NUOVI DATI
       documenti,
       syncStatus
     ] = await db.transaction('r', db.tables, async () => {
@@ -136,11 +141,12 @@ export const loadAllData = async () => {
         db.categorie.toArray(),
       ];
       const rapportiniPromise = db.rapportini.toArray();
-      const eventiGiornalieriPromise = db.eventi_giornalieri.toArray(); // <-- CARICA DALLA NUOVA TABELLA
+      const eventiGiornalieriPromise = db.eventi_giornalieri.toArray();
+      const checkinGiornalieriPromise = db.checkin_giornalieri.toArray(); // <-- CARICA DALLA NUOVA TABELLA
       const documentiPromise = db.documenti.toArray();
       const syncStatusPromise = db.sync_status.get('lastFullSync');
 
-      const results = await Promise.all([...anagrafichePromises, rapportiniPromise, eventiGiornalieriPromise, documentiPromise, syncStatusPromise]);
+      const results = await Promise.all([...anagrafichePromises, rapportiniPromise, eventiGiornalieriPromise, checkinGiornalieriPromise, documentiPromise, syncStatusPromise]);
       return results;
     });
 
@@ -161,7 +167,8 @@ export const loadAllData = async () => {
     return {
       anagrafiche,
       rapportini,
-      eventiGiornalieri, // <-- RESTITUISCI I NUOVI DATI
+      eventiGiornalieri, 
+      checkinGiornalieri, // <-- RESTITUISCI I NUOVI DATI
       documenti,
       lastUpdated,
     };
@@ -170,7 +177,8 @@ export const loadAllData = async () => {
     return {
       anagrafiche: { tecnici: [], clienti: [], veicoli: [], cantieri: [], ditte: [], tipiGiornata: [], luoghi: [], navi: [], categorie: [] },
       rapportini: [],
-      eventiGiornalieri: [], // <-- RESTITUISCI ARRAY VUOTO IN CASO DI ERRORE
+      eventiGiornalieri: [], 
+      checkinGiornalieri: [], // <-- RESTITUISCI ARRAY VUOTO IN CASO DI ERRORE
       documenti: [],
       lastUpdated: null,
     };

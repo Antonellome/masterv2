@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db } from '@/config/firebase';
 import dayjs from 'dayjs';
 import type { Documento } from '@/models/definitions';
 import DocumentoForm from '@/components/Documenti/DocumentoForm';
