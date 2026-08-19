@@ -34,66 +34,74 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteDocument = exports.updateDocument = exports.createDocument = void 0;
-const functions = __importStar(require("firebase-functions"));
+const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
-// Funzione di utility per verificare i permessi di amministratore
-const checkAdmin = async (uid) => {
-    var _a;
-    const user = await admin.auth().getUser(uid);
-    return ((_a = user.customClaims) === null || _a === void 0 ? void 0 : _a.admin) === true;
-};
+const firebase_functions_1 = require("firebase-functions");
+const REGION = "europe-west1";
 // Funzione generica per creare un documento
-exports.createDocument = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+exports.createDocument = (0, https_1.onCall)({ region: REGION }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "La funzione deve essere chiamata da un utente autenticato.");
     }
-    const isAdmin = await checkAdmin(context.auth.uid);
-    if (!isAdmin) {
-        throw new functions.https.HttpsError('permission-denied', 'Must be an admin to create a document.');
+    if (request.auth.token.role !== "admin") {
+        throw new https_1.HttpsError("permission-denied", "Solo un amministratore può creare un documento.");
     }
-    const { collection, docData } = data;
+    const { collection, docData } = request.data;
+    if (!collection || !docData) {
+        throw new https_1.HttpsError("invalid-argument", "Collezione e dati del documento sono obbligatori.");
+    }
     try {
         const docRef = await admin.firestore().collection(collection).add(docData);
+        firebase_functions_1.logger.info(`Admin ${request.auth.uid} ha creato un documento in ${collection} con ID: ${docRef.id}`);
         return { id: docRef.id };
     }
     catch (error) {
-        throw new functions.https.HttpsError('internal', 'Could not create document.', error);
+        firebase_functions_1.logger.error(`Errore creazione documento in ${collection}:`, error);
+        throw new https_1.HttpsError("internal", "Impossibile creare il documento.", error);
     }
 });
 // Funzione generica per aggiornare un documento
-exports.updateDocument = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'The function must be in called while authenticated.');
+exports.updateDocument = (0, https_1.onCall)({ region: REGION }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "La funzione deve essere chiamata da un utente autenticato.");
     }
-    const isAdmin = await checkAdmin(context.auth.uid);
-    if (!isAdmin) {
-        throw new functions.https.HttpsError('permission-denied', 'Must be an admin to update a document.');
+    if (request.auth.token.role !== "admin") {
+        throw new https_1.HttpsError("permission-denied", "Solo un amministratore può aggiornare un documento.");
     }
-    const { collection, docId, docData } = data;
+    const { collection, docId, docData } = request.data;
+    if (!collection || !docId || !docData) {
+        throw new https_1.HttpsError("invalid-argument", "Collezione, ID e dati del documento sono obbligatori.");
+    }
     try {
         await admin.firestore().collection(collection).doc(docId).update(docData);
+        firebase_functions_1.logger.info(`Admin ${request.auth.uid} ha aggiornato il documento ${docId} in ${collection}`);
         return { success: true };
     }
     catch (error) {
-        throw new functions.https.HttpsError('internal', 'Could not update document.', error);
+        firebase_functions_1.logger.error(`Errore aggiornamento documento ${docId} in ${collection}:`, error);
+        throw new https_1.HttpsError("internal", "Impossibile aggiornare il documento.", error);
     }
 });
 // Funzione generica per eliminare un documento
-exports.deleteDocument = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+exports.deleteDocument = (0, https_1.onCall)({ region: REGION }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "La funzione deve essere chiamata da un utente autenticato.");
     }
-    const isAdmin = await checkAdmin(context.auth.uid);
-    if (!isAdmin) {
-        throw new functions.https.HttpsError('permission-denied', 'Must be an admin to delete a document.');
+    if (request.auth.token.role !== "admin") {
+        throw new https_1.HttpsError("permission-denied", "Solo un amministratore può eliminare un documento.");
     }
-    const { collection, docId } = data;
+    const { collection, docId } = request.data;
+    if (!collection || !docId) {
+        throw new https_1.HttpsError("invalid-argument", "Collezione e ID del documento sono obbligatori.");
+    }
     try {
         await admin.firestore().collection(collection).doc(docId).delete();
+        firebase_functions_1.logger.info(`Admin ${request.auth.uid} ha eliminato il documento ${docId} in ${collection}`);
         return { success: true };
     }
     catch (error) {
-        throw new functions.https.HttpsError('internal', 'Could not delete document.', error);
+        firebase_functions_1.logger.error(`Errore eliminazione documento ${docId} in ${collection}:`, error);
+        throw new https_1.HttpsError("internal", "Impossibile eliminare il documento.", error);
     }
 });
 //# sourceMappingURL=genericCrud.js.map

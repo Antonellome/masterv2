@@ -1,136 +1,133 @@
-import { db, bulkPutGeneric } from '../db/db';
-import { functions } from '../config/firebase';
+
 import { httpsCallable } from 'firebase/functions';
-import type { Rapportino } from '../models/definitions';
+import { functions } from '@/config/firebase';
+import { useGlobalStore } from '@/stores/globalStore';
+import { Rapportino, Anagrafiche } from '@/models/definitions';
 
-const getLastSyncTimestamp = async (tableName: string): Promise<number> => {
-    const syncStatus = await db.sync_status.get(tableName);
-    return syncStatus ? syncStatus.value : 0;
+const toDate = (timestamp: any): Date => {
+  if (!timestamp) return new Date('invalid');
+  if (timestamp && typeof timestamp === 'object' && typeof timestamp._seconds === 'number') {
+    return new Date(timestamp._seconds * 1000);
+  }
+  const d = new Date(timestamp);
+  if (!isNaN(d.getTime())) {
+    return d;
+  }
+  return new Date('invalid');
 };
 
-const setLastSyncTimestamp = async (tableName: string, timestamp: number) => {
-    await db.sync_status.put({ id: tableName, value: timestamp });
-};
-
-const pushDirtyRecords = async (tableName: 'rapportini') => {
-    if (tableName !== 'rapportini') {
-        console.error("pushDirtyRecords supporta solo la tabella 'rapportini' per ora.");
-        return;
-    }
-
-    const dirtyRapportini = await db.rapportini.where('isDirty').equals(1).toArray();
-
-    if (dirtyRapportini.length === 0) {
-        console.log(`[Sync] Nessun rapportino locale da caricare.`);
-        return;
-    }
-
-    console.log(`[Sync] Trovati ${dirtyRapportini.length} rapportini locali da caricare.`);
-
-    // CORREZIONE: Specifichiamo la regione anche per queste funzioni per coerenza.
-    const createRapportino = httpsCallable(functions, 'createRapportino', { region: 'us-central1' });
-    const updateRapportino = httpsCallable(functions, 'updateRapportino', { region: 'us-central1' });
-
-    for (const rapportino of dirtyRapportini) {
-        const { isDirty, ...dataToSync } = rapportino;
-
-        try {
-            let result;
-            if (rapportino.id && rapportino.id.length > 20) { 
-                console.log(`[Sync] Aggiornamento del rapportino con ID: ${rapportino.id}`);
-                result = await updateRapportino({ id: rapportino.id, data: dataToSync });
-            } else {
-                console.log(`[Sync] Creazione di un nuovo rapportino...`);
-                result = await createRapportino({ data: dataToSync });
-                const newId = (result.data as any).id;
-                if(newId) {
-                    await db.rapportini.delete(rapportino.id);
-                    rapportino.id = newId;
-                }
-            }
-            
-            await db.rapportini.put({ ...rapportino, isDirty: 0 });
-            console.log(`[Sync] Rapportino ${rapportino.id} sincronizzato con successo.`);
-
-        } catch (error) {
-            console.error(`[Sync] Errore durante la sincronizzazione del rapportino ${rapportino.id}:`, error);
-        }
-    }
-};
-
-export const syncRapportini = async () => {
-    console.log("--- Inizio Sincronizzazione Rapportini ---");
-
-    await pushDirtyRecords('rapportini');
-
-    console.log("[Sync] Avvio del recupero degli aggiornamenti dal server...");
-    const lastSync = await getLastSyncTimestamp('rapportini');
-    const now = Date.now();
-
+const syncAnagrafiche = async () => {
+    console.log("SyncService: Inizio sincronizzazione ANAGRAFICHE.");
     try {
-        // CORREZIONE: Anche questa funzione è in us-central1
-        const getAllRapportiniForSync = httpsCallable(functions, 'getAllRapportiniForSync', { region: 'us-central1' });
-        const response = await getAllRapportiniForSync();
-        
-        const serverRapportini = (response.data as any[]).map(r => ({ ...r, data: new Date(r.data) })) as Rapportino[];
-        const serverIds = new Set(serverRapportini.map(r => r.id));
+        const getAnagrafiche = httpsCallable(functions, 'syncAllAnagrafiche');
+        const response = await getAnagrafiche();
+        const data = response.data as Anagrafiche;
 
-        const localRapportini = await db.rapportini.toArray();
-        const localIds = new Set(localRapportini.map(r => r.id));
-
-        const idsToDelete = [...localIds].filter(id => !serverIds.has(id));
-        if (idsToDelete.length > 0) {
-            console.log(`[Sync] ${idsToDelete.length} rapportini da eliminare localmente.`);
-            await db.rapportini.bulkDelete(idsToDelete);
-        }
-
-        if(serverRapportini.length > 0) {
-            console.log(`[Sync] Aggiornamento/Inserimento di ${serverRapportini.length} rapportini dal server.`);
-            await bulkPutGeneric('rapportini', serverRapportini);
-        }
-        
-        await setLastSyncTimestamp('rapportini', now);
-        console.log("[Sync] Sincronizzazione pull completata con successo.");
-
-    } catch (error) {
-        console.error("[Sync] Errore critico durante la fase di pull:", error);
-    }
-
-    console.log("--- Fine Sincronizzazione Rapportini ---");
-};
-
-export const syncAnagrafiche = async () => {
-    console.log("--- Inizio Sincronizzazione Anagrafiche ---");
-
-    try {
-        // LA CORREZIONE CHIRURGICA: Specifichiamo esplicitamente la regione corretta per la funzione.
-        const syncAllAnagrafiche = httpsCallable(functions, 'syncAllAnagrafiche', { region: 'us-central1' });
-        console.log("[Sync Anagrafiche] Chiamata alla Cloud Function 'syncAllAnagrafiche' in us-central1...");
-
-        const response = await syncAllAnagrafiche();
-        const collections = response.data as { [key: string]: any[] };
-
-        if (!collections || Object.keys(collections).length === 0) {
-            console.warn("[Sync Anagrafiche] La funzione non ha restituito collezioni da sincronizzare.");
+        if (!data || typeof data !== 'object') {
+            console.error("SyncService: ERRORE FATALE - La risposta delle anagrafiche non è un oggetto valido.", response.data);
+            useGlobalStore.getState().setAnagrafiche({ tecnici: [], navi: [], clienti: [], luoghi: [], tipiGiornata: [], veicoli: [] });
             return;
         }
 
-        console.log(`[Sync Anagrafiche] Ricevute ${Object.keys(collections).length} collezioni dal server.`);
+        const anagrafiche: Anagrafiche = {
+            tecnici: data.tecnici || [],
+            navi: data.navi || [],
+            clienti: data.clienti || [],
+            luoghi: data.luoghi || [],
+            tipiGiornata: data.tipiGiornata || [],
+            veicoli: data.veicoli || []
+        };
 
-        for (const collectionName in collections) {
-            const data = collections[collectionName];
-            if (data && data.length > 0) {
-                console.log(`[Sync Anagrafiche] Sincronizzazione di ${data.length} record per la collezione '${collectionName}'...`);
-                await bulkPutGeneric(collectionName as any, data);
-                 console.log(`[Sync Anagrafiche] Collezione '${collectionName}' sincronizzata con successo.`);
-            } else {
-                console.log(`[Sync Anagrafiche] Nessun record da sincronizzare per la collezione '${collectionName}'.`);
-            }
-        }
-
-        console.log("--- Fine Sincronizzazione Anagrafiche ---");
+        useGlobalStore.getState().setAnagrafiche(anagrafiche);
+        console.log(`SyncService: Anagrafiche sincronizzate. Trovati ${anagrafiche.tecnici.length} tecnici.`);
 
     } catch (error) {
-        console.error("[Sync Anagrafiche] Errore critico durante la sincronizzazione:", error);
+        console.error("SyncService: ERRORE CRITICO durante la sincronizzazione delle anagrafiche:", error);
+        useGlobalStore.getState().setAnagrafiche({ tecnici: [], navi: [], clienti: [], luoghi: [], tipiGiornata: [], veicoli: [] });
     }
+};
+
+const syncRapportini = async () => {
+    console.log("SyncService: Inizio sincronizzazione RAPPORTINI.");
+    try {
+        const getAllRapportini = httpsCallable(functions, 'getAllRapportiniForSync');
+        const response = await getAllRapportini();
+        
+        // =========================================================================
+        //  DEBUGGING ATTIVO: STAMPO LA RISPOSTA GREZZA DAL SERVER
+        // =========================================================================
+        console.log("******************************************************************");
+        console.log("*** RISPOSTA GREZZA RICEVUTA DA getAllRapportiniForSync ***");
+        console.log(JSON.stringify(response, null, 2));
+        console.log("******************************************************************");
+        // =========================================================================
+
+        const serverData = (response.data as any)?.data;
+
+        if (!Array.isArray(serverData)) {
+            console.error("SyncService: ERRORE FATALE - La risposta dei rapportini non contiene 'data' come array.", response.data);
+            useGlobalStore.getState().setRapportini([]);
+            return;
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        const rapportiniClient: Rapportino[] = serverData.map((serverReport: any, index: number) => {
+            try {
+                const rapportino: Rapportino = {
+                    id: serverReport.id,
+                    dataInizio: toDate(serverReport.data || serverReport.dataInizio),
+                    dataFine: serverReport.dataFine ? toDate(serverReport.dataFine) : undefined,
+                    tecnicoId: serverReport.tecnicoId,
+                    presenze: serverReport.presenze || [],
+                    tipoGiornataId: serverReport.tipoGiornataId,
+                    trasfertaId: serverReport.trasfertaId,
+                    includeTrasferta: serverReport.includeTrasferta || false,
+                    naveId: serverReport.naveId,
+                    luogoId: serverReport.luogoId,
+                    veicoloId: serverReport.veicoloId,
+                    lavoroEseguito: serverReport.lavoroEseguito || '',
+                    descrizioneBreve: serverReport.descrizioneBreve || '',
+                    materialiImpiegati: serverReport.materialiImpiegati || '',
+                    ordineLavoro: serverReport.ordineLavoro || '',
+                    dettaglioOre: serverReport.dettaglioOreTecnici || serverReport.dettaglioOre || [],
+                    firmaFirmatarioNome: serverReport.firmaFirmatarioNome || '',
+                    firmaFirmatarioSocieta: serverReport.firmaFirmatarioSocieta || '',
+                    firmaVettoriale: serverReport.firmaVettoriale,
+                    createdAt: serverReport.createdAt ? toDate(serverReport.createdAt) : undefined,
+                    createdBy: serverReport.createdBy,
+                    updatedAt: serverReport.updatedAt ? toDate(serverReport.updatedAt) : undefined,
+                    updatedBy: serverReport.updatedBy,
+                    isLocked: serverReport.isLocked || false,
+                    version: serverReport.version || 1,
+                };
+                successCount++;
+                return rapportino;
+            } catch(e) {
+                errorCount++;
+                console.error(`SyncService: Errore durante la trasformazione del rapportino #${index} (ID: ${serverReport.id}). Saltato.`, {error: e, data: serverReport });
+                return null;
+            }
+        }).filter((r): r is Rapportino => r !== null);
+
+        useGlobalStore.getState().setRapportini(rapportiniClient);
+        console.log(`SyncService: Sincronizzazione rapportini completata. Caricati: ${successCount}. Falliti: ${errorCount}.`);
+
+    } catch (error) {
+        console.error("SyncService: ERRORE CRITICO durante la sincronizzazione dei rapportini:", error);
+        useGlobalStore.getState().setRapportini([]);
+    }
+};
+
+export const avviaSincronizzazioneCompleta = async () => {
+    console.log("Sincronizzazione Completa avviata...");
+    useGlobalStore.getState().setIsSyncInProgress(true);
+    
+    await syncAnagrafiche();
+    await syncRapportini();
+    
+    useGlobalStore.getState().setIsSyncInProgress(false);
+    useGlobalStore.getState().setLastUpdated();
+    console.log("Sincronizzazione Completa terminata.");
 };

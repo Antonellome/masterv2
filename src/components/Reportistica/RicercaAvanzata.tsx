@@ -1,9 +1,8 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { db } from '@/db/db';
 import {
     Paper, Typography, Button, Box, TextField, Autocomplete, Grid,
-    Snackbar, Alert, Tooltip, CircularProgress
+    Snackbar, Alert, Tooltip, SvgIcon
 } from '@mui/material';
 import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem, GridSortComparator } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
@@ -18,36 +17,37 @@ import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
-// ** MODIFICA APPORTATA: Import per le Firebase Functions **
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { functions } from '@/config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { useGlobalStore } from '@/stores/globalStore';
 
-import { generateRapportinoPdf } from '@/utils/pdfGenerator';
-import PdfPreviewDialog from '@/components/common/PdfPreviewDialog';
-import { useAnagraficaData } from '@/contexts/DataContext';
-import { useLiveQuery } from 'dexie-react-hooks';
+const SignatureIcon = (props: any) => (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 10.72 9.94 9 12 9c2.65 0 4.8 2.15 4.8 4.8v.1l.33.94h1.54c1.48 0 2.73 1.13 2.87 2.6H19v-1.5h-1.14l-1-1H14v-3.26c0-.63-.51-1.14-1.14-1.14S11.72 13.11 11.72 13.74V17h-1.43v-3.26c0-.63-.51-1.14-1.14-1.14S8 13.11 8 13.74V17H6.28v-2.21L5.5 14H4v2h1v1h1v-1h1v-1h.28v-3.26c0-.63.51-1.14 1.14-1.14S11.72 13.11 11.72 13.74V17h1.14v-3.26c0-.63-.51-1.14 1.14-1.14S15.14 13.11 15.14 13.74V17h1.14v-1.14L17 15h1v2h1v1h-1v-1h-1v-1h-1v1h-1v1h-1v1h1v1h1v1h.86c1.73 0 3.14-1.41 3.14-3.14 0-1.62-1.25-2.95-2.86-3.04z"/>
+    </SvgIcon>
+);
 
 dayjs.locale('it');
 
-// --- INTERFACES & HELPERS (invariate) ---
 interface FlatRapportino {
     id: string;
+    data: Date;
     dataFormatted: string;
-    tecniciNomi: string[];
     mainTecnicoNome: string;
     altriTecniciNomi: string[];
-    tipoGiornataNome: string;
-    naveNome: string;
-    luogoNome: string;
-    clienteNome: string;
-    ordineLavoro?: string;
-    oreResponsabile: string;
-    oreTotali: string;
-    data: Date;
     tecnicoIds: string[];
-    naveId?: string | null;
-    clienteId?: string | null;
+    breveDescrizione: string; // Updated field name
+    tipoGiornataNome: string;
     tipoGiornataId?: string | null;
+    naveNome: string;
+    naveId?: string | null;
+    luogoNome: string;
     luogoId?: string | null;
+    clienteNome: string;
+    clienteId?: string | null;
+    ordineLavoro?: string;
+    oreTotali: string;
+    hasFirma: boolean;
 }
 
 interface FilterState {
@@ -61,208 +61,96 @@ interface FilterState {
     ordineLavoro: string;
 }
 
-const dateSortComparator: GridSortComparator<Date> = (v1, v2) => v1.getTime() - v2.getTime();
-
-const normalizeDate = (date: any): Date => {
-    if (!date) return new Date('invalid');
-    if (date && typeof date.seconds === 'number') { return new Date(date.seconds * 1000); }
-    if (typeof date.toDate === 'function') { return date.toDate(); }
-    const parsedDate = dayjs(date);
-    return parsedDate.isValid() ? parsedDate.toDate() : new Date('invalid');
+const calculateTotalHours = (details: any[] | undefined): number => {
+    if (!Array.isArray(details)) return 0;
+    return details.reduce((sum, d) => {
+        const hours = parseFloat(d?.ore);
+        return !isNaN(hours) ? sum + hours : sum;
+    }, 0);
 };
 
-const getCleanId = (id: any): string | undefined => {
-    if (typeof id === 'string' && id) return id;
-    if (id && typeof id === 'object' && id.id && typeof id.id === 'string') return id.id;
-    return undefined;
-};
+const dateSortComparator: GridSortComparator<Date> = (v1, v2) => new Date(v1).getTime() - new Date(v2).getTime();
 
 const RicercaAvanzata: React.FC = () => {
     const navigate = useNavigate();
     
-    const { 
-        tecnici: anagraficaTecnici, navi: anagraficaNavi, clienti: anagraficaClienti, 
-        luoghi: anagraficaLuoghi, tipiGiornata: anagraficaTipiGiornata,
-        tecniciMap, naviMap, clientiMap, luoghiMap, tipiGiornataMap, veicoliMap,
-        loading: anagraficheLoading 
-    } = useAnagraficaData();
+    const {
+        rapportini, removeRapportino,
+        tecnici, navi, clienti, luoghi, tipiGiornata,
+        tecniciMap, naviMap, clientiMap, luoghiMap, tipiGiornataMap,
+        areAnagraficheLoading
+    } = useGlobalStore(state => state);
 
-    const sortedTecnici = useMemo(() => {
-        if (!anagraficaTecnici) return [];
-        return [...anagraficaTecnici].sort((a, b) => {
-            const cognomeCompare = (a.cognome || '').localeCompare(b.cognome || '');
-            if (cognomeCompare !== 0) return cognomeCompare;
-            return (a.nome || '').localeCompare(b.nome || '');
-        });
-    }, [anagraficaTecnici]);
-
-    const sortedNavi = useMemo(() => {
-        if (!anagraficaNavi) return [];
-        return [...anagraficaNavi].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-    }, [anagraficaNavi]);
-
-    const sortedLuoghi = useMemo(() => {
-        if (!anagraficaLuoghi) return [];
-        return [...anagraficaLuoghi].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-    }, [anagraficaLuoghi]);
-
-    const sortedClienti = useMemo(() => {
-        if (!anagraficaClienti) return [];
-        return [...anagraficaClienti].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-    }, [anagraficaClienti]);
-
-    const sortedTipiGiornata = useMemo(() => {
-        if (!anagraficaTipiGiornata) return [];
-        return [...anagraficaTipiGiornata].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-    }, [anagraficaTipiGiornata]);
-
-    const rapportini = useLiveQuery(() => db.rapportini.toArray());
-    const rapportiniLoading = rapportini === undefined;
+    const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`)), [tecnici]);
+    const sortedNavi = useMemo(() => [...navi].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
+    const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => a.nome.localeCompare(b.nome)), [luoghi]);
+    const sortedClienti = useMemo(() => [...clienti].sort((a, b) => a.nome.localeCompare(b.nome)), [clienti]);
+    const sortedTipiGiornata = useMemo(() => [...tipiGiornata].sort((a, b) => a.nome.localeCompare(b.nome)), [tipiGiornata]);
 
     const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' });
     const [rowToDelete, setRowToDelete] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
 
-    const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
-    const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
-    const [pdfGenerating, setPdfGenerating] = useState(false);
-    const [activeRapportinoId, setActiveRapportinoId] = useState<string | null>(null);
-
     const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
 
-    const handlePrintShareClick = useCallback(async (id: string) => {
-        const rapportino = rapportini?.find(r => r.id === id);
-        if (!rapportino) {
-            setSnackbar({ open: true, message: 'Rapportino non trovato.', severity: 'error' });
-            return;
-        }
-
-        setPdfGenerating(true);
-        setActiveRapportinoId(id);
-
-        try {
-            const safeTecniciMap = tecniciMap || {};
-            const safeNaviMap = naviMap || {};
-            const safeLuoghiMap = luoghiMap || {};
-            const safeVeicoliMap = veicoliMap || {};
-
-            const nave = safeNaviMap[getCleanId(rapportino.naveId) || ''];
-            const fullRapportino: Rapportino = {
-                ...rapportino,
-                data: normalizeDate(rapportino.data),
-                nave: nave || undefined,
-                luogo: safeLuoghiMap[getCleanId(rapportino.luogoId) || ''] || undefined,
-                veicolo: safeVeicoliMap[getCleanId(rapportino.veicoloId) || ''] || undefined,
-                dettaglioOreTecnici: (rapportino.dettaglioOreTecnici || []).map(d => ({
-                    ...d,
-                    nome: safeTecniciMap[getCleanId(d.tecnicoId) || '']?.nome || 'N/D'
-                }))
-            };
-
-            const blob = generateRapportinoPdf(fullRapportino, new Map(Object.entries(safeTecniciMap)));
-            setPdfBlob(blob);
-            setPdfPreviewOpen(true);
-        } catch (error) {
-            console.error("Errore generazione PDF:", error);
-            const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
-            setSnackbar({ open: true, message: `Errore durante la creazione del PDF: ${errorMessage}`, severity: 'error' });
-        } finally {
-            setPdfGenerating(false);
-        }
-    }, [rapportini, tecniciMap, naviMap, luoghiMap, veicoliMap]);
-
-    const getPdfFileName = () => {
-        if (!activeRapportinoId) return 'Rapportino.pdf';
-        const rapportino = rapportini?.find(r => r.id === activeRapportinoId);
-        if (!rapportino) return 'Rapportino.pdf';
-        const mainTecnico = (tecniciMap || {})[getCleanId(rapportino.tecnicoId) || ''];
-        const dateStr = dayjs(normalizeDate(rapportino.data)).format('YYYY-MM-DD');
-        return `Rapportino_${mainTecnico?.cognome || 'TEC'}_${dateStr}.pdf`;
-    };
-    
     const flatRapportini = useMemo((): FlatRapportino[] => {
-        if (!rapportini || anagraficheLoading) return [];
-        
-        const safeNaviMap = naviMap || {};
-        const safeClientiMap = clientiMap || {};
-        const safeLuoghiMap = luoghiMap || {};
-        const safeTecniciMap = tecniciMap || {};
-        const safeTipiGiornataMap = tipiGiornataMap || {};
+        if (!rapportini || !rapportini.length || areAnagraficheLoading) {
+            return [];
+        }
 
-        return rapportini.map((rapportino) => {
-            const dataDaNormalizzare = (rapportino as any).dataInizio || rapportino.data;
-            const dataNormalizzata = normalizeDate(dataDaNormalizzare);
-            let clienteNome = "N/D";
-            let finalClienteId: string | undefined = undefined;
-            const naveId = getCleanId(rapportino.naveId);
-            if (naveId) {
-                const nave = safeNaviMap[naveId];
-                if (nave) {
-                    const clienteId = getCleanId(nave.clienteId);
-                    if (clienteId) {
-                        const cliente = safeClientiMap[clienteId];
-                        if (cliente) { clienteNome = cliente.nome; finalClienteId = cliente.id; }
-                    }
+        return rapportini.map((r: Rapportino) => {
+            const dataInizio = r.dataInizio instanceof Date ? r.dataInizio : new Date(r.dataInizio);
+
+            const tecniciPresenti = (r.presenze || [])
+                .map((id: string) => tecniciMap.get(id))
+                .filter((t): t is Tecnico => !!t);
+
+            const tecniciNomi = tecniciPresenti.map(t => `${t.cognome} ${t.nome}`.trim());
+
+            if (tecniciNomi.length === 0 && r.tecnicoId) {
+                const author = tecniciMap.get(r.tecnicoId);
+                if (author) {
+                    tecniciNomi.push(`${author.cognome} ${author.nome}`.trim());
                 }
             }
-            if (clienteNome === "N/D") {
-                const luogoId = getCleanId(rapportino.luogoId);
-                if (luogoId) {
-                    const luogo = safeLuoghiMap[luogoId];
-                    if (luogo) {
-                        const clienteId = getCleanId(luogo.clienteId);
-                        if (clienteId) {
-                            const cliente = safeClientiMap[clienteId];
-                            if (cliente) { clienteNome = cliente.nome; finalClienteId = cliente.id; }
-                        }
-                    }
-                }
-            }
-            const mainTecnicoId = getCleanId(rapportino.tecnicoId);
-            const allTecnicoIdsInPresenze = (Array.isArray(rapportino.presenze) ? rapportino.presenze.map(getCleanId) : []).filter(Boolean) as string[];
-            const getName = (id: string) => {
-                const t = safeTecniciMap[id];
-                return t ? `${t.cognome} ${t.nome}`.trim() : `ID: ${id}`;
-            };
-            const mainTecnicoNome = mainTecnicoId ? getName(mainTecnicoId) : "N/D";
-            const altriTecniciNomi = allTecnicoIdsInPresenze.filter(id => id !== mainTecnicoId).map(getName);
-            const tecnicoIds = [...new Set([mainTecnicoId, ...altriTecniciNomi].filter(Boolean) as string[])];
-            const tipoGiornataId = getCleanId(rapportino.tipoGiornataId);
-            const tipoGiornataObj = tipoGiornataId ? safeTipiGiornataMap[tipoGiornataId] : undefined;
-            const naveObj = naveId ? safeNaviMap[naveId] : undefined;
-            const luogoId = getCleanId(rapportino.luogoId);
-            const luogoObj = luogoId ? safeLuoghiMap[luogoId] : undefined;
-            let oreTotaliRapporto = rapportino.dettaglioOreTecnici?.reduce((sum, d) => sum + (d.ore || 0), 0) ?? Number(rapportino.oreLavoro) ?? 0;
-            const dettaglioResponsabile = rapportino.dettaglioOreTecnici?.find(d => getCleanId(d.tecnicoId) === getCleanId(rapportino.tecnicoId));
-            let oreResponsabile = dettaglioResponsabile?.ore ?? (rapportino.dettaglioOreTecnici ? 0 : oreTotaliRapporto);
+
+            const mainTecnicoNome = tecniciNomi[0] || 'N/D';
+            const altriTecniciNomi = tecniciNomi.slice(1);
+            const tecnicoIds = tecniciPresenti.map(t => t.id);
+
+            const nave = r.naveId ? naviMap.get(r.naveId) : undefined;
+            const luogo = r.luogoId ? luoghiMap.get(r.luogoId) : undefined;
+            const clienteId = nave?.clienteId || luogo?.clienteId;
+            const cliente = clienteId ? clientiMap.get(clienteId) : undefined;
+            const tipoGiornata = r.tipoGiornataId ? tipiGiornataMap.get(r.tipoGiornataId) : undefined;
+
             return {
-                id: rapportino.id,
-                data: dataNormalizzata,
-                dataFormatted: dayjs(dataNormalizzata).isValid() ? dayjs(dataNormalizzata).format("DD/MM/YYYY") : "Data Invalida",
-                tecniciNomi: [mainTecnicoNome, ...altriTecniciNomi],
+                id: r.id!,
+                data: dataInizio,
+                dataFormatted: dayjs(dataInizio).isValid() ? dayjs(dataInizio).format("DD/MM/YYYY") : "Data Invalida",
                 mainTecnicoNome,
                 altriTecniciNomi,
-                tipoGiornataNome: tipoGiornataObj?.nome || "N/D",
-                naveNome: naveObj?.nome || "N/D",
-                luogoNome: luogoObj?.nome || "N/D",
-                clienteNome,
-                ordineLavoro: rapportino.ordineLavoro,
-                oreResponsabile: formatOreLavoro(oreResponsabile),
-                oreTotali: formatOreLavoro(oreTotaliRapporto),
-                tecnicoIds, 
-                naveId: naveId,
-                clienteId: finalClienteId, 
-                tipoGiornataId: tipoGiornataId,
-                luogoId: luogoId,
+                tecnicoIds,
+                breveDescrizione: r.descrizioneBreve || r.lavoroEseguito || '', // <-- Usa `descrizioneBreve` con fallback a `lavoroEseguito`
+                tipoGiornataNome: tipoGiornata?.nome || "N/D",
+                tipoGiornataId: r.tipoGiornataId,
+                naveNome: nave?.nome || "N/D",
+                naveId: r.naveId,
+                luogoNome: luogo?.nome || "N/D",
+                luogoId: r.luogoId,
+                clienteNome: cliente?.nome || "N/D",
+                clienteId: cliente?.id,
+                ordineLavoro: r.ordineLavoro,
+                oreTotali: formatOreLavoro(calculateTotalHours(r.dettaglioOre)),
+                hasFirma: !!r.firmaVettoriale,
             };
         });
-    }, [rapportini, anagraficheLoading, naviMap, clientiMap, luoghiMap, tecniciMap, tipiGiornataMap]);
+    }, [rapportini, areAnagraficheLoading, naviMap, clientiMap, luoghiMap, tecniciMap, tipiGiornataMap]);
 
     const filteredRapportini = useMemo(() => {
         return flatRapportini.filter(r => {
-           const r_data = dayjs(r.data);
-           if (filters.dataDa && r_data.isBefore(filters.dataDa, 'day')) return false;
-           if (filters.dataA && r_data.isAfter(filters.dataA, 'day')) return false;
+           if (filters.dataDa && dayjs(r.data).isBefore(filters.dataDa, 'day')) return false;
+           if (filters.dataA && dayjs(r.data).isAfter(filters.dataA, 'day')) return false;
            if (filters.tecnico && !r.tecnicoIds.includes(filters.tecnico.id)) return false;
            if (filters.nave && r.naveId !== filters.nave.id) return false;
            if (filters.cliente && r.clienteId !== filters.cliente.id) return false;
@@ -275,37 +163,22 @@ const RicercaAvanzata: React.FC = () => {
 
     const handleDeleteRequest = useCallback((id: string) => setRowToDelete(id), []);
     
-    // =======================================================================================
-    // ** FUNZIONE DI CANCELLAZIONE REFACTORING CON FIREBASE SDK **
-    // Usa httpsCallable per una chiamata sicura e robusta.
-    // =======================================================================================
     const handleConfirmDelete = async () => {
         if (!rowToDelete) return;
         const id = rowToDelete;
         setRowToDelete(null);
-
         try {
-            // 1. Inizializza il servizio Functions e ottieni un riferimento alla funzione
-            const functions = getFunctions();
-            const deleteRapportino = httpsCallable(functions, 'deleteRapportino');
-
-            // 2. Chiama la funzione con i dati necessari. L'autenticazione è gestita in automatico.
-            await deleteRapportino({ id: id });
-
-            // 3. Se la chiamata ha successo, aggiorna lo stato locale per un feedback immediato
-            await db.rapportini.delete(id);
+            const deleteRapportinoFunc = httpsCallable(functions, 'deleteRapportino');
+            await deleteRapportinoFunc({ rapportinoId: id });
+            removeRapportino(id);
             setSnackbar({ open: true, message: 'Rapportino eliminato con successo.', severity: 'success' });
-
         } catch (error: any) {
-            console.error("Errore eliminazione via Cloud Function:", error);
-            // Estrai un messaggio di errore più leggibile dall'oggetto errore di Firebase
-            const errorMessage = error.message || "Errore sconosciuto durante l'eliminazione.";
-            setSnackbar({ open: true, message: errorMessage, severity: 'error' });
+            setSnackbar({ open: true, message: error.message || "Errore durante l'eliminazione.", severity: 'error' });
         }
     };
     
     const handleRowClick = (params: GridRowParams) => {
-        if (params.field === 'actions') return;
+        if (params.field === 'actions' || params.field === 'hasFirma') return;
         navigate(`/rapportino/edit/${params.id}`);
     };
 
@@ -318,7 +191,7 @@ const RicercaAvanzata: React.FC = () => {
     const columns: GridColDef<FlatRapportino>[] = useMemo(() => [
         { field: 'data', headerName: 'Data', width: 110, renderCell: (params) => params.row.dataFormatted, sortComparator: dateSortComparator, type: 'date' },
         { 
-            field: 'tecniciNomi', headerName: 'Tecnici', flex: 1.5, minWidth: 150, 
+            field: 'tecnici', headerName: 'Tecnici', flex: 1.5, minWidth: 150, 
             renderCell: params => {
                 const mainTecnico = params.row.mainTecnicoNome;
                 const altriTecnici = params.row.altriTecniciNomi;
@@ -326,40 +199,61 @@ const RicercaAvanzata: React.FC = () => {
                 const numAltri = altriTecnici.length;
                 return (
                     <Tooltip title={fullList} arrow placement="top">
-                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', my: 'auto' }}>
-                            <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}> {mainTecnico} </Typography>
+                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>{mainTecnico}</Typography>
                             {numAltri > 0 && (
-                                <Typography variant="body2" component="span" sx={{ ml: 0.5, color: 'text.secondary' }}> (+{numAltri}) </Typography>
+                                <Typography variant="body2" component="span" sx={{ ml: 0.5, color: 'text.secondary' }}>(+{numAltri})</Typography>
                             )}
                         </Box>
                     </Tooltip>
                 );
             }
         },
+        { 
+            field: 'breveDescrizione', 
+            headerName: 'Breve Descrizione', // <-- TITOLO CORRETTO
+            flex: 2, 
+            minWidth: 200,
+            renderCell: params => (
+                <Tooltip title={params.value || ''} arrow placement="top">
+                    <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                        {params.value}
+                    </Box>
+                </Tooltip>
+            )
+        },
         { field: 'tipoGiornataNome', headerName: 'Tipo Giornata', flex: 1 },
         { field: 'ordineLavoro', headerName: 'Ordine Lavoro', flex: 1 },
         { field: 'naveNome', headerName: 'Nave', flex: 1 },
         { field: 'luogoNome', headerName: 'Luogo', flex: 1 },
         { field: 'clienteNome', headerName: 'Cliente', flex: 1 },
-        { field: 'oreResponsabile', headerName: 'Ore Resp.', width: 100, align: 'right', headerAlign: 'right' },
         { field: 'oreTotali', headerName: 'Ore Totali', width: 100, align: 'right', headerAlign: 'right' },
+        { 
+            field: 'hasFirma', 
+            headerName: 'Firma', 
+            width: 70, 
+            align: 'center', 
+            headerAlign: 'center',
+            sortable: false,
+            disableColumnMenu: true,
+            renderCell: (params) => (
+                <Tooltip title={params.value ? "Firmato" : "Non Firmato"}>
+                    <span>
+                        <SignatureIcon color={params.value ? 'success' : 'disabled'} />
+                    </span>
+                </Tooltip>
+            )
+        },
         {
             field: 'actions', type: 'actions', headerName: 'Azioni', width: 120,
             getActions: ({ id }) => [
                 <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={(e) => { e.stopPropagation(); handleEdit(id as string);}} showInMenu />, 
-                <GridActionsCellItem 
-                    icon={pdfGenerating && activeRapportinoId === id ? <CircularProgress size={24} /> : <PrintIcon />}
-                    label="Stampa / Condividi" 
-                    onClick={(e) => { e.stopPropagation(); handlePrintShareClick(id as string);}} 
-                    disabled={pdfGenerating && activeRapportinoId === id}
-                />,
+                <GridActionsCellItem icon={<PrintIcon />} label="Stampa/PDF" onClick={(e) => e.stopPropagation() } showInMenu />, 
                 <GridActionsCellItem icon={<DeleteIcon color="error" />} label="Elimina" onClick={(e) => { e.stopPropagation(); handleDeleteRequest(id as string);}} showInMenu />,
             ],
         },
-    ], [handleEdit, handlePrintShareClick, handleDeleteRequest, pdfGenerating, activeRapportinoId]);
+    ], [handleEdit, handleDeleteRequest]);
     
-    const loading = anagraficheLoading || rapportiniLoading;
-
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1, sm: 2 }, gap: 2 }}>
@@ -368,7 +262,7 @@ const RicercaAvanzata: React.FC = () => {
                      <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`.trim()} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
+                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedNavi} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedLuoghi} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedClienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
@@ -382,7 +276,7 @@ const RicercaAvanzata: React.FC = () => {
                     <DataGrid 
                         rows={filteredRapportini} 
                         columns={columns} 
-                        loading={loading} 
+                        loading={areAnagraficheLoading} 
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText} 
                         slots={{ toolbar: GridToolbar }} 
                         slotProps={{ toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 500 } } }} 
@@ -390,26 +284,12 @@ const RicercaAvanzata: React.FC = () => {
                         pageSizeOptions={[10, 25, 50, 100]} 
                         density="compact" 
                         onRowClick={handleRowClick}
-                        sx={{ border: 0, '& .MuiDataGrid-row': { cursor: 'pointer' }, '& .MuiDataGrid-cell': { alignItems: 'center', display: 'flex', whiteSpace: 'nowrap' }, }}
+                        sx={{ border: 0, '& .MuiDataGrid-row': { cursor: 'pointer' }, '& .MuiDataGrid-cell': { alignItems: 'center', display: 'flex' } }}
                     />
                 </Paper>
                 
                 <ConfirmationDialog open={!!rowToDelete} onClose={() => setRowToDelete(null)} onConfirm={handleConfirmDelete} title="Conferma Eliminazione" description={"Sei sicuro di voler eliminare questo rapportino? L'azione è irreversibile."} />
                 
-                {pdfPreviewOpen &&
-                    <PdfPreviewDialog
-                        open={pdfPreviewOpen}
-                        onClose={() => {
-                            setPdfPreviewOpen(false);
-                            setPdfBlob(null);
-                            setActiveRapportinoId(null);
-                        }}
-                        pdfBlob={pdfBlob}
-                        fileName={getPdfFileName()}
-                        canShare={!!navigator.share}
-                    />
-                }
-
                 {snackbar && <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(null)}><Alert onClose={() => setSnackbar(null)} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>}
             </Box>
         </LocalizationProvider>

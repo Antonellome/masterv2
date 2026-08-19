@@ -1,32 +1,34 @@
 
-import * as functions from "firebase-functions";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+
+const REGION = "europe-west1";
 
 interface EliminaTecnicoData {
     uid: string;
 }
 
-export const eliminaTecnico = functions.region('europe-west1').https.onCall(async (data: EliminaTecnicoData, context: functions.https.CallableContext) => {
-    if (context.auth?.token.role !== 'admin') {
+export const eliminaTecnico = onCall({ region: REGION }, async (request) => {
+    if (request.auth?.token.role !== 'admin') {
         logger.error(
-            `Tentativo non autorizzato. UID: ${context.auth?.uid || 'Nessuno'}`
+            `Tentativo non autorizzato. UID: ${request.auth?.uid || 'Nessuno'}`
         );
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "permission-denied",
             "Solo gli amministratori possono eliminare i tecnici."
         );
     }
 
-    const { uid } = data;
+    const { uid } = request.data as EliminaTecnicoData;
     if (!uid) {
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "invalid-argument",
             "Dati non validi. È necessario fornire 'uid'."
         );
     }
 
-    logger.info(`Richiesta di eliminazione per UID: ${uid} dall'admin: ${context.auth.token.email}`);
+    logger.info(`Richiesta di eliminazione per UID: ${uid} dall'admin: ${request.auth.token.email}`);
 
     try {
         await admin.auth().deleteUser(uid);
@@ -38,9 +40,9 @@ export const eliminaTecnico = functions.region('europe-west1').https.onCall(asyn
     } catch (error: any) {
         logger.error(`Errore durante l'eliminazione del tecnico con UID ${uid}:`, error);
         if (error.code === 'auth/user-not-found') {
-            throw new functions.https.HttpsError("not-found", `Nessun utente trovato con UID: ${uid}.`);
+            throw new HttpsError("not-found", `Nessun utente trovato con UID: ${uid}.`);
         }
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             `Errore interno durante l'eliminazione. ${error.message}`
         );

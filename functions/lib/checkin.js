@@ -37,17 +37,12 @@ exports.createCheckin = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const logger = __importStar(require("firebase-functions/logger"));
 const firestore_1 = require("firebase-admin/firestore");
+const REGION = "europe-west1";
 // --- FINE DEFINIZIONE TIPO LOCALE ---
 /**
  * Crea un nuovo documento di check-in/out nella collezione `checkin_giornalieri`.
- *
- * Questa funzione è sicura e segue le specifiche del file `presenze_nuova.md`.
- *
- * @param {any} data - L'oggetto dati inviato dal client.
- * @param {CallableContext} context - Il contesto della funzione, include l'autenticazione.
- * @returns {Promise<{id: string}>} - L'ID del documento creato.
  */
-exports.createCheckin = (0, https_1.onCall)(async (request) => {
+exports.createCheckin = (0, https_1.onCall)({ region: REGION }, async (request) => {
     const { data, auth } = request;
     // 1. CONTROLLO DI SICUREZZA FONDAMENTALE
     if (!auth || auth.uid !== data.tecnicoId) {

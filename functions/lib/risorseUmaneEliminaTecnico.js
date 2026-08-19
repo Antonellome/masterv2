@@ -34,20 +34,21 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.eliminaTecnico = void 0;
-const functions = __importStar(require("firebase-functions"));
+const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
-exports.eliminaTecnico = functions.region('europe-west1').https.onCall(async (data, context) => {
+const REGION = "europe-west1";
+exports.eliminaTecnico = (0, https_1.onCall)({ region: REGION }, async (request) => {
     var _a, _b;
-    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'admin') {
-        logger.error(`Tentativo non autorizzato. UID: ${((_b = context.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'Nessuno'}`);
-        throw new functions.https.HttpsError("permission-denied", "Solo gli amministratori possono eliminare i tecnici.");
+    if (((_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'admin') {
+        logger.error(`Tentativo non autorizzato. UID: ${((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'Nessuno'}`);
+        throw new https_1.HttpsError("permission-denied", "Solo gli amministratori possono eliminare i tecnici.");
     }
-    const { uid } = data;
+    const { uid } = request.data;
     if (!uid) {
-        throw new functions.https.HttpsError("invalid-argument", "Dati non validi. È necessario fornire 'uid'.");
+        throw new https_1.HttpsError("invalid-argument", "Dati non validi. È necessario fornire 'uid'.");
     }
-    logger.info(`Richiesta di eliminazione per UID: ${uid} dall'admin: ${context.auth.token.email}`);
+    logger.info(`Richiesta di eliminazione per UID: ${uid} dall'admin: ${request.auth.token.email}`);
     try {
         await admin.auth().deleteUser(uid);
         await admin.firestore().collection("tecnici").doc(uid).delete();
@@ -57,9 +58,9 @@ exports.eliminaTecnico = functions.region('europe-west1').https.onCall(async (da
     catch (error) {
         logger.error(`Errore durante l'eliminazione del tecnico con UID ${uid}:`, error);
         if (error.code === 'auth/user-not-found') {
-            throw new functions.https.HttpsError("not-found", `Nessun utente trovato con UID: ${uid}.`);
+            throw new https_1.HttpsError("not-found", `Nessun utente trovato con UID: ${uid}.`);
         }
-        throw new functions.https.HttpsError("internal", `Errore interno durante l'eliminazione. ${error.message}`);
+        throw new https_1.HttpsError("internal", `Errore interno durante l'eliminazione. ${error.message}`);
     }
 });
 //# sourceMappingURL=risorseUmaneEliminaTecnico.js.map

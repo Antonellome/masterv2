@@ -1,13 +1,15 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
-import { collection, onSnapshot, doc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+// RIPRISTINO: Re-importo 'db' e 'functions' dalla configurazione centrale.
+import { db, functions } from '@/config/firebase'; 
+import { httpsCallable } from 'firebase/functions'; 
 import type { Rapportino, Tecnico, Nave, Luogo } from '@/models/definitions';
 import RapportiniList from '@/components/Rapportini/RapportiniList';
 import RapportinoFormController from '@/components/Rapportini/RapportinoFormController';
 import { useAlert } from '@/contexts/AlertContext';
-import { useAnagraficaData } from '@/contexts/DataContext'; // Corretto l'import
+import { useAnagraficaData } from '@/contexts/DataContext';
 
 const GestioneRapportini = () => {
     const { showAlert } = useAlert();
@@ -16,7 +18,7 @@ const GestioneRapportini = () => {
         navi, 
         luoghi, 
         loading: loadingData,
-    } = useAnagraficaData(); // Corretto l'hook
+    } = useAnagraficaData();
 
     const [rapportini, setRapportini] = useState<Rapportino[]>([]);
     const [loadingRapportini, setLoadingRapportini] = useState(true);
@@ -59,41 +61,25 @@ const GestioneRapportini = () => {
     };
 
     const handleDelete = async (reportId: string) => {
-        if (!window.confirm("Sei sicuro di voler spostare questo rapportino nel cestino?")) {
+        if (!window.confirm("Sei sicuro di voler ELIMINARE DEFINITIVAMENTE questo rapportino? L'operazione è irreversibile.")) {
             return;
         }
+        
+        // RIPRISTINO: Usiamo l'istanza delle functions importata direttamente.
+        const deleteRapportino = httpsCallable(functions, 'deleteRapportino');
 
-        const reportRef = doc(db, "rapportini", reportId);
         try {
-            await updateDoc(reportRef, {
-                deletedAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            });
-            showAlert(`Rapportino spostato nel cestino.`, 'success');
-        } catch (error) {
-            console.error("Errore durante la cancellazione (soft delete) del rapportino:", error);
-            if (error instanceof Error) {
-                showAlert(`Errore durante l'eliminazione: ${error.message}`, 'error');
-            } else {
-                showAlert("Si è verificato un errore sconosciuto durante l'eliminazione.", 'error');
-            }
+            await deleteRapportino({ rapportinoId: reportId });
+            showAlert('Rapportino eliminato con successo!', 'success');
+        } catch (error: any) {
+            console.error("Errore eliminazione via Cloud Function:", error);
+            showAlert(`Errore [${error.code}]: ${error.message}`, 'error');
         }
     };
 
-    const tecniciMap = useMemo(() => {
-        if (!tecnici) return new Map<string, Tecnico>();
-        return new Map(tecnici.map(t => [t.id, t]));
-    }, [tecnici]);
-
-    const naviMap = useMemo(() => {
-        if (!navi) return new Map<string, string>();
-        return new Map(navi.map(n => [n.id, n.nome]));
-    }, [navi]);
-
-    const luoghiMap = useMemo(() => {
-        if (!luoghi) return new Map<string, string>();
-        return new Map(luoghi.map(l => [l.id, l.nome]));
-    }, [luoghi]);
+    const tecniciMap = useMemo(() => new Map(tecnici.map(t => [t.id, t])), [tecnici]);
+    const naviMap = useMemo(() => new Map(navi.map(n => [n.id, n.nome])), [navi]);
+    const luoghiMap = useMemo(() => new Map(luoghi.map(l => [l.id, l.nome])), [luoghi]);
 
     const isLoading = loadingData || loadingRapportini;
 

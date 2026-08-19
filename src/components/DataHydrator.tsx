@@ -1,97 +1,57 @@
 
 import { useEffect, useRef } from 'react';
 import { useGlobalStore } from '@/stores/globalStore';
-import { syncAnagrafiche, syncRapportini } from '@/services/SyncService';
-import { loadAllData } from '@/db/db';
+// Importa l'unica funzione di sincronizzazione corretta
+import { avviaSincronizzazioneCompleta } from '@/services/SyncService';
 
 export const DataHydrator = () => {
-  const {
-    isAuthenticated,
-    isSyncInProgress,
-    setIsSyncInProgress,
-    setAnagrafiche,
-    setRapportini,
-    setLastUpdated,
-    setAnagraficheLoading,
-  } = useGlobalStore(state => ({
-    isAuthenticated: state.isAuthenticated,
-    isSyncInProgress: state.isSyncInProgress,
-    setIsSyncInProgress: state.setIsSyncInProgress,
-    setAnagrafiche: state.setAnagrafiche,
-    setRapportini: state.setRapportini,
-    setLastUpdated: state.setLastUpdated,
-    setAnagraficheLoading: state.setAnagraficheLoading,
-  }));
+  const isAuthenticated = useGlobalStore(state => state.isAuthenticated);
 
-  // Usiamo un ref per gestire l'intervallo, in modo da non doverlo includere nelle dipendenze dell'effetto.
+  // Ref per l'intervallo, per evitare riesecuzioni dell'effetto
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const performSync = async () => {
-      // LA VERA GUARDIA: Controlla lo stato globale. Se è true, esce subito.
-      // Questo è il cuore della soluzione e previene ogni sovrapposizione.
-      if (useGlobalStore.getState().isSyncInProgress) {
-        console.log('[DataHydrator] Sync già in corso. Salto.');
+      // La guardia principale: non fare nulla se la sincronizzazione è già in corso.
+      if (useGlobalStore.getState().isSyncing) {
+        console.log('[DataHydrator] Sincronizzazione già in corso. Salto.');
         return;
       }
-
-      console.log('[DataHydrator] Avvio Sincronizzazione Globale...');
-      setIsSyncInProgress(true);
-      setAnagraficheLoading(true);
-
-      try {
-        await Promise.all([
-          syncAnagrafiche(),
-          syncRapportini(),
-        ]);
-
-        console.log('[DataHydrator] Sync server OK. Ricarico dati locali...');
-        const { anagrafiche, rapportini, lastUpdated } = await loadAllData();
-
-        setAnagrafiche(anagrafiche);
-        setRapportini(rapportini);
-        setLastUpdated(lastUpdated);
-
-        console.log('[DataHydrator] Store aggiornato.');
-
-      } catch (error) {
-        console.error('[DataHydrator] ERRORE SINCRONIZZAZIONE GLOBALE.', error);
-      } finally {
-        console.log('[DataHydrator] Fine Sincronizzazione Globale.');
-        setIsSyncInProgress(false);
-        setAnagraficheLoading(false);
-      }
+      console.log('[DataHydrator] Avvio Sincronizzazione Completa...');
+      await avviaSincronizzazioneCompleta();
+      console.log('[DataHydrator] Sincronizzazione Completa terminata.');
     };
 
-    // Se l'utente è autenticato e non c'è un intervallo attivo, avvialo.
     if (isAuthenticated) {
-      // Esegui subito la prima sincronizzazione
+      // Esegui la prima sincronizzazione all'avvio
       performSync();
 
-      // Pulisci qualsiasi intervallo precedente prima di crearne uno nuovo.
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      // Pulisci intervalli precedenti
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
       
-      // Imposta l'intervallo periodico.
+      // Imposta la sincronizzazione periodica ogni 5 minuti
       intervalRef.current = setInterval(performSync, 5 * 60 * 1000);
 
     } else {
-      // Se l'utente non è autenticato (logout), pulisci l'intervallo.
+      // Se l'utente fa logout, pulisci l'intervallo
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     }
 
-    // La funzione di pulizia viene eseguita quando il componente si smonta o prima di rieseguire l'effetto.
+    // Funzione di pulizia per smontaggio del componente
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
 
-  // L'UNICA DIPENDENZA CORRETTA E NECESSARIA È LO STATO DI AUTENTICAZIONE.
-  // L'effetto deve rieseguirsi solo al login/logout.
-  }, [isAuthenticated, setIsSyncInProgress, setAnagraficheLoading, setAnagrafiche, setRapportini, setLastUpdated]);
+  // L'effetto dipende solo dallo stato di autenticazione.
+  }, [isAuthenticated]);
 
+  // Questo componente non renderizza nulla.
   return null;
 };

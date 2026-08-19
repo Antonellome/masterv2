@@ -1,215 +1,156 @@
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { useReactToPrint } from 'react-to-print';
-import RapportinoPrint from './RapportinoPrint';
-import { 
-    Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Paper,
-    IconButton, Menu, MenuItem, TextField, Box, Typography, Select,
-    InputAdornment
-} from '@mui/material';
-import { 
-    MoreVert as MoreVertIcon, 
-    Edit as EditIcon, 
-    Delete as DeleteIcon, 
-    Search as SearchIcon, 
-    ArrowBack as ArrowBackIcon, 
-    ArrowForward as ArrowForwardIcon, 
-    Email as EmailIcon, 
-    Phone as PhoneIcon,
-    Print as PrintIcon,
-    Share as ShareIcon
-} from '@mui/icons-material';
+import React from 'react';
+import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material';
+import { DataGrid, GridColDef, GridRenderCellParams, GridValueGetterParams, GridActionsCellItem } from '@mui/x-data-grid';
+import { useGlobalStore } from '@/stores/globalStore';
+import { Rapportino } from '@/models/definitions';
+import dayjs from 'dayjs';
 
-// --- Interfacce --- 
-interface Rapportino {
-  id: string;
-  data: string;
-  cliente: string;
-  oreLavorate: number;
-  descrizione: string;
-  operatore: string;
-}
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import PrintIcon from '@mui/icons-material/Print';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 interface RapportiniTableProps {
-  rapportini: Rapportino[];
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
-  onEmail: (id: string) => void;
-  onTel: (id: string) => void;
+    rapportini: Rapportino[];
+    onEdit: (rapportino: Rapportino) => void;
+    onDelete: (rapportinoId: string) => void;
+    onPrint: (rapportino: Rapportino) => void;
 }
 
-const RapportiniTable: React.FC<RapportiniTableProps> = ({ rapportini, onEdit, onDelete, onEmail, onTel }) => {
-  // --- Stati per Paginazione e Filtro ---
-  const [filter, setFilter] = useState('');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [currentRapportinoId, setCurrentRapportinoId] = useState<string | null>(null);
+const MissingDataChip = ({ label }: { label: string }) => (
+    <Tooltip title="Dato non trovato."><Chip icon={<WarningAmberIcon />} label={label} color="warning" size="small" variant="outlined" /></Tooltip>
+);
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, rapportinoId: string) => {
-    setAnchorEl(event.currentTarget);
-    setCurrentRapportinoId(rapportinoId);
-  };
+const parseDate = (dateValue: any): dayjs.Dayjs | null => {
+    if (!dateValue) return null;
+    if (dateValue && typeof dateValue.toDate === 'function') return dayjs(dateValue.toDate());
+    const d = dayjs(dateValue);
+    return d.isValid() ? d : null;
+};
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setCurrentRapportinoId(null);
-  };
+const RapportiniTable: React.FC<RapportiniTableProps> = ({ rapportini, onEdit, onDelete, onPrint }) => {
+    const {
+        tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, areAnagraficheLoading
+    } = useGlobalStore(state => ({
+        tecniciMap: state.tecniciMap,
+        clientiMap: state.clientiMap,
+        naviMap: state.naviMap,
+        luoghiMap: state.luoghiMap,
+        tipiGiornataMap: state.tipiGiornataMap,
+        areAnagraficheLoading: state.areAnagraficheLoading,
+    }));
 
-  // --- Logica per Stampa Singola (ROBUSTA) ---
-  const componentToPrintRef = useRef<HTMLDivElement>(null);
-  const [rapportinoSelezionato, setRapportinoSelezionato] = useState<Rapportino | null>(null);
+    const columns: GridColDef<Rapportino>[] = [
+        { 
+            field: 'dataFormatted', 
+            headerName: 'Data', 
+            width: 100, 
+            valueGetter: (params) => parseDate(params.row.dataInizio)?.format('DD/MM/YYYY') ?? 'Data Invalida',
+            sortComparator: (v1, v2, param1, param2) => {
+                const date1 = parseDate(param1.api.getRow(param1.id).dataInizio);
+                const date2 = parseDate(param2.api.getRow(param2.id).dataInizio);
+                if (!date1 || !date2) return 0;
+                return date1.diff(date2);
+            }
+        },
+        {
+            field: 'tecniciNomi', headerName: 'Tecnici', flex: 0.7, minWidth: 180,
+            renderCell: (params) => {
+                const mainTecnicoId = params.row.tecnicoId;
+                const allTecniciIds = [ ...new Set([mainTecnicoId, ...(params.row.presenze || [])]) ];
+                const mainTecnico = tecniciMap.get(mainTecnicoId);
+                const altriTecnici = allTecniciIds.filter(id => id !== mainTecnicoId).map(id => tecniciMap.get(id)?.nomeCompleto).filter(Boolean);
 
-  const handlePrint = useReactToPrint({
-      content: () => componentToPrintRef.current,
-      documentTitle: `Rapportino-${rapportinoSelezionato?.id || ''}`,
-      onAfterPrint: () => setRapportinoSelezionato(null)
-  });
+                if (!mainTecnico) return <MissingDataChip label="Tecnico Resp. mancante" />;
 
-  useEffect(() => {
-      if (rapportinoSelezionato) {
-          handlePrint();
-      }
-  }, [rapportinoSelezionato, handlePrint]);
+                const countAltri = altriTecnici.length;
+                const tooltipText = [mainTecnico.nomeCompleto, ...altriTecnici].join(', ');
 
-  const avviaStampaSingola = useCallback((rapportino: Rapportino) => {
-      setRapportinoSelezionato(rapportino);
-  }, []);
+                return (
+                    <Tooltip title={tooltipText}>
+                        <Typography variant="body2" noWrap>
+                            <Box component="strong" sx={{ fontWeight: 'bold' }}>{mainTecnico.nomeCompleto}</Box>
+                            {countAltri > 0 && <Box component="span" sx={{ ml: 0.5 }}> (+{countAltri})</Box>}
+                        </Typography>
+                    </Tooltip>
+                );
+            }
+        },
+        {
+            field: 'descrizioneBreve',
+            headerName: 'Descrizione Breve',
+            flex: 1,
+            minWidth: 200,
+            valueGetter: (params) => params.row.descrizioneBreve || '-',
+        },
+        {
+            field: 'tipoGiornataNome', headerName: 'Tipo Giornata', width: 130,
+            valueGetter: (params) => tipiGiornataMap.get(params.row.tipoGiornataId)?.nome || '-',
+        },
+        { field: 'ordineLavoro', headerName: 'Ordine', width: 120, valueGetter: (params) => params.row.ordineLavoro || '-' },
+        { field: 'naveNome', headerName: 'Nave', width: 150, valueGetter: (params) => naviMap.get(params.row.naveId)?.nome || '-' },
+        { field: 'luogoNome', headerName: 'Luogo', width: 150, valueGetter: (params) => luoghiMap.get(params.row.luogoId)?.nome || '-' },
+        {
+            field: 'clienteNome', headerName: 'Cliente', width: 150,
+            valueGetter: (params) => {
+                const nave = naviMap.get(params.row.naveId);
+                if (nave?.clienteId) return clientiMap.get(nave.clienteId)?.nome;
+                return clientiMap.get(params.row.clienteId)?.nome || '-';
+            }
+        },
+        {
+            field: 'oreTotali', headerName: 'Ore', width: 80, align: 'center', headerAlign: 'center',
+            valueGetter: (params) => {
+                if (Array.isArray(params.row.dettaglioOre) && params.row.dettaglioOre.length > 0) {
+                    return params.row.dettaglioOre.reduce((sum, item) => sum + (item.ore || 0), 0);
+                }
+                return 0;
+            },
+            renderCell: (params) => `${(params.value || 0).toFixed(1)}h`
+        },
+        {
+            field: 'firma', headerName: 'Firma', width: 70, align: 'center', headerAlign: 'center',
+            renderCell: (params) => {
+                 const hasFirma = !!params.row.firmaVettoriale;
+                 const tooltipText = hasFirma 
+                    ? `Firmato da: ${params.row.firmaFirmatarioNome || 'N/D'}`
+                    : 'Non Firmato';
+                return (
+                     <Tooltip title={tooltipText}>
+                         <span style={{ fontSize: '1.2rem' }}>{hasFirma ? '\u2714\uFE0F' : '\u274C'}</span>
+                     </Tooltip>
+                )
+            }
+        },
+        {
+            field: 'actions', type: 'actions', headerName: 'Azioni', width: 100, align: 'center', headerAlign: 'center',
+            getActions: (params) => [
+                <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={() => onEdit(params.row)} showInMenu />, 
+                <GridActionsCellItem icon={<PrintIcon />} label="Stampa" onClick={() => onPrint(params.row)} showInMenu />, 
+                <GridActionsCellItem icon={<DeleteIcon />} label="Elimina" onClick={() => onDelete(params.row.id)} showInMenu />,
+            ]
+        },
+    ];
 
-  // --- Logica per Condivisione ---
-  const handleShare = async (rapportino: Rapportino) => {
-    const shareData = {
-      title: `Rapportino di Intervento: ${rapportino.id}`,
-      text: `Dettagli: Cliente ${rapportino.cliente}, Data: ${new Date(rapportino.data).toLocaleDateString()}, Ore: ${rapportino.oreLavorate}`,
-      url: window.location.href,
-    };
-    if (navigator.share) {
-      try { await navigator.share(shareData); } catch (e) { console.error("Share failed", e); }
-    } else {
-      navigator.clipboard.writeText(shareData.text);
-      alert("Dettagli copiati negli appunti!");
-    }
-  };
-
-  // --- Filtro e Paginazione Dati ---
-  const filteredRapportini = rapportini.filter(r =>
-      Object.values(r).some(val => String(val).toLowerCase().includes(filter.toLowerCase()))
-  );
-  const paginatedRapportini = filteredRapportini.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-
-  return (
-    <Box>
-      {/* Componente nascosto per la stampa singola. */}
-      <div style={{ display: 'none' }}>
-        {rapportinoSelezionato && <RapportinoPrint ref={componentToPrintRef} rapportinoId={rapportinoSelezionato.id} />}
-      </div>
-
-      {/* Barra di ricerca */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        <TextField 
-          placeholder="Cerca in tabella..." 
-          value={filter} 
-          onChange={e => setFilter(e.target.value)}
-          variant="outlined"
-          size="small"
-          sx={{width: '40%'}}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Box>
-
-      {/* Tabella */}
-      <TableContainer component={Paper}>
-        <Table id="tabella-da-stampare">
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell><TableCell>Data</TableCell><TableCell>Cliente</TableCell><TableCell align="right">Ore</TableCell><TableCell>Descrizione</TableCell><TableCell>Operatore</TableCell><TableCell>Azioni</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {paginatedRapportini.map((rapportino) => (
-              <TableRow key={rapportino.id}>
-                <TableCell>{rapportino.id}</TableCell>
-                <TableCell>{new Date(rapportino.data).toLocaleDateString()}</TableCell>
-                <TableCell>{rapportino.cliente}</TableCell>
-                <TableCell align="right">{rapportino.oreLavorate}</TableCell>
-                <TableCell sx={{ whiteSpace: "pre-wrap"}}>{rapportino.descrizione}</TableCell>
-                <TableCell>{rapportino.operatore}</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex' }}>
-                    <IconButton aria-label="Stampa Rapportino" onClick={() => avviaStampaSingola(rapportino)} size="small">
-                      <PrintIcon />
-                    </IconButton>
-                    <IconButton aria-label="Condividi" onClick={() => handleShare(rapportino)} size="small">
-                      <ShareIcon />
-                    </IconButton>
-                    <IconButton
-                      aria-label="more"
-                      aria-controls="long-menu"
-                      aria-haspopup="true"
-                      onClick={(e) => handleMenuClick(e, rapportino.id)}
-                      size="small"
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={() => { onEdit(currentRapportinoId!); handleMenuClose(); }}>
-          <EditIcon sx={{ mr: 1 }} /> Modifica
-        </MenuItem>
-        <MenuItem onClick={() => { onDelete(currentRapportinoId!); handleMenuClose(); }}>
-          <DeleteIcon sx={{ mr: 1 }} /> Elimina
-        </MenuItem>
-        <MenuItem onClick={() => { onEmail(currentRapportinoId!); handleMenuClose(); }}>
-          <EmailIcon sx={{ mr: 1 }} /> Invia Email
-        </MenuItem>
-        <MenuItem onClick={() => { onTel(currentRapportinoId!); handleMenuClose(); }}>
-          <PhoneIcon sx={{ mr: 1 }} /> Chiama
-        </MenuItem>
-      </Menu>
-
-      {/* Controlli di Paginazione */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 2 }}>
-          <Typography sx={{ mr: 2 }}>Righe:</Typography>
-          <Select
-            native
-            value={rowsPerPage}
-            onChange={e => setRowsPerPage(Number(e.target.value))}
-            inputProps={{ 'aria-label': 'rows per page' }}
-            size="small"
-            sx={{ mr: 2 }}
-          >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-          </Select>
-          <Typography sx={{ mr: 2 }}>
-            {page * rowsPerPage + 1}-{(page + 1) * rowsPerPage > filteredRapportini.length ? filteredRapportini.length : (page + 1) * rowsPerPage} di {filteredRapportini.length}
-          </Typography>
-          <IconButton aria-label="Precedente" onClick={() => setPage(p => p - 1)} disabled={page === 0}>
-            <ArrowBackIcon />
-          </IconButton>
-          <IconButton aria-label="Successiva" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * rowsPerPage >= filteredRapportini.length}>
-            <ArrowForwardIcon />
-          </IconButton>
-      </Box>
-    </Box>
-  );
+    return (
+        <Box sx={{ height: '75vh', width: '100%' }}>
+            <DataGrid
+                rows={rapportini}
+                columns={columns}
+                loading={areAnagraficheLoading}
+                rowHeight={45}
+                density="compact"
+                initialState={{
+                    pagination: { paginationModel: { pageSize: 50 } },
+                    sorting: { sortModel: [{ field: 'dataFormatted', sort: 'desc' }] },
+                }}
+                pageSizeOptions={[25, 50, 100]}
+                disableRowSelectionOnClick
+                 sx={{ border: 0, '& .MuiDataGrid-cell:focus-within, & .MuiDataGrid-columnHeader:focus-within': { outline: 'none !important' } }}
+            />
+        </Box>
+    );
 };
 
 export default RapportiniTable;

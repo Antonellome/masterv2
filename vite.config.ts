@@ -1,3 +1,4 @@
+// Riavvio forzato del server di sviluppo per pulire la cache.
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';

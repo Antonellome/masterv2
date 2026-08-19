@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useGlobalStore } from '@/stores/globalStore';
-import { functions } from '@/config/firebase'; // PERCORSO CORRETTO
+import { functions } from '@/config/firebase'; // RIPRISTINO: Torniamo all'importazione originale
 import { httpsCallable } from 'firebase/functions';
 import { getAuth, sendPasswordResetEmail } from "firebase/auth";
 import {
@@ -20,7 +20,7 @@ import EditIcon from '@mui/icons-material/Edit';
 
 import { NuovoUtenteDialog, ModificaUtenteDialog, ConfermaEliminazioneDialog } from './AmministratoriDialogs';
 
-// Logica sicura basata su Cloud Functions come da FASE 1
+// RIPRISTINO: Logica originale che usa l'istanza importata
 const gestisciUtenti = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 const getAllUsers = httpsCallable(functions, 'admin_getAllUsers');
 
@@ -42,12 +42,10 @@ const GestioneAmministratori = () => {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
 
-  // IMPLEMENTAZIONE CORRETTA: Caricamento dati tramite Cloud Function sicura
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       const result = await getAllUsers();
-      // La funzione restituisce già i dati nel formato corretto { id, nome, email, ruolo }
       const usersData = Array.isArray(result.data)
         ? (result.data as any[]).filter(user => user && user.id)
         : [];
@@ -69,7 +67,7 @@ const GestioneAmministratori = () => {
     try {
       await action();
       setFeedback({ type: 'success', message: successMessage });
-      fetchUsers(); // Ricarica i dati per riflettere i cambiamenti
+      fetchUsers(); 
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || errorMessage });
     } finally {

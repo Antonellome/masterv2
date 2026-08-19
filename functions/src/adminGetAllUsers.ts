@@ -1,39 +1,44 @@
 
-import * as functions from "firebase-functions";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 
+const REGION = "europe-west1";
+
 /**
- * Cloud Function per recuperare SOLO gli utenti amministrativi (staff).
- * Filtra gli utenti di Firebase Auth per restituire solo quelli con il claim `livello: 'staff'`.
+ * Funzione per recuperare ESCLUSIVAMENTE gli utenti di amministrazione (staff e admin).
+ * Filtra gli utenti per restituire solo quelli con il claim `role` impostato a 'staff' o 'admin'.
+ * Richiede privilegi di amministratore.
  */
-export const admin_getAllUsers = functions.region("europe-west1").https.onCall(async (data, context) => {
+export const admin_getAllUsers = onCall({ region: REGION }, async (request) => {
     // 1. Controllo di sicurezza: solo gli admin possono chiamare questa funzione.
-    if (!context.auth || context.auth.token.admin !== true) {
-        logger.error(`Tentativo non autorizzato di elencare lo staff da UID: ${context.auth?.uid}`);
-        throw new functions.https.HttpsError("permission-denied", "Operazione consentita solo agli amministratori.");
+    if (request.auth?.token.role !== 'admin') {
+        logger.error(`Tentativo non autorizzato di elencare lo staff da UID: ${request.auth?.uid}`);
+        throw new HttpsError("permission-denied", "Operazione consentita solo agli amministratori.");
     }
 
-    logger.info(`Richiesta elenco staff da admin: ${context.auth.token.email}`);
+    logger.info(`L'admin ${request.auth.token.email} richiede l'elenco dello staff amministrativo.`);
 
     try {
         const staffUsers: any[] = [];
         let nextPageToken: string | undefined;
 
-        // Cicla attraverso tutti gli utenti paginati per trovarli tutti
+        // Cicla attraverso tutti gli utenti paginati
         do {
             const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
             
             listUsersResult.users.forEach(userRecord => {
-                const customClaims = (userRecord.customClaims || {}) as { admin?: boolean; livello?: string };
+                const customClaims = (userRecord.customClaims || {}) as { role?: string };
+                const userRole = customClaims.role;
 
-                // ** LA CORREZIONE CHIAVE: FILTRA PER CLAIM `livello` **
-                if (customClaims.livello === 'staff') {
+                // **FILTRO CORRETTO: SOLO UTENTI CON RUOLO 'staff' o 'admin'**
+                if (userRole === 'staff' || userRole === 'admin') {
                     staffUsers.push({
                         id: userRecord.uid,
                         email: userRecord.email || "N/D",
                         nome: userRecord.displayName || "Non specificato",
-                        ruolo: customClaims.admin === true ? "admin" : "user",
+                        role: userRole,
+                        disabled: userRecord.disabled,
                     });
                 }
             });
@@ -42,11 +47,11 @@ export const admin_getAllUsers = functions.region("europe-west1").https.onCall(a
 
         } while (nextPageToken);
 
-        logger.info(`Restituiti ${staffUsers.length} utenti staff.`);
+        logger.info(`Restituiti ${staffUsers.length} utenti dello staff.`);
         return staffUsers;
 
     } catch (error: any) {
         logger.error("Errore durante il recupero dell'elenco dello staff:", error);
-        throw new functions.https.HttpsError("internal", `Impossibile recuperare l'elenco dello staff: ${error.message}`);
+        throw new HttpsError("internal", `Impossibile recuperare l'elenco dello staff: ${error.message}`);
     }
 });

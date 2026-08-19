@@ -34,54 +34,52 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.risorseUmane_gestisciAccessoTecnico = void 0;
-const functions = __importStar(require("firebase-functions"));
+const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
-const logger = __importStar(require("firebase-functions/logger"));
-exports.risorseUmane_gestisciAccessoTecnico = functions.region("europe-west1").https.onCall(async (data, context) => {
-    var _a;
+const firebase_functions_1 = require("firebase-functions");
+const REGION = "europe-west1";
+exports.risorseUmane_gestisciAccessoTecnico = (0, https_1.onCall)({ region: REGION }, async (request) => {
+    var _a, _b;
     // 1. Autenticazione e Autorizzazione
-    if (!context.auth || context.auth.token.role !== 'admin') {
-        logger.error(`Tentativo non autorizzato di gestire accesso. UID: ${((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid) || 'Nessuno'}`);
-        throw new functions.https.HttpsError("permission-denied", "Solo gli amministratori possono eseguire questa operazione.");
+    if (((_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'admin') {
+        firebase_functions_1.logger.error(`Tentativo non autorizzato di gestire accesso. UID: ${((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'Nessuno'}`);
+        throw new https_1.HttpsError("permission-denied", "Solo gli amministratori possono eseguire questa operazione.");
     }
     // 2. Validazione Input
-    const { uid, action } = data;
+    const { uid, action } = request.data;
     if (!uid || (action !== "enable" && action !== "disable")) {
-        throw new functions.https.HttpsError("invalid-argument", "Dati non validi. Fornire 'uid' e 'action' ('enable'/'disable').");
+        throw new https_1.HttpsError("invalid-argument", "Dati non validi. Fornire 'uid' e 'action' ('enable'/'disable').");
     }
-    logger.info(`Richiesta di ${action} per UID: ${uid} dall'admin: ${context.auth.token.email}`);
+    firebase_functions_1.logger.info(`Richiesta di ${action} per UID: ${uid} dall'admin: ${request.auth.token.email}`);
     const db = admin.firestore();
     const auth = admin.auth();
     const newState = action === "enable";
     try {
-        // 3. Trova il documento del tecnico basandosi sul CAMPO 'uid', non sull'ID del documento.
+        // 3. Trova il documento del tecnico basandosi sul CAMPO 'uid'.
         const tecniciRef = db.collection("tecnici");
         const querySnapshot = await tecniciRef.where("uid", "==", uid).limit(1).get();
         if (querySnapshot.empty) {
-            logger.error(`ERRORE CRITICO: Nessun documento tecnico trovato in Firestore per l'UID: ${uid}. L'utente esiste in Auth ma non nel DB.`);
-            // Nonostante l'errore nel DB, procediamo con l'aggiornamento in Auth per mantenere la coerenza con la richiesta.
-            // Potrebbe essere necessario un intervento manuale per allineare Firestore.
+            firebase_functions_1.logger.error(`ERRORE CRITICO: Nessun documento tecnico trovato in Firestore per l'UID: ${uid}.`);
         }
         else {
             const tecnicoDoc = querySnapshot.docs[0];
-            logger.info(`Trovato documento tecnico: ${tecnicoDoc.id} per UID: ${uid}. Aggiornamento di 'appAccess' a ${newState}...`);
-            // Aggiorna il documento corretto in Firestore
+            firebase_functions_1.logger.info(`Trovato documento tecnico: ${tecnicoDoc.id}. Aggiornamento di 'appAccess' a ${newState}...`);
             await tecnicoDoc.ref.update({ appAccess: newState });
-            logger.info(`Documento Firestore ${tecnicoDoc.id} aggiornato con successo.`);
+            firebase_functions_1.logger.info(`Documento Firestore ${tecnicoDoc.id} aggiornato con successo.`);
         }
         // 4. Aggiorna lo stato dell'utente in Firebase Authentication
         await auth.updateUser(uid, { disabled: !newState });
-        logger.info(`Stato utente in Authentication aggiornato per UID: ${uid}. Disabilitato: ${!newState}`);
+        firebase_functions_1.logger.info(`Stato utente in Authentication per UID: ${uid} aggiornato. Disabilitato: ${!newState}`);
         const actionText = newState ? "abilitato" : "revocato";
         const message = `Accesso ${actionText} con successo per l'utente con UID: ${uid}.`;
         return { status: "success", message: message };
     }
     catch (error) {
-        logger.error(`Fallimento nella gestione dell'accesso per UID ${uid}:`, error);
+        firebase_functions_1.logger.error(`Fallimento nella gestione dell'accesso per UID ${uid}:`, error);
         if (error.code === "auth/user-not-found") {
-            throw new functions.https.HttpsError("not-found", `CRITICO: Nessun utente trovato in Authentication con UID: ${uid}. Impossibile procedere.`);
+            throw new https_1.HttpsError("not-found", `CRITICO: Nessun utente trovato in Authentication con UID: ${uid}. Impossibile procedere.`);
         }
-        throw new functions.https.HttpsError("internal", `Si è verificato un errore interno: ${error.message}`);
+        throw new https_1.HttpsError("internal", `Si è verificato un errore interno: ${error.message}`);
     }
 });
 //# sourceMappingURL=risorseUmaneGestisciAccessoTecnico.js.map

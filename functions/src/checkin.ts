@@ -3,9 +3,10 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 
+const REGION = "europe-west1";
+
 // --- INIZIO DEFINIZIONE TIPO LOCALE ---
-// Duplico la definizione qui per rendere la funzione auto-contenuta e risolvere l'errore di deploy.
-// Questa struttura deve rimanere sincronizzata con `src/models/definitions.ts`
+// Duplico la definizione qui per rendere la funzione auto-contenuta.
 interface Checkin {
   id: string;
   tecnicoId: string;
@@ -21,14 +22,8 @@ interface Checkin {
 
 /**
  * Crea un nuovo documento di check-in/out nella collezione `checkin_giornalieri`.
- *
- * Questa funzione è sicura e segue le specifiche del file `presenze_nuova.md`.
- *
- * @param {any} data - L'oggetto dati inviato dal client.
- * @param {CallableContext} context - Il contesto della funzione, include l'autenticazione.
- * @returns {Promise<{id: string}>} - L'ID del documento creato.
  */
-export const createCheckin = onCall(async (request) => {
+export const createCheckin = onCall({ region: REGION }, async (request) => {
   const { data, auth } = request;
 
   // 1. CONTROLLO DI SICUREZZA FONDAMENTALE

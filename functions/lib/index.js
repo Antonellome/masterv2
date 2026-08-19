@@ -33,14 +33,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.riparaScuderi = exports.admin_getAllUsers = exports.forceAdmin = exports.eliminaTecnico = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.createCheckin = exports.eliminaAnagrafica = exports.aggiornaAnagrafica = exports.syncAllAnagrafiche = exports.creaAnagrafica = exports.getAllRapportiniForSync = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = exports.migraStaffUnaTantum = void 0;
+exports.riparaScuderi = exports.admin_getAllUsers = exports.forceAdmin = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.createCheckin = exports.eliminaAnagrafica = exports.aggiornaAnagrafica = exports.syncAllAnagrafiche = exports.creaAnagrafica = exports.getAllRapportiniForSync = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
-// ===================================================================
-// !! NUOVA FUNZIONE DI MIGRAZIONE UNA TANTUM !!
-var migraStaffUnaTantum_1 = require("./migraStaffUnaTantum");
-Object.defineProperty(exports, "migraStaffUnaTantum", { enumerable: true, get: function () { return migraStaffUnaTantum_1.migraStaffUnaTantum; } });
-// ===================================================================
 // --- Funzioni CRUD Generiche (NUOVA ARCHITETTURA) ---
 var genericCrud_1 = require("./genericCrud");
 Object.defineProperty(exports, "createDocument", { enumerable: true, get: function () { return genericCrud_1.createDocument; } });
@@ -69,8 +64,6 @@ var amministrazioneGestisciUtenti_1 = require("./amministrazioneGestisciUtenti")
 Object.defineProperty(exports, "amministrazione_gestisciUtenti", { enumerable: true, get: function () { return amministrazioneGestisciUtenti_1.amministrazione_gestisciUtenti; } });
 var risorseUmaneGestisciAccessoTecnico_1 = require("./risorseUmaneGestisciAccessoTecnico");
 Object.defineProperty(exports, "risorseUmane_gestisciAccessoTecnico", { enumerable: true, get: function () { return risorseUmaneGestisciAccessoTecnico_1.risorseUmane_gestisciAccessoTecnico; } });
-var risorseUmaneEliminaTecnico_1 = require("./risorseUmaneEliminaTecnico");
-Object.defineProperty(exports, "eliminaTecnico", { enumerable: true, get: function () { return risorseUmaneEliminaTecnico_1.eliminaTecnico; } });
 var forceAdmin_1 = require("./forceAdmin");
 Object.defineProperty(exports, "forceAdmin", { enumerable: true, get: function () { return forceAdmin_1.forceAdmin; } });
 var adminGetAllUsers_1 = require("./adminGetAllUsers");

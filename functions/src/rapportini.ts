@@ -1,161 +1,120 @@
 
-import { onRequest } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { logger } from "firebase-functions";
 
 const db = admin.firestore();
-const REGION = "us-central1";
+const REGION = "europe-west1";
 
-// Funzione di utility per verificare i permessi
-const verifyAuth = async (req: any, res: any): Promise<admin.auth.DecodedIdToken | null> => {
-    const idToken = req.headers.authorization?.split('Bearer ')[1];
-    if (!idToken) {
-        res.status(401).json({ status: 'error', message: 'Token di autorizzazione mancante.' });
-        return null;
+// Funzione di utilità per convertire in modo sicuro qualsiasi valore in un oggetto Date o null.
+// Gestisce Timestamp di Firestore, stringhe di data, e oggetti corrotti.
+const toDateSafe = (timestamp: any): Date | null => {
+    if (!timestamp) return null;
+    if (timestamp && typeof timestamp.toDate === 'function') {
+        // Formato Timestamp di Firestore standard
+        return timestamp.toDate();
     }
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        return decodedToken;
-    } catch (error: any) {
-        logger.error(`Errore di autenticazione:`, error);
-        res.status(401).json({ status: 'error', message: 'Token non valido o scaduto.' });
-        return null;
+    if (timestamp && typeof timestamp === 'object' && typeof timestamp._seconds === 'number') {
+        // Formato oggetto comune quando i Timestamp vengono serializzati
+        return new Date(timestamp._seconds * 1000);
     }
+    // Prova a creare una data da una stringa o numero
+    const d = new Date(timestamp);
+    if (!isNaN(d.getTime())) {
+        return d;
+    }
+    // Se tutto fallisce, logga l'anomalia e restituisci null
+    logger.warn("toDateSafe: Rilevato formato data non valido o corrotto.", { value: timestamp });
+    return null;
 };
 
-// ============================================================================
-// FUNZIONE DI CREAZIONE - Logica di scrittura diretta e sicura con Timestamp
-// ============================================================================
-export const createRapportino = onRequest({ region: REGION, cors: true }, async (req, res) => {
-    if (req.method !== 'POST') {
-        res.status(405).send('Method Not Allowed');
-        return;
-    }
-
-    const decodedToken = await verifyAuth(req, res);
-    if (!decodedToken) return;
-
-    const data = req.body.data || req.body;
-
-    const dataWithTimestamps = {
-        ...data,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: decodedToken.uid,
-    };
-
-    try {
-        const docRef = await db.collection('rapportini').add(dataWithTimestamps);
-        logger.info(`Rapportino creato con ID: ${docRef.id} da UID: ${decodedToken.uid}`);
-        res.status(201).json({ status: 'success', id: docRef.id });
-    } catch (error) {
-        logger.error("Errore durante la creazione del rapportino:", error);
-        res.status(500).json({ status: 'error', message: 'Errore interno durante la creazione del rapportino.' });
-    }
-});
-
-// ============================================================================
-// FUNZIONE DI AGGIORNAMENTO - Logica di scrittura diretta e sicura con Timestamp
-// ============================================================================
-export const updateRapportino = onRequest({ region: REGION, cors: true }, async (req, res) => {
-    if (req.method !== 'POST') {
-        res.status(405).send('Method Not Allowed');
-        return;
-    }
-
-    const decodedToken = await verifyAuth(req, res);
-    if (!decodedToken) return;
-
-    const { id, data } = req.body;
-    if (!id || !data) {
-        res.status(400).json({ status: 'error', message: 'ID o dati del rapportino mancanti.' });
-        return;
-    }
-
-    const dataWithTimestamp = {
-        ...data,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedBy: decodedToken.uid,
-    };
-
-    try {
-        const docRef = db.collection('rapportini').doc(id);
-        await docRef.update(dataWithTimestamp);
-        logger.info(`Rapportino ${id} aggiornato con successo da UID: ${decodedToken.uid}`);
-        res.status(200).json({ status: 'success' });
-    } catch (error) {
-        logger.error(`Errore durante l'aggiornamento del rapportino ${id}:`, error);
-        res.status(500).json({ status: 'error', message: `Errore interno durante l'aggiornamento del rapportino ${id}.` });
-    }
-});
-
-// ============================================================================
-// FUNZIONE DI CANCELLAZIONE - Verifiche di sicurezza migliorate
-// ============================================================================
-export const deleteRapportino = onRequest({ region: REGION, cors: true }, async (req, res) => {
-    if (req.method !== 'POST') {
-        res.status(405).send('Method Not Allowed');
-        return;
-    }
-
-    const decodedToken = await verifyAuth(req, res);
-    if (!decodedToken) return;
-
-    const { id } = req.body;
-    if (!id) {
-        res.status(400).json({ status: 'error', message: 'ID del rapportino mancante.' });
-        return;
-    }
-
-    if (decodedToken.admin !== true) {
-        logger.warn(`Utente non autorizzato (UID: ${decodedToken.uid}) ha tentato di eliminare il rapportino ${id}.`);
-        res.status(403).json({ status: 'error', message: "Azione non autorizzata. Solo gli amministratori possono eliminare." });
-        return;
+export const getAllRapportiniForSync = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "L'utente non è autenticato.");
     }
 
     try {
-        const docRef = db.collection('rapportini').doc(id);
-        await docRef.delete();
+        const snapshot = await db.collection("rapportini").get();
         
-        logger.info(`Rapportino ${id} eliminato con successo dall'admin (UID: ${decodedToken.uid}).`);
-        res.status(200).json({ status: 'success', message: `Rapportino ${id} eliminato.` });
+        // 1. Mappa tutti i documenti includendo il loro ID.
+        const allDocs = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        
+        // 2. Filtra solo i documenti non marcati come eliminati.
+        const activeDocs = allDocs.filter(doc => doc.isDeleted !== true);
 
-    } catch (error) {
-        logger.error(`Errore CANCELLAZIONE rapportino ${id}:`, error);
-        res.status(500).json({ status: 'error', message: 'Errore interno del server.' });
-    }
-});
-
-// ===============================================================================
-// FUNZIONE PER LA SINCRONIZZAZIONE - Restituisce tutti i rapportini per il client
-// ===============================================================================
-export const getAllRapportiniForSync = onRequest({ region: REGION, cors: true }, async (req, res) => {
-    if (req.method !== 'POST') { // Le callable function sono sempre POST
-        res.status(405).send('Method Not Allowed');
-        return;
-    }
-
-    const decodedToken = await verifyAuth(req, res);
-    if (!decodedToken) return; // Errore già gestito
-
-    try {
-        const snapshot = await db.collection('rapportini').get();
-        const rapportini = snapshot.docs.map(doc => {
-            const data = doc.data();
-            // Converti i timestamp di Firestore in un formato serializzabile (millisecondi)
+        // ===========================================================================================
+        //  ** LOGICA DI TRASFORMAZIONE CORRETTA **
+        //  Non scartiamo più nessun documento. Usiamo `map` per trasformare ogni documento.
+        //  Ogni campo data viene sanitizzato. Se un campo data è corrotto, diventa `null`,
+        //  ma l'oggetto rapportino viene comunque incluso nel risultato.
+        // ===========================================================================================
+        const rapportiniProcessati = activeDocs.map(doc => {
             return {
-                ...data,
-                id: doc.id,
-                data: data.data.toDate(), // Assicurati che il campo data sia un oggetto Date
-                createdAt: data.createdAt?.toMillis(),
-                updatedAt: data.updatedAt?.toMillis(),
+                ...doc,
+                dataInizio: toDateSafe(doc.dataInizio),
+                createdAt: toDateSafe(doc.createdAt),
+                dataFine: toDateSafe(doc.dataFine),
+                updatedAt: toDateSafe(doc.updatedAt),
             };
         });
 
-        res.status(200).json({ data: rapportini });
+        // Questo log ora dovrebbe sempre riportare "Documenti scartati: 0".
+        logger.info(`Processo completato. Rapportini validi da inviare: ${rapportiniProcessati.length}. Documenti scartati: ${activeDocs.length - rapportiniProcessati.length}`);
+
+        return { data: rapportiniProcessati };
 
     } catch (error) {
-        logger.error("Errore durante il recupero dei rapportini per la sincronizzazione:", error);
-        res.status(500).json({ status: 'error', message: 'Errore interno durante il recupero dei dati.' });
+        logger.error("ERRORE CRITICO in getAllRapportiniForSync:", error);
+        throw new HttpsError("internal", "Errore interno durante il recupero dei dati.");
+    }
+});
+
+// --- Funzioni CRUD mantenute per integrità ---
+
+export const createRapportino = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "L'utente non è autenticato.");
+    const data = request.data;
+    const dataWithTimestamps = { ...data, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: request.auth.uid, isDeleted: false };
+    try {
+        const docRef = await db.collection("rapportini").add(dataWithTimestamps);
+        return { status: "success", id: docRef.id };
+    } catch (error) {
+        logger.error("Errore creazione rapportino:", error);
+        throw new HttpsError("internal", "Errore interno.");
+    }
+});
+
+export const updateRapportino = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "L'utente non è autenticato.");
+    const { id, data } = request.data;
+    if (!id || !data) throw new HttpsError("invalid-argument", "ID o dati mancanti.");
+    const dataWithTimestamp = { ...data, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: request.auth.uid };
+    try {
+        await db.collection("rapportini").doc(id).update(dataWithTimestamp);
+        return { status: "success" };
+    } catch (error) {
+        logger.error(`Errore aggiornamento ${id}:`, error);
+        throw new HttpsError("internal", `Errore interno.`);
+    }
+});
+
+export const deleteRapportino = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Utente non autenticato.");
+    const claims = request.auth.token;
+    if (claims.role !== 'admin' && claims.role !== 'superadmin') {
+         throw new HttpsError("permission-denied", "Solo gli amministratori possono eliminare.");
+    }
+    const { rapportinoId } = request.data;
+    if (!rapportinoId) throw new HttpsError("invalid-argument", "ID rapportino non fornito.");
+    try {
+        await db.collection('rapportini').doc(rapportinoId).update({ 
+            isDeleted: true,
+            deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+            deletedBy: request.auth.uid
+        });
+        return { success: true };
+    } catch (error) {
+        logger.error(`Errore soft-delete ${rapportinoId}:`, error);
+        throw new HttpsError('internal', 'Errore interno durante l\'eliminazione.');
     }
 });
