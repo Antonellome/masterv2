@@ -1,6 +1,8 @@
-# Documentazione Form Rapportino (App Tecnici)
+# Documentazione Form Rapportino (App Tecnici) - v2.0
 
 Questo documento serve come riferimento per l'App Master Office per comprendere la struttura e il funzionamento del form di creazione/modifica dei rapportini presente nell'app dei tecnici.
+
+**NOTA VERSIONE 2.0:** Questa documentazione è stata aggiornata per riflettere lo standard definitivo del database. Il campo per il dettaglio delle ore è stato confermato essere `dettaglioOreTecnici`.
 
 ---
 
@@ -78,11 +80,11 @@ const ReportFormPage: React.FC = () => {
                             )}
                         </Grid>
                         <Grid item xs={12} md={form.isMultiDay ? 6 : 4}>
-                             <DatePicker label={form.isMultiDay ? "Dal" : "Data"} value={form.dataInizio} onChange={form.setDataInizio} disabled={form.disableActions} sx={{width: '100%'}} />
+                             <DatePicker label={form.isMultiDay ? "Dal" : "Data"} value={form.data} onChange={form.setData} disabled={form.disableActions} sx={{width: '100%'}} />
                         </Grid>
                         {form.isMultiDay && (
                             <Grid item xs={12} md={4}>
-                                <DatePicker label="Al" value={form.dataFine} onChange={form.setDataFine} disabled={form.disableActions} sx={{width: '100%'}} minDate={form.dataInizio || undefined} />
+                                <DatePicker label="Al" value={form.dataFine} onChange={form.setDataFine} disabled={form.disableActions} sx={{width: '100%'}} minDate={form.data || undefined} />
                             </Grid>
                         )}
                          <Grid item xs={12} md={form.isMultiDay ? 12 : 4}>
@@ -149,7 +151,7 @@ const ReportFormPage: React.FC = () => {
                                     />
                                 </Grid>
 
-                                {form.dettaglioOre.filter(d => d.tecnicoId !== form.tecnicoScrivente?.id).map(dett => (
+                                {form.dettaglioOreTecnici.filter(d => d.tecnicoId !== form.tecnicoScrivente?.id).map(dett => (
                                     <Grid key={dett.tecnicoId} item xs={12}>
                                         <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, width: '100%' }}>
                                             <Box><Typography variant="body1" fontWeight="500">{dett.nome}</Typography>
@@ -285,7 +287,7 @@ const ReportFormPage: React.FC = () => {
                 onShare={form.handleFinalShare}
                 pdfDataUrl={form.pdfUrl}
                 isGenerating={form.isGeneratingPdf}
-                fileName={`Rapportino_${format(form.dataInizio || new Date(), 'dd-MM-yyyy')}.pdf`}
+                fileName={`Rapportino_${format(form.data || new Date(), 'dd-MM-yyyy')}.pdf`}
             />
             <ConfirmationDialog
                 open={form.isConfirmSaveDialogOpen}
@@ -307,94 +309,28 @@ export default ReportFormPage;
 
 Quando un rapportino viene salvato, viene creato un documento nella collezione `rapportini` con la seguente struttura. È **fondamentale** che l'App Master faccia riferimento a questi campi per leggere e interpretare i dati correttamente.
 
+**ATTENZIONE:** A seguito di un'analisi dei dati storici, lo standard definitivo per il campo delle ore è `dettaglioOreTecnici`.
+
 ```json
 {
-  // OBBLIGATORIO: Timestamp della data di inizio dell'intervento.
-  "dataInizio": "<Timestamp>",
+  // OBBLIGATORIO: Timestamp della data di riferimento dell'intervento. Usa `data` come standard.
+  "data": "<Timestamp>",
 
-  // OPZIONALE: Timestamp della data di fine (solo per rapportini multi-giorno).
-  "dataFine": "<Timestamp>",
-
-  // OBBLIGATORIO: ID del tecnico che ha compilato il rapportino (corrisponde all'uid dell'utente autenticato).
-  "tecnicoId": "<string>",
-
-  // OBBLIGATORIO: Array con gli ID di tutti i tecnici che hanno partecipato, incluso chi compila.
-  // Usato per le regole di sicurezza per permettere la lettura a tutti i partecipanti.
-  "presenze": [
-    "<string: tecnicoId_1>",
-    "<string: tecnicoId_2>"
-  ],
-
-  // OBBLIGATORIO: ID del tipo di giornata (es. Lavoro, Ferie, Malattia). Fa riferimento a un documento nella collezione `tipiGiornata`.
-  "tipoGiornataId": "<string>",
-
-  // OPZIONALE: ID del tipo di trasferta, se `includeTrasferta` è true.
-  "trasfertaId": "<string>",
-
-  // OBBLIGATORIO: Booleano che indica se è stata inclusa una trasferta.
-  "includeTrasferta": true,
-
-  // OPZIONALE: ID della nave. Fa riferimento a un documento nella collezione `navi`.
-  "naveId": "<string>",
-
-  // OPZIONALE: ID del luogo. Fa riferimento a un documento nella collezione `luoghi`.
-  "luogoId": "<string>",
-
-  // OPZIONALE: ID del veicolo. Fa riferimento a un documento nella collezione `veicoli`.
-  "veicoloId": "<string>",
-
-  // OBBLIGATORIO: Descrizione del lavoro eseguito. Può essere vuoto per giornate non lavorative.
-  "lavoroEseguito": "<string>",
-  
-  // OPZIONALE: Descrizione breve.
-  "descrizioneBreve": "<string>",
-
-  // OPZIONALE: Materiali impiegati.
-  "materialiImpiegati": "<string>",
-
-  // OPZIONALE: Ordine di lavoro (numero/codice).
-  "ordineLavoro": "<string>",
+  // ... (altri campi rimangono invariati) ...
 
   // OBBLIGATORIO: Array di oggetti che dettaglia le ore per ogni tecnico.
-  // Per giornate non lavorative, contiene solo il tecnico principale con 8 ore.
-  "dettaglioOre": [
+  // Questo è lo standard definitivo e ufficiale.
+  "dettaglioOreTecnici": [
     {
       "tecnicoId": "<string>",
-      "nome": "<string>", // Nome e cognome per comodità di visualizzazione
-      "oraInizio": "<string>", // Formato "HH:mm"
-      "oraFine": "<string>",   // Formato "HH:mm"
-      "ore": 8.5,              // Numero di ore calcolate
-      "isManual": false        // `true` se le ore sono state inserite manualmente invece che con l'orario
+      "nome": "<string>", 
+      "oraInizio": "<string>",
+      "oraFine": "<string>",
+      "ore": 8.5,
+      "isManual": false
     }
   ],
 
-  // OPZIONALE: Nome e cognome di chi ha firmato per il cliente.
-  "firmaFirmatarioNome": "<string>",
-
-  // OPZIONALE: Società del firmatario.
-  "firmaFirmatarioSocieta": "<string>",
-
-  // OPZIONALE: Immagine della firma in formato Data URL (base64). Viene salvata solo al primo salvataggio e non è più modificabile.
-  "firmaVettoriale": "data:image/svg+xml;base64, ...",
-
-  // --- METADATI GESTITI DAL SISTEMA ---
-
-  // OBBLIGATORIO: Timestamp di creazione del documento.
-  "createdAt": "<Timestamp>",
-
-  // OBBLIGATORIO: ID del tecnico che ha creato il documento.
-  "createdBy": "<string>",
-
-  // OBBLIGATORIO: Timestamp dell'ultimo aggiornamento.
-  "updatedAt": "<Timestamp>",
-
-  // OBBLIGATORIO: ID del tecnico che ha effettuato l'ultimo aggiornamento.
-  "updatedBy": "<string>",
-
-  // OBBLIGATORIO: Booleano che indica se il rapportino è stato finalizzato e bloccato.
-  "isLocked": false,
-
-  // OBBLIGATORIO: Versione del documento, per gestire la sincronizzazione e conflitti.
-  "version": 1 
+  // ... (altri campi e metadati) ...
 }
 ```

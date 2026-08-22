@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.riparaScuderi = exports.admin_getAllUsers = exports.forceAdmin = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.createCheckin = exports.eliminaAnagrafica = exports.aggiornaAnagrafica = exports.syncAllAnagrafiche = exports.creaAnagrafica = exports.getAllRapportiniForSync = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = void 0;
+exports.riparaScuderi = exports.admin_getAllUsers = exports.forceAdmin = exports.risorseUmane_gestisciAccessoTecnico = exports.amministrazione_gestisciUtenti = exports.createTecnico = exports.deleteNotificationBatch = exports.deleteNotifiche = exports.sendNotifica = exports.markNotificheAsRead = exports.getNotifiche = exports.createCheckin = exports.eliminaAnagrafica = exports.aggiornaAnagrafica = exports.syncAllAnagrafiche = exports.creaAnagrafica = exports.getAllRapportiniForSync = exports.deleteRapportino = exports.updateRapportino = exports.createRapportino = exports.deleteDocument = exports.updateDocument = exports.createDocument = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 // --- Funzioni CRUD Generiche (NUOVA ARCHITETTURA) ---
@@ -57,6 +57,13 @@ Object.defineProperty(exports, "eliminaAnagrafica", { enumerable: true, get: fun
 // Check-in - API Sicura per le Presenze (NUOVA AGGIUNTA FASE F2)
 var checkin_1 = require("./checkin");
 Object.defineProperty(exports, "createCheckin", { enumerable: true, get: function () { return checkin_1.createCheckin; } });
+// Notifiche - API per App Tecnici (NUOVA AGGIUNTA FASE T)
+var notifiche_1 = require("./notifiche");
+Object.defineProperty(exports, "getNotifiche", { enumerable: true, get: function () { return notifiche_1.getNotifiche; } });
+Object.defineProperty(exports, "markNotificheAsRead", { enumerable: true, get: function () { return notifiche_1.markNotificheAsRead; } });
+Object.defineProperty(exports, "sendNotifica", { enumerable: true, get: function () { return notifiche_1.sendNotifica; } });
+Object.defineProperty(exports, "deleteNotifiche", { enumerable: true, get: function () { return notifiche_1.deleteNotifiche; } });
+Object.defineProperty(exports, "deleteNotificationBatch", { enumerable: true, get: function () { return notifiche_1.deleteNotificationBatch; } });
 // Gestione Tecnici e Utenti
 var createTecnico_1 = require("./createTecnico");
 Object.defineProperty(exports, "createTecnico", { enumerable: true, get: function () { return createTecnico_1.createTecnico; } });

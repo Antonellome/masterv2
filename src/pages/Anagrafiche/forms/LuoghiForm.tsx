@@ -35,7 +35,7 @@ const LuoghiForm: React.FC<LuoghiFormProps> = ({ onSubmit, defaultValues }) => {
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Controller
             name="nome"
             control={control}
@@ -50,7 +50,7 @@ const LuoghiForm: React.FC<LuoghiFormProps> = ({ onSubmit, defaultValues }) => {
             )}
           />
         </Grid>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Controller
             name="clienteId"
             control={control}
@@ -77,7 +77,7 @@ const LuoghiForm: React.FC<LuoghiFormProps> = ({ onSubmit, defaultValues }) => {
             )}
           />
         </Grid>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Button type="submit" variant="contained" color="primary" fullWidth>
             Salva
           </Button>

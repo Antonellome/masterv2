@@ -79,7 +79,11 @@ const OrariDefault = () => {
                 Orario di Lavoro Standard
             </Typography>
             <Grid container spacing={3} alignItems="center">
-                <Grid item xs={12} sm={4}>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 4
+                    }}>
                     <TextField 
                         label="Inizio Lavoro" 
                         name="inizio" 
@@ -90,7 +94,11 @@ const OrariDefault = () => {
                         InputLabelProps={{ shrink: true }} 
                     />
                 </Grid>
-                <Grid item xs={12} sm={4}>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 4
+                    }}>
                     <TextField 
                         label="Fine Lavoro" 
                         name="fine" 
@@ -101,7 +109,11 @@ const OrariDefault = () => {
                         InputLabelProps={{ shrink: true }} 
                     />
                 </Grid>
-                <Grid item xs={12} sm={4}>
+                <Grid
+                    size={{
+                        xs: 12,
+                        sm: 4
+                    }}>
                     <FormControl fullWidth>
                         <InputLabel>Pausa</InputLabel>
                         <Select

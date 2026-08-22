@@ -17,12 +17,11 @@ import {
 } from '@mui/material';
 import DirectionsBoatIcon from '@mui/icons-material/DirectionsBoat';
 import PlaceIcon from '@mui/icons-material/Place';
-// AGGIORNAMENTO: Importiamo i nostri hook moderni
-import { useAnagraficaData } from '@/contexts/DataContext';
-import { useCollectionData } from '@/hooks/useCollectionData';
-import { Checkin } from '@/models/definitions';
+// Import our new central store
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import type { Checkin } from '@/models/definitions';
 
-// --- INTERFACCE ---
+// --- INTERFACES (unchanged) ---
 interface AggregatedData {
   id: string;
   nome: string;
@@ -30,7 +29,7 @@ interface AggregatedData {
   count: number;
 }
 
-// --- COMPONENTI INTERNI (invariati) ---
+// --- INTERNAL COMPONENTS (unchanged) ---
 const RiepilogoTable = ({ title, data, icon }: { title: string, data: AggregatedData[], icon: React.ReactNode }) => (
     <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
         <Box display="flex" alignItems="center" mb={2}>
@@ -68,21 +67,27 @@ const RiepilogoTable = ({ title, data, icon }: { title: string, data: Aggregated
     </Paper>
 );
 
-// --- COMPONENTE PRINCIPALE ---
+// --- MAIN COMPONENT (Now simplified) ---
 const CheckinVisivo: React.FC = () => {
-  // 1. Carichiamo i dati dai nostri hook locali
-  const { data: checkins, loading: loadingCheckins, error: errorCheckins } = useCollectionData<Checkin>('checkin_giornalieri');
-  const { navi, luoghi, loading: loadingAnagrafiche, error: errorAnagrafiche } = useAnagraficaData();
+  // 1. Get all data directly from the central store.
+  const { navi, luoghi, checkins, loading, error } = useRapportiniStore(state => ({
+    navi: state.navi,
+    luoghi: state.luoghi,
+    checkins: state.checkins,
+    loading: state.loading,
+    error: state.error,
+  }));
 
-  // 2. Aggrega i dati per la visualizzazione (la logica interna non cambia)
+  // 2. Memoize the aggregation logic. The core logic is the same,
+  // but it now uses the pre-fetched maps for better performance.
   const { naviAgg, luoghiAgg } = useMemo(() => {
     if (!checkins || checkins.length === 0) {
         return { naviAgg: [], luoghiAgg: [] };
     }
 
     const anagrafiche = [
-      ...navi.map(n => ({...n, tipo: 'nave'})),
-      ...luoghi.map(l => ({...l, tipo: 'luogo'}))
+      ...navi.map(n => ({...n, tipo: 'nave' as const})),
+      ...luoghi.map(l => ({...l, tipo: 'luogo' as const}))
     ];
     const anagraficheMap = new Map(anagrafiche.map(a => [a.id, a]));
 
@@ -106,28 +111,35 @@ const CheckinVisivo: React.FC = () => {
 
   }, [checkins, navi, luoghi]);
 
-  const loading = loadingAnagrafiche || loadingCheckins;
-  const error = errorAnagrafiche || errorCheckins;
-
+  // 3. Render loading/error states based on the global state.
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
   }
   if (error) {
-    return <Alert severity="error">{typeof error === 'string' ? error : error.message}</Alert>
+    return <Alert severity="error">{error}</Alert>
   }
 
+  // 4. Render the UI (unchanged).
   return (
-    <Box>
-        <Typography variant="h5" gutterBottom>Riepilogo Visivo Presenze</Typography>
-        <Grid container spacing={4} mt={1}>
-            <Grid item xs={12} md={6}>
-                <RiepilogoTable title="Navi" data={naviAgg} icon={<DirectionsBoatIcon color="primary" />} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-                <RiepilogoTable title="Luoghi" data={luoghiAgg} icon={<PlaceIcon color="secondary" />} />
-            </Grid>
-        </Grid>
-    </Box>
+      <Box>
+          <Typography variant="h5" gutterBottom>Riepilogo Visivo Presenze</Typography>
+          <Grid container spacing={4} mt={1}>
+              <Grid
+                  size={{
+                      xs: 12,
+                      md: 6
+                  }}>
+                  <RiepilogoTable title="Navi" data={naviAgg} icon={<DirectionsBoatIcon color="primary" />} />
+              </Grid>
+              <Grid
+                  size={{
+                      xs: 12,
+                      md: 6
+                  }}>
+                  <RiepilogoTable title="Luoghi" data={luoghiAgg} icon={<PlaceIcon color="secondary" />} />
+              </Grid>
+          </Grid>
+      </Box>
   );
 };
 

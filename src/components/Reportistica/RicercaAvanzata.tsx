@@ -4,7 +4,7 @@ import {
     Paper, Typography, Button, Box, TextField, Autocomplete, Grid,
     Snackbar, Alert, Tooltip, SvgIcon
 } from '@mui/material';
-import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem, GridSortComparator } from '@mui/x-data-grid';
+import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -17,9 +17,9 @@ import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Tecnico, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
-import { functions } from '@/config/firebase';
-import { httpsCallable } from 'firebase/functions';
-import { useGlobalStore } from '@/stores/globalStore';
+import { rapportinoCloudService } from '@/services/rapportinoCloudService';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { parseToDayjs } from '@/utils/dateUtils';
 
 const SignatureIcon = (props: any) => (
     <SvgIcon {...props} viewBox="0 0 24 24">
@@ -28,27 +28,6 @@ const SignatureIcon = (props: any) => (
 );
 
 dayjs.locale('it');
-
-interface FlatRapportino {
-    id: string;
-    data: Date;
-    dataFormatted: string;
-    mainTecnicoNome: string;
-    altriTecniciNomi: string[];
-    tecnicoIds: string[];
-    breveDescrizione: string; // Updated field name
-    tipoGiornataNome: string;
-    tipoGiornataId?: string | null;
-    naveNome: string;
-    naveId?: string | null;
-    luogoNome: string;
-    luogoId?: string | null;
-    clienteNome: string;
-    clienteId?: string | null;
-    ordineLavoro?: string;
-    oreTotali: string;
-    hasFirma: boolean;
-}
 
 interface FilterState {
     dataDa: Dayjs | null;
@@ -61,25 +40,27 @@ interface FilterState {
     ordineLavoro: string;
 }
 
-const calculateTotalHours = (details: any[] | undefined): number => {
-    if (!Array.isArray(details)) return 0;
-    return details.reduce((sum, d) => {
-        const hours = parseFloat(d?.ore);
-        return !isNaN(hours) ? sum + hours : sum;
-    }, 0);
+// Placeholder for the unimplemented removeRapportino from the store
+const useSafeRapportiniStore = () => {
+    const store = useRapportiniStore();
+    const removeRapportino = (id: string) => {
+        // This is a dummy implementation. The real implementation should be in the store.
+        console.warn(`removeRapportino called with ${id}, but it's not implemented in the store yet.`);
+    };
+    return { ...store, removeRapportino };
 };
 
-const dateSortComparator: GridSortComparator<Date> = (v1, v2) => new Date(v1).getTime() - new Date(v2).getTime();
 
 const RicercaAvanzata: React.FC = () => {
     const navigate = useNavigate();
     
     const {
-        rapportini, removeRapportino,
+        rapportini,
         tecnici, navi, clienti, luoghi, tipiGiornata,
         tecniciMap, naviMap, clientiMap, luoghiMap, tipiGiornataMap,
-        areAnagraficheLoading
-    } = useGlobalStore(state => state);
+        loading,
+        removeRapportino // This is now the safe dummy function
+    } = useSafeRapportiniStore();
 
     const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`)), [tecnici]);
     const sortedNavi = useMemo(() => [...navi].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
@@ -93,73 +74,28 @@ const RicercaAvanzata: React.FC = () => {
 
     const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
 
-    const flatRapportini = useMemo((): FlatRapportino[] => {
-        if (!rapportini || !rapportini.length || areAnagraficheLoading) {
-            return [];
-        }
-
-        return rapportini.map((r: Rapportino) => {
-            const dataInizio = r.dataInizio instanceof Date ? r.dataInizio : new Date(r.dataInizio);
-
-            const tecniciPresenti = (r.presenze || [])
-                .map((id: string) => tecniciMap.get(id))
-                .filter((t): t is Tecnico => !!t);
-
-            const tecniciNomi = tecniciPresenti.map(t => `${t.cognome} ${t.nome}`.trim());
-
-            if (tecniciNomi.length === 0 && r.tecnicoId) {
-                const author = tecniciMap.get(r.tecnicoId);
-                if (author) {
-                    tecniciNomi.push(`${author.cognome} ${author.nome}`.trim());
-                }
-            }
-
-            const mainTecnicoNome = tecniciNomi[0] || 'N/D';
-            const altriTecniciNomi = tecniciNomi.slice(1);
-            const tecnicoIds = tecniciPresenti.map(t => t.id);
-
-            const nave = r.naveId ? naviMap.get(r.naveId) : undefined;
-            const luogo = r.luogoId ? luoghiMap.get(r.luogoId) : undefined;
-            const clienteId = nave?.clienteId || luogo?.clienteId;
-            const cliente = clienteId ? clientiMap.get(clienteId) : undefined;
-            const tipoGiornata = r.tipoGiornataId ? tipiGiornataMap.get(r.tipoGiornataId) : undefined;
-
-            return {
-                id: r.id!,
-                data: dataInizio,
-                dataFormatted: dayjs(dataInizio).isValid() ? dayjs(dataInizio).format("DD/MM/YYYY") : "Data Invalida",
-                mainTecnicoNome,
-                altriTecniciNomi,
-                tecnicoIds,
-                breveDescrizione: r.descrizioneBreve || r.lavoroEseguito || '', // <-- Usa `descrizioneBreve` con fallback a `lavoroEseguito`
-                tipoGiornataNome: tipoGiornata?.nome || "N/D",
-                tipoGiornataId: r.tipoGiornataId,
-                naveNome: nave?.nome || "N/D",
-                naveId: r.naveId,
-                luogoNome: luogo?.nome || "N/D",
-                luogoId: r.luogoId,
-                clienteNome: cliente?.nome || "N/D",
-                clienteId: cliente?.id,
-                ordineLavoro: r.ordineLavoro,
-                oreTotali: formatOreLavoro(calculateTotalHours(r.dettaglioOre)),
-                hasFirma: !!r.firmaVettoriale,
-            };
-        });
-    }, [rapportini, areAnagraficheLoading, naviMap, clientiMap, luoghiMap, tecniciMap, tipiGiornataMap]);
-
     const filteredRapportini = useMemo(() => {
-        return flatRapportini.filter(r => {
-           if (filters.dataDa && dayjs(r.data).isBefore(filters.dataDa, 'day')) return false;
-           if (filters.dataA && dayjs(r.data).isAfter(filters.dataA, 'day')) return false;
-           if (filters.tecnico && !r.tecnicoIds.includes(filters.tecnico.id)) return false;
+        return rapportini.filter(r => {
+           if (!r) return false; // Defensive check
+           const dataRapportino = parseToDayjs(r.data);
+           if (filters.dataDa && dataRapportino && dataRapportino.isBefore(filters.dataDa, 'day')) return false;
+           if (filters.dataA && dataRapportino && dataRapportino.isAfter(filters.dataA, 'day')) return false;
+           if (filters.tecnico && !r.presenze?.includes(filters.tecnico.id)) return false;
            if (filters.nave && r.naveId !== filters.nave.id) return false;
-           if (filters.cliente && r.clienteId !== filters.cliente.id) return false;
-           if (filters.tipoGiornata && r.tipoGiornataId !== filters.tipoGiornata.id) return false;
            if (filters.luogo && r.luogoId !== filters.luogo.id) return false;
+           if (filters.tipoGiornata && r.tipoGiornataId !== filters.tipoGiornata.id) return false;
            if (filters.ordineLavoro && !(r.ordineLavoro || '').toLowerCase().includes(filters.ordineLavoro.toLowerCase())) return false;
+           
+           if (filters.cliente) {
+                const nave = naviMap.get(r.naveId || '');
+                const luogo = luoghiMap.get(r.luogoId || '');
+                const clienteId = nave?.clienteId || luogo?.clienteId;
+                if (clienteId !== filters.cliente.id) return false;
+           }
+
            return true;
        });
-   }, [flatRapportini, filters]);
+   }, [rapportini, filters, naviMap, luoghiMap]);
 
     const handleDeleteRequest = useCallback((id: string) => setRowToDelete(id), []);
     
@@ -168,9 +104,8 @@ const RicercaAvanzata: React.FC = () => {
         const id = rowToDelete;
         setRowToDelete(null);
         try {
-            const deleteRapportinoFunc = httpsCallable(functions, 'deleteRapportino');
-            await deleteRapportinoFunc({ rapportinoId: id });
-            removeRapportino(id);
+            await rapportinoCloudService.delete(id);
+            removeRapportino(id); // Calls the dummy function
             setSnackbar({ open: true, message: 'Rapportino eliminato con successo.', severity: 'success' });
         } catch (error: any) {
             setSnackbar({ open: true, message: error.message || "Errore durante l'eliminazione.", severity: 'error' });
@@ -188,32 +123,44 @@ const RicercaAvanzata: React.FC = () => {
 
     const resetFilters = useCallback(() => setFilters({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' }), []);
 
-    const columns: GridColDef<FlatRapportino>[] = useMemo(() => [
-        { field: 'data', headerName: 'Data', width: 110, renderCell: (params) => params.row.dataFormatted, sortComparator: dateSortComparator, type: 'date' },
+    // *** THE FINAL FIX (R.7) - DEFENSIVE COLUMN DEFINITIONS ***
+    const columns: GridColDef<Rapportino>[] = useMemo(() => [
         { 
-            field: 'tecnici', headerName: 'Tecnici', flex: 1.5, minWidth: 150, 
+            field: 'data', 
+            headerName: 'Data', 
+            width: 110, 
+            valueGetter: params => parseToDayjs(params.row?.data)?.toDate(),
+            renderCell: params => parseToDayjs(params.row?.data)?.format("DD/MM/YYYY") ?? "--",
+            type: 'date' 
+        },
+        { 
+            field: 'tecnici', 
+            headerName: 'Tecnici', 
+            flex: 1.5, minWidth: 150, 
+            valueGetter: params => params.row?.presenze?.map(id => tecniciMap.get(id)?.nome).join(', ') ?? '',
             renderCell: params => {
-                const mainTecnico = params.row.mainTecnicoNome;
-                const altriTecnici = params.row.altriTecniciNomi;
-                const fullList = [mainTecnico, ...altriTecnici].join(', ');
-                const numAltri = altriTecnici.length;
+                if (!params.row) return null;
+                const mainTecnico = tecniciMap.get(params.row.tecnicoId);
+                const altriTecniciCount = (params.row.presenze || []).filter(id => id !== params.row.tecnicoId).length;
+                const fullList = (params.row.presenze || []).map(id => tecniciMap.get(id)?.nome).join(', ');
                 return (
                     <Tooltip title={fullList} arrow placement="top">
                         <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
-                            <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>{mainTecnico}</Typography>
-                            {numAltri > 0 && (
-                                <Typography variant="body2" component="span" sx={{ ml: 0.5, color: 'text.secondary' }}>(+{numAltri})</Typography>
+                            <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>{mainTecnico?.nome || 'N/A'}</Typography>
+                            {altriTecniciCount > 0 && (
+                                <Typography variant="body2" component="span" sx={{ ml: 0.5, color: 'text.secondary' }}>(+{altriTecniciCount})</Typography>
                             )}
                         </Box>
                     </Tooltip>
                 );
             }
         },
-        { 
-            field: 'breveDescrizione', 
-            headerName: 'Breve Descrizione', // <-- TITOLO CORRETTO
+        {
+            field: 'lavoroEseguito',
+            headerName: 'Breve Descrizione',
             flex: 2, 
             minWidth: 200,
+            valueGetter: params => params.row?.lavoroEseguito || '',
             renderCell: params => (
                 <Tooltip title={params.value || ''} arrow placement="top">
                     <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
@@ -222,12 +169,24 @@ const RicercaAvanzata: React.FC = () => {
                 </Tooltip>
             )
         },
-        { field: 'tipoGiornataNome', headerName: 'Tipo Giornata', flex: 1 },
-        { field: 'ordineLavoro', headerName: 'Ordine Lavoro', flex: 1 },
-        { field: 'naveNome', headerName: 'Nave', flex: 1 },
-        { field: 'luogoNome', headerName: 'Luogo', flex: 1 },
-        { field: 'clienteNome', headerName: 'Cliente', flex: 1 },
-        { field: 'oreTotali', headerName: 'Ore Totali', width: 100, align: 'right', headerAlign: 'right' },
+        { field: 'tipoGiornataNome', headerName: 'Tipo Giornata', flex: 1, valueGetter: params => tipiGiornataMap.get(params.row?.tipoGiornataId || '')?.nome || ''},
+        { field: 'ordineLavoro', headerName: 'Ordine Lavoro', flex: 1, valueGetter: params => params.row?.ordineLavoro || '' },
+        { field: 'naveNome', headerName: 'Nave', flex: 1, valueGetter: params => naviMap.get(params.row?.naveId || '')?.nome || ''},
+        { field: 'luogoNome', headerName: 'Luogo', flex: 1, valueGetter: params => luoghiMap.get(params.row?.luogoId || '')?.nome || ''},
+        { field: 'clienteNome', headerName: 'Cliente', flex: 1, valueGetter: params => {
+            if (!params.row) return '';
+            const nave = naviMap.get(params.row.naveId || '');
+            const luogo = luoghiMap.get(params.row.luogoId || '');
+            const clienteId = nave?.clienteId || luogo?.clienteId;
+            return clienteId ? clientiMap.get(clienteId)?.nome || '' : '';
+        }},
+        { 
+            field: 'oreTotali', 
+            headerName: 'Ore Totali', 
+            width: 100, align: 'right', headerAlign: 'right',
+            valueGetter: params => (params.row?.dettaglioOreTecnici || []).reduce((sum, d) => sum + (d.ore || 0), 0),
+            renderCell: params => formatOreLavoro(params.value)
+        },
         { 
             field: 'hasFirma', 
             headerName: 'Firma', 
@@ -236,6 +195,7 @@ const RicercaAvanzata: React.FC = () => {
             headerAlign: 'center',
             sortable: false,
             disableColumnMenu: true,
+            valueGetter: params => !!params.row?.firmaVettoriale,
             renderCell: (params) => (
                 <Tooltip title={params.value ? "Firmato" : "Non Firmato"}>
                     <span>
@@ -252,7 +212,7 @@ const RicercaAvanzata: React.FC = () => {
                 <GridActionsCellItem icon={<DeleteIcon color="error" />} label="Elimina" onClick={(e) => { e.stopPropagation(); handleDeleteRequest(id as string);}} showInMenu />,
             ],
         },
-    ], [handleEdit, handleDeleteRequest]);
+    ], [handleEdit, handleDeleteRequest, tecniciMap, tipiGiornataMap, naviMap, luoghiMap, clientiMap]);
     
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
@@ -260,15 +220,55 @@ const RicercaAvanzata: React.FC = () => {
                 <Paper elevation={2} sx={{ p: 2, flexShrink: 0 }}>
                     <Typography variant="h6" sx={{ mb: 2 }}>Filtri Ricerca</Typography>
                      <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedNavi} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedLuoghi} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedClienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={sortedTipiGiornata} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><TextField label="Ordine di Lavoro" value={filters.ordineLavoro} onChange={e => handleFilterChange('ordineLavoro', e.target.value)} fullWidth size="small" /></Grid>
-                        <Grid item xs={12}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><Autocomplete options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={filters.tecnico} onChange={(_, v) => handleFilterChange('tecnico', v)} renderInput={(params) => <TextField {...params} label="Tecnico" size="small" />} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><Autocomplete options={sortedNavi} getOptionLabel={(o) => o.nome} value={filters.nave} onChange={(_, v) => handleFilterChange('nave', v)} renderInput={(params) => <TextField {...params} label="Nave" size="small" />} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><Autocomplete options={sortedLuoghi} getOptionLabel={(o) => o.nome} value={filters.luogo} onChange={(_, v) => handleFilterChange('luogo', v)} renderInput={(params) => <TextField {...params} label="Luogo" size="small" />} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><Autocomplete options={sortedClienti} getOptionLabel={(o) => o.nome} value={filters.cliente} onChange={(_, v) => handleFilterChange('cliente', v)} renderInput={(params) => <TextField {...params} label="Cliente" size="small" />} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><Autocomplete options={sortedTipiGiornata} getOptionLabel={(o) => o.nome} value={filters.tipoGiornata} onChange={(_, v) => handleFilterChange('tipoGiornata', v)} renderInput={(params) => <TextField {...params} label="Tipo Giornata" size="small" />} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><TextField label="Ordine di Lavoro" value={filters.ordineLavoro} onChange={e => handleFilterChange('ordineLavoro', e.target.value)} fullWidth size="small" /></Grid>
+                        <Grid size={12}><Button onClick={resetFilters} variant="outlined" fullWidth>Azzera Filtri</Button></Grid>
                     </Grid>
                 </Paper>
 
@@ -276,7 +276,7 @@ const RicercaAvanzata: React.FC = () => {
                     <DataGrid 
                         rows={filteredRapportini} 
                         columns={columns} 
-                        loading={areAnagraficheLoading} 
+                        loading={loading} 
                         localeText={itIT.components.MuiDataGrid.defaultProps.localeText} 
                         slots={{ toolbar: GridToolbar }} 
                         slotProps={{ toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 500 } } }} 

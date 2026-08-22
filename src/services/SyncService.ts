@@ -17,7 +17,6 @@ const toDate = (timestamp: any): Date => {
 };
 
 const syncAnagrafiche = async () => {
-    console.log("SyncService: Inizio sincronizzazione ANAGRAFICHE.");
     try {
         const getAnagrafiche = httpsCallable(functions, 'syncAllAnagrafiche');
         const response = await getAnagrafiche();
@@ -39,7 +38,6 @@ const syncAnagrafiche = async () => {
         };
 
         useGlobalStore.getState().setAnagrafiche(anagrafiche);
-        console.log(`SyncService: Anagrafiche sincronizzate. Trovati ${anagrafiche.tecnici.length} tecnici.`);
 
     } catch (error) {
         console.error("SyncService: ERRORE CRITICO durante la sincronizzazione delle anagrafiche:", error);
@@ -48,20 +46,10 @@ const syncAnagrafiche = async () => {
 };
 
 const syncRapportini = async () => {
-    console.log("SyncService: Inizio sincronizzazione RAPPORTINI.");
     try {
         const getAllRapportini = httpsCallable(functions, 'getAllRapportiniForSync');
         const response = await getAllRapportini();
         
-        // =========================================================================
-        //  DEBUGGING ATTIVO: STAMPO LA RISPOSTA GREZZA DAL SERVER
-        // =========================================================================
-        console.log("******************************************************************");
-        console.log("*** RISPOSTA GREZZA RICEVUTA DA getAllRapportiniForSync ***");
-        console.log(JSON.stringify(response, null, 2));
-        console.log("******************************************************************");
-        // =========================================================================
-
         const serverData = (response.data as any)?.data;
 
         if (!Array.isArray(serverData)) {
@@ -112,7 +100,6 @@ const syncRapportini = async () => {
         }).filter((r): r is Rapportino => r !== null);
 
         useGlobalStore.getState().setRapportini(rapportiniClient);
-        console.log(`SyncService: Sincronizzazione rapportini completata. Caricati: ${successCount}. Falliti: ${errorCount}.`);
 
     } catch (error) {
         console.error("SyncService: ERRORE CRITICO durante la sincronizzazione dei rapportini:", error);
@@ -121,7 +108,6 @@ const syncRapportini = async () => {
 };
 
 export const avviaSincronizzazioneCompleta = async () => {
-    console.log("Sincronizzazione Completa avviata...");
     useGlobalStore.getState().setIsSyncInProgress(true);
     
     await syncAnagrafiche();
@@ -129,5 +115,4 @@ export const avviaSincronizzazioneCompleta = async () => {
     
     useGlobalStore.getState().setIsSyncInProgress(false);
     useGlobalStore.getState().setLastUpdated();
-    console.log("Sincronizzazione Completa terminata.");
 };

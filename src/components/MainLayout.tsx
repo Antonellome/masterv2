@@ -156,13 +156,7 @@ const MainLayout = () => {
                 </Drawer>
             </Box>
 
-            {/* 
-              FIX DEFINITIVO: Rimossa la proprietà `height: '100vh'` che creava un conflitto
-              di layout e impediva il corretto calcolo delle dimensioni dei componenti figli.
-              Il layout flex esistente è sufficiente a garantire che questo Box occupi
-              tutto lo spazio verticale disponibile in modo corretto.
-            */}
-            <Box component="main" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <Box component="main" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <Toolbar sx={{ minHeight: `${appBarHeight} !important` }} />
                 <Box sx={{ flexGrow: 1, p: 3, overflow: 'auto' }}>
                     <Outlet />

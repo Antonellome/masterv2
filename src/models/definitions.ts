@@ -104,10 +104,11 @@ export interface Luogo extends BaseEntity {
   clienteId?: string; 
 }
 
-// --- DATI OPERATIVI (STRUTTURA UNIFICATA POST-COMPATIBILITÀ) ---
+// --- DATI OPERATIVI (STRUTTURA UNIFICATA - FASE R.4) ---
 
-export interface DettaglioOre {
+export interface DettaglioOreTecnici {
   tecnicoId: string;
+  nome: string;
   oraInizio?: string | null;
   oraFine?: string | null;
   ore?: number;
@@ -115,8 +116,8 @@ export interface DettaglioOre {
 }
 
 export interface Rapportino extends BaseEntity {
-  // --- CAMPI FONDAMENTALI ---
-  dataInizio: Timestamp | Date;
+  // --- CAMPI FONDAMENTALI (STANDARD R.4) ---
+  data: Timestamp | Date;
   dataFine?: Timestamp | Date | null;
   tecnicoId: string;
   presenze: string[];
@@ -133,8 +134,8 @@ export interface Rapportino extends BaseEntity {
   lavoroEseguito: string;
   materialiImpiegati?: string | null;
 
-  // --- DETTAGLIO ORE ---
-  dettaglioOre: DettaglioOre[];
+  // --- DETTAGLIO ORE (STANDARD R.4) ---
+  dettaglioOreTecnici: DettaglioOreTecnici[];
 
   // --- FIRMA ---
   firmaFirmatarioNome?: string | null;
@@ -151,12 +152,14 @@ export interface Rapportino extends BaseEntity {
   
   // --- CAMPO PER SINCRONIZZAZIONE LOCALE ---
   isDirty?: 1 | 0;
+  isDeleted?: boolean;
 
-  // --- CAMPI LEGACY (da rimuovere in futuro) ---
+  // --- CAMPI LEGACY (mantenuti per compatibilità in lettura) ---
+  dataInizio?: any; 
   approvato?: boolean;
   note?: string;
   oreLavoro?: number;
-  data?: any; 
+  dettaglioOre?: any;
 }
 
 /**
@@ -288,12 +291,15 @@ export interface Scadenza {
 
 export type EventoGiornaliero = Rapportino | Checkin;
 
+export type CollectionName = 'rapportini' | 'tecnici' | 'clienti' | 'ditte' | 'navi' | 'luoghi' | 'categorie' | 'tipi_giornata' | 'veicoli' | 'checkin_giornalieri' | 'scadenze' | 'notifiche_inviate' | 'utenti' | 'impostazioni' | 'sync_manifest' | 'sync_queue_errors';
+
+
 export interface AnagraficaConfig {
     [key: string]: {
         collectionName: string;
         title: string;
         fields: FormField[];
-        columns: GridColDef[];
+        columns: any[];//GridColDef[];
         relations?: {
             [key: string]: {
                 collection: string;

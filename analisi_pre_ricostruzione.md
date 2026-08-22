@@ -60,16 +60,50 @@ L'analisi ha chiarito la divisione fondamentale dei ruoli tra le due applicazion
 Per uscire da questa situazione critica, è stato definito un piano d'azione in 3 fasi sequenziali:
 
 1.  **K.1 - Stabilizzazione Interfaccia:**
-    *   **Azione:** Riscrivere il componente `RapportiniTable.tsx` per renderlo robusto e "difensivo". Deve interpretare correttamente la struttura dati definita in `report_tecnici.md` e non andare in crash in presenza di dati corrotti. I dati corrotti verranno evidenziati con un indicatore visivo.
-    *   **Obiettivo:** Ottenere un'interfaccia stabile che permetta di visualizzare tutti i rapportini (corretti e corrotti) senza crash.
+    *   **Azione:** Riscrivere il componente `RapportiniTable.tsx` per renderlo robusto e "difensivo".
+    *   **Obiettivo:** Ottenere un'interfaccia stabile.
 
 2.  **K.2 - Bonifica Dati Backend:**
-    *   **Azione:** Sfruttando l'interfaccia stabilizzata, analizzare i dati su Firestore per identificare i rapportini duplicati e orfani. Eseguire, con conferma utente, operazioni chirurgiche di eliminazione.
-    *   **Obiettivo:** Pulire la collezione `rapportini` su Firestore, lasciando solo dati coerenti e validi.
+    *   **Azione:** Sfruttando l'interfaccia stabilizzata, analizzare ed eliminare i dati corrotti.
+    *   **Obiettivo:** Pulire la collezione `rapportini`.
 
 3.  **K.3 - Ripristino Funzionalità Amministrative:**
-    *   **Azione:** Attivare e implementare in modo sicuro i pulsanti "Modifica" ed "Elimina" nell'App Master, collegandoli a Cloud Functions che verifichino i permessi di amministratore.
-    *   **Obiettivo:** Fornire all'ufficio strumenti sicuri e affidabili per la gestione quotidiana dei dati.
+    *   **Azione:** Attivare in modo sicuro i pulsanti "Modifica" ed "Elimina".
+    *   **Obiettivo:** Fornire all'ufficio strumenti di gestione affidabili.
+
+---
+
+# Evoluzione del Piano: FASE P - Operazione "Terra Bruciata"
+
+*   **STATO:** **ATTIVO - EMERGENZA OPERATIVA.**
+*   **OBIETTIVO STRATEGICO:** Eradicare il debito tecnico residuo, con focus sull'azzeramento delle letture anomale su Firestore.
+
+### **Log Operativo e Piano d'Azione Corrente**
+
+*   **AZIONE P.1 - Bonifica Componente di Stampa:**
+    *   **STATO: ESEGUITO.**
+    *   **Azione:** Il componente `RapportinoPrint.tsx` è stato trasformato da "pagina" a "componente puro", rimuovendo ogni accesso diretto al database. Questa azione ha intenzionalmente interrotto la compatibilità con il suo componente genitore.
+
+*   **AZIONE P.E.1 - Blindatura Funzione `createRapportino`:**
+    *   **STATO: ESEGUITO.**
+    *   **Azione:** Risolto un blocco critico (`FirebaseError: internal`) riscrivendo la funzione per utilizzare una strategia di validazione "picking", più sicura, e migliorando il logging per future diagnosi.
+
+*   **AZIONE P.2 - Riparazione Integrazione Stampa:**
+    *   **STATO: DA FARE.**
+    *   **File Target:** `src/pages/RapportiniListPage.tsx`.
+    *   **Azione:** Modificare il componente per recuperare il rapportino completo dallo stato globale (Zustand) e passarlo come prop a `RapportinoPrint.tsx`, ripristinando la funzionalità di stampa in linea con la nuova architettura.
+
+*   **AZIONE P.3 - Analisi Componenti di Editing:**
+    *   **STATO: DA FARE.**
+    *   **Azione:** Verificare che `RapportinoEditPage.tsx` e i suoi figli carichino i dati dallo stato globale, senza query dirette.
+
+*   **AZIONE P.4 - Mappatura Dipendenze Residue:**
+    *   **STATO: DA FARE.**
+    *   **Azione:** Eseguire una ricerca globale di `"firebase/firestore"` per scovare e neutralizzare ogni altra istanza di accesso diretto al database.
+
+*   **AZIONE P.5 - Validazione e Monitoraggio:**
+    *   **STATO: DA FARE.**
+    *   **Azione:** Monitorare costantemente i log di Firestore per confermare il crollo delle letture dopo ogni intervento.
 
 ---
 
@@ -77,7 +111,7 @@ Per uscire da questa situazione critica, è stato definito un piano d'azione in 
 
 ### 1. Autenticazione (Analisi Completata)
 
-*   **Falla Critica (SEC-1, DI-2):** Sistema di permessi rotto e inaffidabile. Il client non si fida del token sicuro di Firebase.
+*   **Falla Critica (SEC-1, DI-2):** Sistema di permessi rotto e inaffidabile.
 
 ### 2. Tecnici (Analisi Completata)
 
@@ -86,7 +120,6 @@ Per uscire da questa situazione critica, è stato definito un piano d'azione in 
 ### 3. Reportistica (Analisi Completata)
 
 *   **Criticità Grave:** Logica di business insostenibile eseguita sul client (**PERF-1, PERF-2**).
-*   **BUG di Sicurezza:** Cancellazione senza verifica permessi.
 
 ### 4. Presenze (Analisi Completata)
 
@@ -95,33 +128,28 @@ Per uscire da questa situazione critica, è stato definito un piano d'azione in 
 ### 5. Anagrafiche (Analisi Completata)
 
 *   **Design Pattern:** Eccellente design scalabile.
-*   **Criticità:** Minato da fondamenta deboli (dipendenza da stato globale, join sul client, API non sicura).
 
 ### 6. Documenti / Scadenze (Analisi Completata)
 
 *   **Falla di Sicurezza (SEC-2):** CRUD completo eseguito direttamente dal client su Firestore, senza controlli.
-*   **Inconsistenza Architetturale (A-1):** Ignora gli standard del resto dell'app.
 
 ### 7. Notifiche (Analisi Completata)
 
-*   **Falla di Sicurezza (SEC-3):** Qualsiasi utente può inviare notifiche a chiunque scrivendo direttamente su Firestore.
-*   **Funzionalità Mancante:** Il sistema **non invia vere notifiche push** (FCM).
+*   **Falla di Sicurezza (SEC-3):** Qualsiasi utente può inviare notifiche a chiunque.
 
 ### 8. Impostazioni / Amministrazione (Analisi Completata)
 
-*   **Causa Principale di SEC-1:** La gestione dei ruoli è basata su una collezione Firestore separata (`admins`) invece che sui **Firebase Auth Custom Claims**. Questo è l'errore architetturale che invalida il sistema di permessi dell'intera app.
-*   **Implementazione Sicura (per le Scritture):** Paradossalmente, il componente usa correttamente una Cloud Function (`amministrazione_gestisciUtenti`) per tutte le operazioni di modifica.
+*   **Causa Principale di SEC-1:** La gestione dei ruoli è basata su una collezione Firestore separata (`admins`) invece che sui **Firebase Auth Custom Claims**.
 
 ### 9. Dashboard (Analisi Completata)
 
-*   **Epicentro delle Criticità di Performance (PERF-1, PERF-2):** La dashboard è l'esempio perfetto dell'architettura client-heavy. Esegue calcoli, aggregazioni e join estremamente pesanti direttamente nel browser.
-*   **Dipendenza dallo Stato Globale:** Non ha logica di data-fetching propria, ma dipende completamente dai dati caricati all'avvio.
+*   **Epicentro delle Criticità di Performance (PERF-1, PERF-2):** La dashboard è l'esempio perfetto dell'architettura client-heavy.
 
 ---
 
 # Piani di Ricostruzione (ARCHIVIATI)
 
-*Questa sezione contiene i piani di ristrutturazione passati, superati dall'evoluzione della strategia e dalla scoperta di criticità più profonde.*
+*Questa sezione contiene i piani di ristrutturazione passati, superati dall'evoluzione della strategia.*
 
 ## Fase 0: Messa in Sicurezza delle Cloud Functions Esistenti
 *   **STATO: FATTO.**
@@ -130,16 +158,16 @@ Per uscire da questa situazione critica, è stato definito un piano d'azione in 
 *   **STATO: FATTO.**
 
 ## Fase 2: Creazione di un'API Sicura con Cloud Functions
-*   **STATO: SUPERATO** dalla strategia globale.
+*   **STATO: SUPERATO**.
 
 ## Fase 3: Ottimizzazione delle Performance e Refactoring del Data Fetching
-*   **STATO: SUPERATO** dalla strategia globale.
+*   **STATO: SUPERATO**.
 
 ## Fase 4: Pulizia e Finalizzazione
-*   **STATO: SUPERATO** dalla strategia globale.
+*   **STATO: SUPERATO**.
 
 ## NUOVO PIANO DI RISTRUTTURAZIONE: REPORTISTICA E SINCRONIZZAZIONE (SUPERATO)
-*   **STATO: SUPERATO** dalla strategia globale del `DataHydrator` e dalla scoperta della dualità architetturale.
+*   **STATO: SUPERATO**.
 
 ## AGGIORNAMENTO PIANO: Architettura Globale e Debito Tecnico (SUPERATO)
-*   **STATO: SUPERATO** e completato con l'eliminazione di Dexie e la centralizzazione su Zustand.
+*   **STATO: SUPERATO**.

@@ -1,83 +1,67 @@
-import { useEffect, useMemo } from 'react';
-import { useScadenzeStore } from '../store/useScadenzeStore';
-import dayjs from 'dayjs';
-import type { Scadenza } from '../models/definitions';
+import { useMemo } from 'react';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { Scadenza } from '@/models/definitions';
 
+/**
+ * Custom hook to process and categorize deadlines from the store.
+ * It provides memoized lists of deadlines that are expired, expiring soon,
+ * or upcoming.
+ *
+ * @returns An object containing categorized deadlines and a silence toggle.
+ */
 export const useScadenze = () => {
-    const {
-        scadenze,
-        loading,
-        error,
-        fetchScadenze,
-        toggleSilence
-    } = useScadenzeStore();
+    // Correctly select states from the store
+    const { scadenze, isScadenzaSilenced, toggleScadenzaSilence } = useRapportiniStore(state => ({
+        scadenze: state.scadenze || [], // <--- FIX: Default to an empty array to prevent crash on initial render
+        isScadenzaSilenced: state.isScadenzaSilenced,
+        toggleScadenzaSilence: state.toggleScadenzaSilence
+    }));
 
-    useEffect(() => {
-        if (scadenze.length === 0) { // Fetch solo se lo store è vuoto
-            fetchScadenze();
-        }
-    }, [fetchScadenze, scadenze.length]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    const { activeScadenze, silencedScadenze, activeScadenzeCount, overallStatus } = useMemo(() => {
-        const now = dayjs();
-        const active: Scadenza[] = [];
-        const silenced: Scadenza[] = [];
+    const processedScadenze = useMemo(() => {
+        const result: {
+            scadute: Scadenza[];
+            inScadenza: Scadenza[];
+            prossime: Scadenza[];
+        } = {
+            scadute: [],
+            inScadenza: [],
+            prossime: [],
+        };
 
+        // The scadenze array is now guaranteed to exist.
         scadenze.forEach(s => {
-            const dataScadenza = dayjs(s.data);
-            if (!dataScadenza.isValid()) return;
+            if (!s.data) return; // Skip if data is invalid
 
-            const giorniMancanti = dataScadenza.diff(now, 'day');
+            const scadenzaDate = s.data.toDate();
+            scadenzaDate.setHours(0, 0, 0, 0);
 
-            let status: 'ok' | 'imminente' | 'scaduto' = 'ok';
-            if (giorniMancanti < 0) {
-                status = 'scaduto';
-            } else if (giorniMancanti <= 30) {
-                status = 'imminente';
-            }
-            
-            const scadenzaConStatus = { ...s, status };
+            const diffTime = scadenzaDate.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            if (s.silenced) {
-                silenced.push(scadenzaConStatus);
+            if (diffDays < 0) {
+                result.scadute.push(s);
+            } else if (diffDays <= (s.giorniPreavviso || 30)) {
+                result.inScadenza.push(s);
             } else {
-                // --- LA CORREZIONE È QUI ---
-                // Aggiungi alla lista "Attive" solo se lo stato è critico.
-                if (status === 'scaduto' || status === 'imminente') {
-                    active.push(scadenzaConStatus);
-                }
+                result.prossime.push(s);
             }
         });
 
-        // Il conteggio si basa sulla lunghezza della lista filtrata
-        const finalActiveCount = active.length;
-        const hasScaduto = active.some(s => s.status === 'scaduto');
+        // Sort each category
+        const sortByDate = (a: Scadenza, b: Scadenza) => (a.data?.toDate().getTime() || 0) - (b.data?.toDate().getTime() || 0);
+        result.scadute.sort(sortByDate);
+        result.inScadenza.sort(sortByDate);
+        result.prossime.sort(sortByDate);
 
-        let overallStatus: 'ok' | 'imminente' | 'scaduto' = 'ok';
-        if (hasScaduto) {
-            overallStatus = 'scaduto';
-        } else if (finalActiveCount > 0) {
-            overallStatus = 'imminente';
-        }
-
-        const sorter = (a: Scadenza, b: Scadenza) => dayjs(a.data).diff(dayjs(b.data));
-
-        return {
-            activeScadenze: active.sort(sorter),
-            silencedScadenze: silenced.sort(sorter),
-            activeScadenzeCount: finalActiveCount, // Il conteggio ora corrisponde alla lista visualizzata
-            overallStatus
-        };
-    }, [scadenze]);
+        return result;
+    }, [scadenze, today]);
 
     return {
-        activeScadenze,
-        silencedScadenze,
-        activeScadenzeCount,
-        overallStatus,
-        loading,
-        error,
-        fetchScadenze,
-        toggleSilence
+        ...processedScadenze,
+        isSilenced: isScadenzaSilenced,
+        toggleSilence: toggleScadenzaSilence,
     };
 };

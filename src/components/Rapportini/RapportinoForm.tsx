@@ -2,28 +2,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     DialogContent, DialogTitle, DialogActions, Autocomplete, Button, CircularProgress, Grid, Alert, 
-    Divider, Box, Chip, TextField, Paper, IconButton, Typography
+    Divider, Box, Chip, TextField
 } from '@mui/material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import { Timestamp } from 'firebase/firestore';
-import type { Rapportino, TipoGiornata, Tecnico, Nave, Luogo, Veicolo, DettaglioOre } from '@/models/definitions';
-import { saveRapportino } from '@/services/rapportiniService';
-import { useCollectionData } from '@/hooks/useCollectionData';
-import { v4 as uuidv4 } from 'uuid';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { convertToRapportinoStandard } from '@/utils/rapportinoConverter';
-import { calculateTotalHours } from '@/utils/hoursCalculator';
-import { parseToDayjs } from '@/utils/dateUtils'; // <-- IMPORT DELL'UNICA VERA LEGGE
+import type { Rapportino, TipoGiornata, Tecnico, Nave, Luogo, Veicolo, DettaglioOreTecnici } from '@/models/definitions';
+import { rapportinoCloudService } from '@/services/rapportinoCloudService';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { parseToDayjs } from '@/utils/dateUtils';
+import GestoreOrariTecnico from './GestoreOrariTecnico';
 
 dayjs.locale('it');
-
-// --- VIA LA VECCHIA LOGICA INUTILE ---
-
-// Stato interno per la UI
-interface DettaglioOreState extends DettaglioOre { nome: string; }
 
 interface RapportinoFormProps {
     onClose: () => void;
@@ -31,147 +23,168 @@ interface RapportinoFormProps {
     initialDate?: dayjs.Dayjs;
 }
 
-const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino: rapportinoGrezzzo, initialDate }) => {
+const RapportinoForm: React.FC<RapportinoFormProps> = ({ onClose, rapportino, initialDate }) => {
     
-    const standardData = useMemo(() => convertToRapportinoStandard(rapportinoGrezzzo), [rapportinoGrezzzo]);
+    const { tecnici, navi, luoghi, veicoli, tipiGiornata, tipiGiornataMap } = useRapportiniStore(state => ({
+        tecnici: state.tecnici,
+        navi: state.navi,
+        luoghi: state.luoghi,
+        veicoli: state.veicoli,
+        tipiGiornata: state.tipiGiornata,
+        tipiGiornataMap: state.tipiGiornataMap
+    }));
 
-    const { data: tecnici, loading: loadingTecnici } = useCollectionData<Tecnico>('tecnici');
-    const { data: navi, loading: loadingNavi } = useCollectionData<Nave>('navi');
-    const { data: luoghi, loading: loadingLuoghi } = useCollectionData<Luogo>('luoghi');
-    const { data: veicoli, loading: loadingVeicoli } = useCollectionData<Veicolo>('veicoli');
-    const { data: tipiGiornata, loading: loadingTipiGiornata } = useCollectionData<TipoGiornata>('tipiGiornata');
+    const loadingMasterData = !tecnici.length || !tipiGiornata.length;
 
-    const loadingMasterData = loadingTecnici || loadingNavi || loadingLuoghi || loadingVeicoli || loadingTipiGiornata;
-
-    const [tecnicoScrivente, setTecnicoScrivente] = useState<Tecnico | null>(null);
-    // --- APPLICAZIONE DELLA NUOVA LEGGE ---
-    const [dataInizio, setDataInizio] = useState<Dayjs | null>(parseToDayjs(standardData.dataInizio) || (initialDate ? dayjs(initialDate) : dayjs()));
-    const [tipoGiornataId, setTipoGiornataId] = useState(standardData.tipoGiornataId);
-    const [nave, setNave] = useState<Nave | null>(null);
-    const [luogo, setLuogo] = useState<Luogo | null>(null);
-    const [lavoroEseguito, setLavoroEseguito] = useState(standardData.lavoroEseguito);
-    const [materialiImpiegati, setMaterialiImpiegati] = useState(standardData.materialiImpiegati);
-    const [dettaglioOre, setDettaglioOre] = useState<DettaglioOreState[]>([]);
+    const [data, setData] = useState<Dayjs | null>(null);
+    const [tecnicoId, setTecnicoId] = useState<string>('');
+    const [tipoGiornataId, setTipoGiornataId] = useState<string>('');
+    const [naveId, setNaveId] = useState<string | null>(null);
+    const [luogoId, setLuogoId] = useState<string | null>(null);
+    const [veicoloId, setVeicoloId] = useState<string | null>(null);
+    const [lavoroEseguito, setLavoroEseguito] = useState('');
+    const [materialiImpiegati, setMaterialiImpiegati] = useState('');
+    const [dettaglioOreTecnici, setDettaglioOreTecnici] = useState<DettaglioOreTecnici[]>([]);
+    const [presenze, setPresenze] = useState<string[]>([]);
     
     const [isSaving, setIsSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
     const tecniciMap = useMemo(() => new Map(tecnici.map(t => [t.id, t])), [tecnici]);
-    const tipiGiornataMap = useMemo(() => new Map(tipiGiornata.map(t => [t.id, t])), [tipiGiornata]);
     const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`)), [tecnici]);
 
     useEffect(() => {
-        if (loadingMasterData) return;
-
-        setTecnicoScrivente(tecniciMap.get(standardData.tecnicoId) || null);
-        setNave(navi.find(n => n.id === standardData.naveId) || null);
-        setLuogo(luoghi.find(l => l.id === standardData.luogoId) || null);
-        setLavoroEseguito(standardData.lavoroEseguito);
-        setMaterialiImpiegati(standardData.materialiImpiegati);
-        setTipoGiornataId(standardData.tipoGiornataId);
-        // --- APPLICAZIONE DELLA NUOVA LEGGE (ANCHE QUI) ---
-        setDataInizio(parseToDayjs(standardData.dataInizio) || (initialDate ? dayjs(initialDate) : dayjs()));
-
-        const dettagliConNome = standardData.dettaglioOre.map(d => {
-            const tecnico = tecniciMap.get(d.tecnicoId);
-            const tipoGiornata = tipiGiornataMap.get(standardData.tipoGiornataId);
-            const oreCalcolate = calculateTotalHours(tipoGiornata, [d]);
-            return {
-                ...d,
-                nome: tecnico ? `${tecnico.cognome} ${tecnico.nome}` : `ID Sconosciuto: ${d.tecnicoId}`,
-                ore: d.isManual ? d.ore : oreCalcolate
-            };
-        });
-        setDettaglioOre(dettagliConNome);
-
-    }, [standardData, loadingMasterData, tecniciMap, navi, luoghi, tipiGiornataMap, initialDate]);
-
-    
-    const handleAddTecnico = (_: any, tecnico: Tecnico | null) => {
-        if (tecnico && !dettaglioOre.some(d => d.tecnicoId === tecnico.id)) {
-            const nuovoDettaglio: DettaglioOreState = {
-                tecnicoId: tecnico.id,
-                nome: `${tecnico.cognome} ${tecnico.nome}`,
-                ore: 8,
-                isManual: true,
-            };
-            setDettaglioOre(prev => [...prev, nuovoDettaglio]);
+        if (rapportino) {
+            setData(parseToDayjs(rapportino.data));
+            setTecnicoId(rapportino.tecnicoId || '');
+            setTipoGiornataId(rapportino.tipoGiornataId || '');
+            setNaveId(rapportino.naveId || null);
+            setLuogoId(rapportino.luogoId || null);
+            setVeicoloId(rapportino.veicoloId || null);
+            setLavoroEseguito(rapportino.lavoroEseguito || '');
+            setMaterialiImpiegati(rapportino.materialiImpiegati || '');
+            setDettaglioOreTecnici(rapportino.dettaglioOreTecnici || []);
+            setPresenze(rapportino.presenze || []);
+        } else {
+            setData(initialDate || dayjs());
+            if (tecnici[0]) setTecnicoId(tecnici[0].id);
         }
-    };
-
-    const handleUpdateOre = (tecnicoId: string, ore: number) => {
-        setDettaglioOre(prev => prev.map(d => d.tecnicoId === tecnicoId ? { ...d, ore: isNaN(ore) ? 0 : ore, isManual: true } : d));
-    };
+    }, [rapportino, initialDate, tecnici]);
     
-    const handleRemoveDettaglio = (tecnicoId: string) => {
-        setDettaglioOre(prev => prev.filter(d => d.tecnicoId !== tecnicoId));
-    };
+    useEffect(() => {
+        const ids = dettaglioOreTecnici.map(d => d.tecnicoId);
+        setPresenze([...new Set([tecnicoId, ...ids].filter(Boolean))]);
+    }, [dettaglioOreTecnici, tecnicoId]);
+
 
     const handleSubmit = async () => {
-        if (!tecnicoScrivente || !tipoGiornataId || !dataInizio) { setFormError("Compilare i campi obbligatori."); return; }
+        if (!tecnicoId || !tipoGiornataId || !data) {
+            setFormError("Compilare i campi obbligatori: Tecnico, Data e Tipo Giornata.");
+            return;
+        }
         setFormError(null);
         setIsSaving(true);
 
         try {
-            const docToSave: Rapportino = {
-                ...(standardData.originalData),
-                id: standardData.id || uuidv4(),
-                dataInizio: Timestamp.fromDate(dataInizio.toDate()),
-                tecnicoId: tecnicoScrivente.id,
-                presenze: [...new Set(dettaglioOre.map(d => d.tecnicoId))],
+            const dataToSave: Partial<Rapportino> = {
+                data: Timestamp.fromDate(data.toDate()),
+                tecnicoId,
                 tipoGiornataId,
-                naveId: nave?.id || null,
-                luogoId: luogo?.id || null,
+                naveId,
+                luogoId,
+                veicoloId,
                 lavoroEseguito,
                 materialiImpiegati,
-                dettaglioOre: dettaglioOre.map(({nome, ...rest}) => rest),
-                updatedAt: Timestamp.now(),
-                updatedBy: tecnicoScrivente.id,
-                version: (standardData.originalData?.version || 0) + 1,
-                data: undefined,
-                note: undefined,
-                dettaglioOreTecnici: undefined,
-                oreLavoro: undefined,
-            } as Rapportino;
-
-            await saveRapportino(docToSave);
+                dettaglioOreTecnici,
+                presenze,
+                version: (rapportino?.version || 0) + 1,
+            };
+            
+            if (rapportino && rapportino.id) {
+                await rapportinoCloudService.update(rapportino.id, dataToSave);
+            } else {
+                await rapportinoCloudService.create(dataToSave);
+            }
             onClose();
-        } catch (e: any) { setFormError(`Errore: ${e.message}`); }
-        finally { setIsSaving(false); }
+        } catch (e: any) {
+            setFormError(`Errore durante il salvataggio: ${e.message}`);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     if (loadingMasterData) return <Box p={5} display="flex" justifyContent="center"><CircularProgress /></Box>;
 
+    const selectedTecnico = tecniciMap.get(tecnicoId) || null;
+    const selectedTipoGiornata = tipiGiornataMap.get(tipoGiornataId) || null;
+    const selectedNave = navi.find(n => n.id === naveId) || null;
+    const selectedLuogo = luoghi.find(l => l.id === luogoId) || null;
+
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
-            <DialogTitle>{standardData.isNew ? 'Nuovo Rapportino' : 'Modifica Rapportino'}</DialogTitle>
+            <DialogTitle>{rapportino ? 'Modifica Rapportino' : 'Nuovo Rapportino'}</DialogTitle>
             <DialogContent>
                 <Grid container spacing={2} sx={{ mt: 1 }}>
-                    {formError && <Grid item xs={12}><Alert severity="error">{formError}</Alert></Grid>}
+                    {formError && <Grid size={12}><Alert severity="error">{formError}</Alert></Grid>}
                     
-                    <Grid item xs={12} md={8}>
-                        <Autocomplete value={tecnicoScrivente} onChange={(_, v) => setTecnicoScrivente(v)} options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} isOptionEqualToValue={(o, v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Tecnico Responsabile" />} />
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 8
+                        }}>
+                        <Autocomplete
+                            value={selectedTecnico}
+                            onChange={(_, v) => setTecnicoId(v?.id || '')}
+                            options={sortedTecnici}
+                            getOptionLabel={(o) => `${o.cognome} ${o.nome}`}
+                            isOptionEqualToValue={(o, v) => o.id === v.id}
+                            renderInput={(p) => <TextField {...p} label="Tecnico Responsabile" />}
+                        />
                     </Grid>
-                    <Grid item xs={12} md={4}><DatePicker label="Data" value={dataInizio} onChange={setDataInizio} sx={{ width: '100%' }} /></Grid>
-                    <Grid item xs={12}><Autocomplete value={tipiGiornataMap.get(tipoGiornataId) || null} onChange={(_, v) => setTipoGiornataId(v?.id || '')} options={[...tipiGiornataMap.values()]} getOptionLabel={(o) => o.nome} renderInput={(p) => <TextField {...p} label="Tipo Giornata" />} /></Grid>
-
-                    <Grid item xs={12}><Divider sx={{ my: 1 }}><Chip label="Dettagli e Descrizione" /></Divider></Grid>
-                    <Grid item xs={12} md={6}><Autocomplete value={nave} onChange={(_,v) => setNave(v)} options={navi} getOptionLabel={(o) => o.nome} isOptionEqualToValue={(o,v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Nave" />} /></Grid>
-                    <Grid item xs={12} md={6}><Autocomplete value={luogo} onChange={(_,v) => setLuogo(v)} options={luoghi} getOptionLabel={(o) => o.nome} isOptionEqualToValue={(o,v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Luogo" />} /></Grid>
-                    <Grid item xs={12}><TextField label="Lavoro Eseguito" value={lavoroEseguito} onChange={e => setLavoroEseguito(e.target.value)} fullWidth multiline rows={4} /></Grid>
-                    <Grid item xs={12}><TextField label="Materiali Impiegati" value={materialiImpiegati} onChange={e => setMaterialiImpiegati(e.target.value)} fullWidth multiline rows={2} /></Grid>
-
-                    <Grid item xs={12}><Divider sx={{ my: 1 }}><Chip label="Tecnici e Ore" /></Divider></Grid>
-                    <Grid item xs={12}>{
-                        dettaglioOre.map(d => (
-                             <Paper key={d.tecnicoId} variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-                                <Typography variant="body1" sx={{ flexGrow: 1 }}>{d.nome}</Typography>
-                                <TextField label="Ore" type="number" value={d.ore || ''} onChange={(e) => handleUpdateOre(d.tecnicoId, parseFloat(e.target.value))} sx={{ width: '100px' }} size="small" helperText={d.isManual ? "Manuale" : "Calcolate"} />
-                                <IconButton size="small" onClick={() => handleRemoveDettaglio(d.tecnicoId)}><DeleteIcon /></IconButton>
-                            </Paper>
-                        ))}
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 4
+                        }}>
+                        <DatePicker label="Data" value={data} onChange={setData} sx={{ width: '100%' }} />
                     </Grid>
-                    <Grid item xs={12}><Autocomplete options={sortedTecnici.filter(t => !dettaglioOre.some(d => d.tecnicoId === t.id))} onChange={handleAddTecnico} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} renderInput={(p) => <TextField {...p} label="Aggiungi Tecnico..." />} value={null} clearOnBlur /></Grid>
+                    <Grid size={12}>
+                        <Autocomplete
+                            value={selectedTipoGiornata}
+                            onChange={(_, v) => setTipoGiornataId(v?.id || '')}
+                            options={[...tipiGiornata]}
+                            getOptionLabel={(o) => o.nome}
+                            renderInput={(p) => <TextField {...p} label="Tipo Giornata" />}
+                        />
+                    </Grid>
+
+                    <Grid size={12}><Divider sx={{ my: 1 }}><Chip label="Dettagli e Descrizione" /></Divider></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 6
+                        }}>
+                        <Autocomplete value={selectedNave} onChange={(_,v) => setNaveId(v?.id || null)} options={navi} getOptionLabel={(o) => o.nome} isOptionEqualToValue={(o,v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Nave" />} />
+                    </Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 6
+                        }}>
+                        <Autocomplete value={selectedLuogo} onChange={(_,v) => setLuogoId(v?.id || null)} options={luoghi} getOptionLabel={(o) => o.nome} isOptionEqualToValue={(o,v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Luogo" />} />
+                    </Grid>
+                    <Grid size={12}><TextField label="Lavoro Eseguito" value={lavoroEseguito} onChange={e => setLavoroEseguito(e.target.value)} fullWidth multiline rows={4} /></Grid>
+                    <Grid size={12}><TextField label="Materiali Impiegati" value={materialiImpiegati} onChange={e => setMaterialiImpiegati(e.target.value)} fullWidth multiline rows={2} /></Grid>
+
+                    <Grid size={12}><Divider sx={{ my: 1 }}><Chip label="Tecnici e Ore" /></Divider></Grid>
+                    <Grid size={12}>
+                       <GestoreOrariTecnico
+                           dettaglioOreTecnici={dettaglioOreTecnici}
+                           setDettaglioOreTecnici={setDettaglioOreTecnici}
+                           tecniciDisponibili={sortedTecnici}
+                           isReadOnly={false}
+                       />
+                    </Grid>
 
                 </Grid>
             </DialogContent>

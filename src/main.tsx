@@ -13,7 +13,6 @@ import App from './App';
 import './index.css';
 import '@/styles/global.css'; // <-- INIETTATO CSS GLOBALE PER SCROLLING
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import { DataProvider } from '@/contexts/DataContext';
 import { attemptDbRecovery } from './db/recovery';
 
 // ESEGUI IL CONTROLLO DI RECUPERO PRIMA DI QUALSIASI ALTRA COSA
@@ -22,13 +21,11 @@ attemptDbRecovery().then(() => {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <ThemeProvider>
-        <DataProvider>
-          <Router>
-            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={it}>
-              <App />
-            </LocalizationProvider>
-          </Router>
-        </DataProvider>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={it}>
+            <App />
+          </LocalizationProvider>
+        </Router>
       </ThemeProvider>
     </React.StrictMode>
   );

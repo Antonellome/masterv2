@@ -1,10 +1,10 @@
 
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
-import { useAnagraficaData } from '@/contexts/DataContext.tsx'; 
+import { useRapportiniStore } from '@/store/useRapportiniStore'; 
 import { Box, Chip, Typography } from '@mui/material';
 import dayjs from 'dayjs';
 import { Timestamp } from 'firebase/firestore';
-import type { Veicolo, Documento, Tecnico } from '@/models/definitions';
+import type { Veicolo, Tecnico } from '@/models/definitions';
 
 interface ScadenzaRow {
     id: string;
@@ -57,7 +57,11 @@ const columns: GridColDef<ScadenzaRow>[] = [
 ];
 
 const ScadenzeGrid = () => {
-    const { veicoli, tecnici } = useAnagraficaData();
+    // Data is now fetched from the central Zustand store
+    const { veicoli, tecnici } = useRapportiniStore(state => ({
+        veicoli: state.veicoli,
+        tecnici: state.tecnici,
+    }));
 
     const rows: ScadenzaRow[] = [
         ...(veicoli || []).flatMap((v: Veicolo): ScadenzaRow[] => [

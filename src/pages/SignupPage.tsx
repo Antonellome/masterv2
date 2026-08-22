@@ -51,7 +51,11 @@ const SignupPage: React.FC = () => {
         </Typography>
         <Box component="form" noValidate onSubmit={handleSignup} sx={{ mt: 3 }}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 autoComplete="given-name"
                 name="firstName"
@@ -65,7 +69,11 @@ const SignupPage: React.FC = () => {
                 disabled={loading}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 required
                 fullWidth
@@ -78,7 +86,7 @@ const SignupPage: React.FC = () => {
                 disabled={loading}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 required
                 fullWidth
@@ -91,7 +99,7 @@ const SignupPage: React.FC = () => {
                 disabled={loading}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 required
                 fullWidth
@@ -117,7 +125,7 @@ const SignupPage: React.FC = () => {
             {loading ? 'Registrazione...' : 'Registrati'}
           </Button>
           <Grid container justifyContent="flex-end">
-            <Grid item>
+            <Grid>
               <Link to="/login">
                 <Typography variant="body2">
                   Hai già un account? Accedi

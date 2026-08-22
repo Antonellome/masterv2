@@ -97,10 +97,18 @@ const CheckinVisivo: React.FC<CheckinVisivoProps> = ({ checkins, loading, error 
 
     return (
         <Grid container spacing={2} sx={{ mt: 1 }} alignItems="stretch">
-            <Grid item xs={12} md={6}>
+            <Grid
+                size={{
+                    xs: 12,
+                    md: 6
+                }}>
                 {renderGroup('Navi', <ShipIcon sx={{ mr: 1, color: 'primary.main' }} />, naviEntries)}
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid
+                size={{
+                    xs: 12,
+                    md: 6
+                }}>
                 {renderGroup('Luoghi', <PlaceIcon sx={{ mr: 1, color: 'secondary.main' }} />, luoghiEntries)}
             </Grid>
         </Grid>

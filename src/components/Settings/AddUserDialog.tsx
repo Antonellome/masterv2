@@ -99,7 +99,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ open, onClose, onUserAdde
                     {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
                     <Grid container spacing={2} sx={{ pt: 1 }}>
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                             <TextField
                                 autoFocus
                                 margin="dense"
@@ -113,7 +113,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ open, onClose, onUserAdde
                                 disabled={loading || !!success}
                             />
                         </Grid>
-                         <Grid item xs={12}>
+                         <Grid size={12}>
                              <TextField
                                 margin="dense"
                                 id="email"
@@ -126,7 +126,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ open, onClose, onUserAdde
                                 disabled={loading || !!success}
                             />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid size={12}>
                             <FormControl fullWidth margin="dense">
                                 <InputLabel id="ruolo-label">Ruolo</InputLabel>
                                 <Select

@@ -1,61 +1,66 @@
-
 // src/services/notificationService.ts
-import { collection, query, where, onSnapshot, Unsubscribe } from 'firebase/firestore';
-import { db } from '@/firebase';
-import { useGlobalStore } from '@/stores/globalStore';
-import { INotification } from '@/models/definitions';
+import { functions } from '@/firebase/firebaseConfig'; // Assicurati che il percorso sia corretto
+import { httpsCallable } from 'firebase/functions';
+import { Notifica } from '@/models/definitions'; // Assicurati che il percorso sia corretto
 
-let unsubscribe: Unsubscribe | null = null;
+// --- Callable Functions ---
+const getNotificheCallable = httpsCallable(functions, 'getNotifiche');
+const markNotificheAsReadCallable = httpsCallable(functions, 'markNotificheAsRead');
+const deleteNotificheCallable = httpsCallable(functions, 'deleteNotifiche');
+const deleteNotificationBatchCallable = httpsCallable(functions, 'deleteNotificationBatch');
 
 /**
- * Inizializza il listener di Firestore per le notifiche dell'utente corrente.
- * Si sottoscrive ai cambiamenti e aggiorna lo store globale.
- * Restituisce una funzione per annullare la sottoscrizione.
+ * Recupera l'elenco completo delle notifiche per l'utente autenticato.
  */
-export function initializeNotificationListener() {
-  // Annulla qualsiasi sottoscrizione precedente per evitare listener multipli
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-  }
-
-  const { user, setNotifications, setNotificationsLoading } = useGlobalStore.getState();
-
-  if (!user) {
-    setNotifications([]);
-    setNotificationsLoading(false);
-    return; // Nessun utente, nessuna notifica
-  }
-
-  setNotificationsLoading(true);
-
-  const q = query(
-    collection(db, 'notifications'),
-    where("recipientId", "==", user.uid)
-  );
-
-  unsubscribe = onSnapshot(q, 
-    (querySnapshot) => {
-      const notifs = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as INotification))
-        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
-      
-      // Aggiorna lo store globale con i nuovi dati
-      setNotifications(notifs);
-    },
-    (error) => {
-      console.error("Errore nel fetch delle notifiche: ", error);
-      setNotificationsLoading(false);
+export const getNotifiche = async (): Promise<Notifica[]> => {
+    try {
+        const result = await getNotificheCallable();
+        const data = result.data as { notifiche: Notifica[] };
+        return data.notifiche;
+    } catch (error) {
+        console.error("Errore durante il recupero delle notifiche:", error);
+        throw new Error("Impossibile caricare le notifiche.");
     }
-  );
-}
+};
 
 /**
- * Interrompe l'ascolto delle notifiche.
+ * Segna una o più notifiche come lette.
+ * @param notificaIds - Un array di ID delle notifiche da marcare.
  */
-export function cleanupNotificationListener() {
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-  }
-}
+export const markNotificheAsRead = async (notificaIds: string[]): Promise<void> => {
+    if (notificaIds.length === 0) return;
+    try {
+        await markNotificheAsReadCallable({ notificaIds });
+    } catch (error) {
+        console.error("Errore durante l'aggiornamento delle notifiche:", error);
+        throw new Error("Impossibile segnare le notifiche come lette.");
+    }
+};
+
+/**
+ * Elimina una o più notifiche specifiche.
+ * @param notificaIds - Un array di ID delle notifiche da eliminare.
+ */
+export const deleteNotifiche = async (notificaIds: string[]): Promise<void> => {
+    if (notificaIds.length === 0) return;
+    try {
+        await deleteNotificheCallable({ notificaIds });
+    } catch (error) {
+        console.error("Errore durante l'eliminazione delle notifiche:", error);
+        throw new Error("Impossibile eliminare le notifiche selezionate.");
+    }
+};
+
+/**
+ * Elimina un intero lotto di notifiche (per Admin).
+ * @param logId - ID del documento in 'notificheInviate'
+ * @param batchId - ID del lotto usato in 'notifiche'
+ */
+export const deleteNotificationBatch = async (logId: string, batchId?: string): Promise<void> => {
+    try {
+        await deleteNotificationBatchCallable({ logId, batchId });
+    } catch (error) {
+        console.error("Errore durante l'eliminazione del lotto di notifiche:", error);
+        throw new Error("Impossibile eliminare il lotto di notifiche.");
+    }
+};

@@ -15,25 +15,25 @@ import {
     InputLabel
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { DettaglioOreData, Tecnico } from '@/models/definitions';
+import { DettaglioOreTecnici, Tecnico } from '@/models/definitions';
 
 interface GestoreOrariTecnicoProps {
-    dettaglioOre: DettaglioOreData[];
-    setDettaglioOre: (dettagli: DettaglioOreData[]) => void;
+    dettaglioOreTecnici: DettaglioOreTecnici[];
+    setDettaglioOreTecnici: (dettagli: DettaglioOreTecnici[]) => void;
     tecniciDisponibili: Tecnico[];
     isReadOnly: boolean;
 }
 
 const GestoreOrariTecnico: React.FC<GestoreOrariTecnicoProps> = ({
-    dettaglioOre,
-    setDettaglioOre,
+    dettaglioOreTecnici,
+    setDettaglioOreTecnici,
     tecniciDisponibili,
     isReadOnly,
 }) => {
     // Aggiunge un tecnico alla lista dei dettagli
     const handleAddTecnico = (tecnici: Tecnico[]) => {
         const nuoviDettagli = tecnici.map(t => {
-            const dettaglioEsistente = dettaglioOre.find(d => d.tecnicoId === t.id);
+            const dettaglioEsistente = dettaglioOreTecnici.find(d => d.tecnicoId === t.id);
             if (dettaglioEsistente) {
                 return dettaglioEsistente;
             }
@@ -44,12 +44,12 @@ const GestoreOrariTecnico: React.FC<GestoreOrariTecnicoProps> = ({
                 pausa: 60, // Default in minuti
             };
         });
-        setDettaglioOre(nuoviDettagli);
+        setDettaglioOreTecnici(nuoviDettagli);
     };
 
     // Rimuove un tecnico dalla lista
     const handleRemoveTecnico = (tecnicoId: string) => {
-        setDettaglioOre(dettaglioOre.filter(d => d.tecnicoId !== tecnicoId));
+        setDettaglioOreTecnici(dettaglioOreTecnici.filter(d => d.tecnicoId !== tecnicoId));
     };
 
     // Aggiorna un valore specifico (ore o pausa) per un tecnico
@@ -57,10 +57,10 @@ const GestoreOrariTecnico: React.FC<GestoreOrariTecnicoProps> = ({
         const numValue = Number(value);
         if (isNaN(numValue)) return;
 
-        const nuoviDettagli = dettaglioOre.map(d =>
+        const nuoviDettagli = dettaglioOreTecnici.map(d =>
             d.tecnicoId === tecnicoId ? { ...d, [field]: numValue } : d
         );
-        setDettaglioOre(nuoviDettagli);
+        setDettaglioOreTecnici(nuoviDettagli);
     };
 
     const oreOptions = Array.from({ length: 25 }, (_, i) => i * 0.5); // da 0 a 12 con step di 0.5
@@ -68,7 +68,7 @@ const GestoreOrariTecnico: React.FC<GestoreOrariTecnicoProps> = ({
 
     // I tecnici già selezionati per l'autocomplete
     const tecniciSelezionati = tecniciDisponibili.filter(t => 
-        dettaglioOre.some(d => d.tecnicoId === t.id)
+        dettaglioOreTecnici.some(d => d.tecnicoId === t.id)
     );
 
     return (
@@ -92,9 +92,9 @@ const GestoreOrariTecnico: React.FC<GestoreOrariTecnicoProps> = ({
                     ))
                 }
             />
-            {dettaglioOre.length > 0 && (
+            {dettaglioOreTecnici.length > 0 && (
                 <Paper variant="outlined" sx={{ mt: 2, p: 2 }}>
-                    {dettaglioOre.map(dettaglio => (
+                    {dettaglioOreTecnici.map(dettaglio => (
                         <Grid container spacing={2} key={dettaglio.tecnicoId} alignItems="center" sx={{ mb: 1.5 }}>
                             <Grid
                                 size={{
@@ -131,9 +131,9 @@ const GestoreOrariTecnico: React.FC<GestoreOrariTecnicoProps> = ({
                                      <InputLabel>Pausa</InputLabel>
                                      <Select
                                         label="Pausa"
-                                        value={dettaglio.pausa ?? ''}
+                                        value={(dettaglio as any).pausa ?? ''}
                                         disabled={isReadOnly}
-                                        onChange={(e) => handleDettaglioChange(dettaglio.tecnicoId, 'pausa', e.target.value)}
+                                        onChange={(e) => handleDettaglioChange(dettaglio.tecnicoId, 'pausa' as any, e.target.value)}
                                     >
                                         {pausaOptions.map(p => <MenuItem key={p} value={p}>{p} min</MenuItem>)}
                                     </Select>

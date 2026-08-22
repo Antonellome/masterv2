@@ -73,7 +73,11 @@ const CheckinFilters: React.FC<CheckinFiltersProps> = ({ filtri, onFilterChange,
 
     return (
         <Grid container spacing={2} sx={{ alignItems: 'center', py: 2 }}>
-            <Grid item xs={12} md={4}>
+            <Grid
+                size={{
+                    xs: 12,
+                    md: 4
+                }}>
                 <FormControl fullWidth size="small">
                     <InputLabel>Filtra per Luogo</InputLabel>
                     <Select
@@ -98,7 +102,11 @@ const CheckinFilters: React.FC<CheckinFiltersProps> = ({ filtri, onFilterChange,
                     </Select>
                 </FormControl>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid
+                size={{
+                    xs: 12,
+                    md: 4
+                }}>
                 <FormControl fullWidth size="small">
                     <InputLabel>Filtra per Nave</InputLabel>
                     <Select
@@ -123,7 +131,11 @@ const CheckinFilters: React.FC<CheckinFiltersProps> = ({ filtri, onFilterChange,
                     </Select>
                 </FormControl>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid
+                size={{
+                    xs: 12,
+                    md: 4
+                }}>
                 <Autocomplete
                     fullWidth
                     size="small"

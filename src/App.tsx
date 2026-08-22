@@ -6,7 +6,8 @@ import { Box, CircularProgress, Typography, Paper, Button } from '@mui/material'
 
 import { useAuthInitializer } from '@/auth/authHooks';
 import { authService } from '@/auth/authService';
-import { DataHydrator } from '@/components/DataHydrator';
+// ULTIMATE FIX: Using the new, clean DataInitializer component.
+import { DataInitializer } from '@/components/DataInitializer';
 import { GlobalAlert } from '@/components/GlobalAlert';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -25,7 +26,6 @@ const ScadenzePage = lazy(() => import('@/pages/ScadenzePage'));
 const SincronizzazionePage = lazy(() => import('@/pages/SincronizzazionePage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const RapportinoEdit = lazy(() => import('@/pages/RapportinoEdit'));
-const RapportinoPrintPage = lazy(() => import('@/pages/RapportinoPrint'));
 const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 
@@ -56,8 +56,6 @@ const AccessDenied = () => {
   );
 };
 
-// Il componente UpdateNotifier è stato RIMOSSO.
-
 const AppContent = () => {
   const isAuthLoading = useGlobalStore((state) => state.isAuthLoading);
   const isAuthenticated = useGlobalStore((state) => state.isAuthenticated);
@@ -78,14 +76,12 @@ const AppContent = () => {
 
   return (
     <>
-      {isAuthenticated && isAdmin && <DataHydrator />}
-      {/* La chiamata a UpdateNotifier è stata RIMOSSA. */}
+      {isAuthenticated && isAdmin && <DataInitializer />}
       
       <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>}>
         <Routes>
           <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} />
           <Route path="/signup" element={!isAuthenticated ? <SignupPage /> : <Navigate to="/" replace />} />
-          <Route path="/rapportini/stampa/:id" element={<RapportinoPrintPage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>

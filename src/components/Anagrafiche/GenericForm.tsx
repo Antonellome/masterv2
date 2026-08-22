@@ -121,7 +121,13 @@ const GenericForm: React.FC<GenericFormProps> = ({ open, onClose, onSave, item, 
             <DialogContent>
                 <Grid container spacing={2} sx={{ pt: 1 }}>
                     {fields.map(field => (
-                        <Grid item key={field.name} xs={field.gridProps?.size?.xs || 12} sm={field.gridProps?.size?.sm} md={field.gridProps?.size?.md}>
+                        <Grid
+                            key={field.name}
+                            size={{
+                                xs: field.gridProps?.size?.xs || 12,
+                                sm: field.gridProps?.size?.sm,
+                                md: field.gridProps?.size?.md
+                            }}>
                             {renderField(field)}
                         </Grid>
                     ))}

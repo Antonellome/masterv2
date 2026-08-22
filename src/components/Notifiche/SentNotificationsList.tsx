@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useCollection } from 'react-firebase-hooks/firestore';
-import { collection, query, orderBy, limit, getCountFromServer, where, getDocs, writeBatch, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getCountFromServer, where } from 'firebase/firestore';
 import { db } from '@/firebase';
+import { deleteNotificationBatch } from '@/services/notificationService'; // <-- NUOVO IMPORT
 import {
     Typography,
     Box,
@@ -33,8 +34,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import type { NotificaInviata } from '@/models/definitions';
 
-// Rimuoviamo completamente la chiamata alla Cloud Function. L'eliminazione ora è gestita sul client.
-
+// Componente ReadStatusIcon rimane invariato...
 const ReadStatusIcon = ({ notification }: { notification: NotificaInviata }) => {
     const [readCount, setReadCount] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -93,45 +93,17 @@ const SentNotificationsList = () => {
         setNotificationToDelete(null);
     };
 
+    // --- LOGICA DI ELIMINAZIONE SEMPLIFICATA ---
     const handleConfirmDelete = async () => {
         if (!notificationToDelete) return;
         setIsDeleting(true);
 
-        const { logId, batchId } = notificationToDelete;
-
         try {
-            // Step 1: Delete the main log document.
-            const logDocRef = doc(db, "notificheInviate", logId);
-            await deleteDoc(logDocRef);
-
-            // Step 2: If there's a batchId, delete all associated notifications.
-            if (batchId) {
-                const notificationsQuery = query(collection(db, "notifiche"), where("batchId", "==", batchId));
-                const snapshot = await getDocs(notificationsQuery);
-
-                if (!snapshot.empty) {
-                    const BATCH_SIZE = 500;
-                    let commitCount = 0;
-                    let batch = writeBatch(db);
-                    
-                    snapshot.docs.forEach((doc, index) => {
-                        batch.delete(doc.ref);
-                        commitCount++;
-                        if (commitCount === BATCH_SIZE) {
-                            batch.commit();
-                            batch = writeBatch(db); // start a new batch
-                            commitCount = 0;
-                        }
-                    });
-
-                    if (commitCount > 0) {
-                       await batch.commit();
-                    }
-                }
-            }
+            // Chiama la nuova funzione del servizio centralizzato
+            await deleteNotificationBatch(notificationToDelete.logId, notificationToDelete.batchId);
             setSnackbar({ open: true, message: 'Notifica eliminata con successo.', severity: 'success' });
         } catch (err: any) {
-            console.error("Errore catastrofico durante l'eliminazione lato client:", err);
+            console.error("Errore durante la chiamata a deleteNotificationBatch:", err);
             setSnackbar({ open: true, message: `Eliminazione fallita: ${err.message}`, severity: 'error' });
         } finally {
             setIsDeleting(false);
@@ -189,9 +161,11 @@ const SentNotificationsList = () => {
                                         {notification.body}
                                     </Typography>
                                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%', pt: 1 }}>
-                                        <IconButton size="small" onClick={() => handleOpenDeleteDialog(doc.id, notification.batchId)} disabled={isDeleting}>
-                                            <DeleteIcon fontSize="small" />
-                                        </IconButton>
+                                        <Tooltip title="Elimina notifica e cronologia">
+                                            <IconButton size="small" onClick={() => handleOpenDeleteDialog(doc.id, notification.batchId)} disabled={isDeleting}>
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
                                     </Box>
                                 </Collapse>
                             </ListItem>

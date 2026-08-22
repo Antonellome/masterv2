@@ -5,11 +5,10 @@ import { DataGrid, GridColDef, GridRowParams, GridToolbar } from '@mui/x-data-gr
 import { itIT } from '@mui/x-data-grid/locales';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { Tecnico } from '@/models/definitions';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
-import { useGlobalStore } from '@/stores/globalStore'; // <-- IMPORTATO useGlobalStore
+import { useGlobalStore } from '@/stores/globalStore';
 
 interface DialogState {
   open: boolean;
@@ -19,12 +18,14 @@ interface DialogState {
 }
 
 const GestioneAccessi = () => {
-  // Recupera lo stato di caricamento dallo store globale
-  const areAnagraficheLoading = useGlobalStore((state) => state.areAnagraficheLoading);
-
-  const tecnici = useLiveQuery(() => 
-    db.tecnici.orderBy('cognome').toArray()
-  , []);
+  // --- FIX --- 
+  // Rimossa la chiamata diretta a useLiveQuery.
+  // Ora i dati dei tecnici e lo stato di caricamento provengono 
+  // esclusivamente dallo store globale (Zustand), garantendo una singola fonte di verità.
+  const { tecnici, areAnagraficheLoading } = useGlobalStore(state => ({
+    tecnici: state.tecnici,
+    areAnagraficheLoading: state.areAnagraficheLoading
+  }));
 
   const [operating, setOperating] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
@@ -137,7 +138,6 @@ const GestioneAccessi = () => {
     setDialog({ ...dialog, open: false });
   };
 
-  // CONTROLLO DI CARICAMENTO ROBUSTO
   if (areAnagraficheLoading || !tecnici) {
     return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   }

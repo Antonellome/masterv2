@@ -1,14 +1,14 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, forwardRef } from 'react';
 import { Box, Typography, Divider, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress } from '@mui/material';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/db';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { Rapportino } from '@/models/definitions';
 import dayjs from 'dayjs';
 import { formatOreLavoro } from '@/utils/formatters';
 
 interface PrintProps {
-  rapportinoId: string;
-  className?: string; 
+  rapportino: Rapportino | null;
+  className?: string;
 }
 
 const getCleanId = (id: any): string | undefined => {
@@ -33,36 +33,19 @@ const BlockInfo = ({ label, value, preWrap = false }: { label: string, value: Re
     </Box>
 );
 
-const RapportinoPrint = React.forwardRef<HTMLDivElement, PrintProps>((props, ref) => {
-  const { rapportinoId, className } = props;
+const RapportinoPrint = forwardRef<HTMLDivElement, PrintProps>((props, ref) => {
+  const { rapportino, className } = props;
 
-  const data = useLiveQuery(async () => {
-      if (!rapportinoId) return null;
-      const rapportino = await db.rapportini.get(rapportinoId);
-      if (!rapportino) return null;
-
-      const [tecnici, navi, clienti, luoghi, veicoli] = await Promise.all([
-          db.tecnici.toArray(),
-          db.navi.toArray(),
-          db.clienti.toArray(),
-          db.luoghi.toArray(),
-          db.veicoli.toArray()
-      ]);
-
-      return { rapportino, anagrafiche: { tecnici, navi, clienti, luoghi, veicoli } };
-  }, [rapportinoId]);
+  const { tecniciMap, naviMap, luoghiMap, veicoliMap } = useRapportiniStore(state => ({
+      tecniciMap: state.tecniciMap,
+      naviMap: state.naviMap,
+      clientiMap: state.clientiMap,
+      luoghiMap: state.luoghiMap,
+      veicoliMap: state.veicoliMap
+  }));
 
   const enrichedData = useMemo(() => {
-    if (!data?.rapportino || !data?.anagrafiche) return null;
-
-    const { rapportino, anagrafiche } = data;
-    const { tecnici, navi, clienti, luoghi, veicoli } = anagrafiche;
-
-    const tecniciMap = new Map(tecnici.map(t => [t.id, t]));
-    const naviMap = new Map(navi.map(n => [n.id, n]));
-    const clientiMap = new Map(clienti.map(c => [c.id, c]));
-    const luoghiMap = new Map(luoghi.map(l => [l.id, l]));
-    const veicoliMap = new Map(veicoli.map(v => [v.id, v]));
+    if (!rapportino) return null;
 
     const getTecnicoName = (id: string | undefined) => {
         if (!id) return "N/D";
@@ -70,25 +53,12 @@ const RapportinoPrint = React.forwardRef<HTMLDivElement, PrintProps>((props, ref
         return tecnico ? `${tecnico.cognome} ${tecnico.nome}` : "Tecnico non trovato";
     };
     
-    const tuttiITecnici = new Map<string, { nome: string, ore: number }>();
-    if (rapportino.dettaglioOre && rapportino.dettaglioOre.length > 0) {
-        rapportino.dettaglioOre.forEach(dettaglio => {
-            const id = getCleanId(dettaglio.tecnicoId);
-            // @ts-ignore
-            const ore = typeof dettaglio.ore === 'string' ? parseFloat(dettaglio.ore.replace(',', '.')) : dettaglio.ore || 0;
-            if (id) {
-                tuttiITecnici.set(id, { nome: getTecnicoName(id), ore });
-            }
-        });
-    } else { 
-        // @ts-ignore
-        const oreLavoro = typeof rapportino.oreLavoro === 'string' ? parseFloat(rapportino.oreLavoro.replace(',', '.')) : rapportino.oreLavoro || 0;
-        const allIds = [...new Set([getCleanId(rapportino.tecnicoId), ...(rapportino.presenze || []).map(getCleanId)].filter(Boolean) as string[])];
-        const orePerTecnico = allIds.length > 0 ? oreLavoro / allIds.length : 0;
-        allIds.forEach(id => {
-            tuttiITecnici.set(id, { nome: getTecnicoName(id), ore: orePerTecnico });
-        });
-    }
+    // LOGICA UNIFICATA E CORRETTA (FASE R.4)
+    const tuttiITecnici = rapportino.dettaglioOreTecnici.map(dettaglio => {
+        const id = getCleanId(dettaglio.tecnicoId);
+        const ore = typeof dettaglio.ore === 'string' ? parseFloat(dettaglio.ore.replace(',', '.')) : dettaglio.ore || 0;
+        return { nome: getTecnicoName(id), ore };
+    });
 
     const getDataNave = () => {
         const naveId = getCleanId(rapportino.naveId);
@@ -99,11 +69,11 @@ const RapportinoPrint = React.forwardRef<HTMLDivElement, PrintProps>((props, ref
     };
 
     return {
-        data: dayjs(rapportino.dataInizio as Date).format('DD MMMM YYYY'),
+        data: dayjs(rapportino.data as Date).format('DD MMMM YYYY'),
         naveImpianto: getDataNave(),
         luogo: getCleanId(rapportino.luogoId) ? luoghiMap.get(getCleanId(rapportino.luogoId)!)?.nome : "N/D",
         veicolo: getCleanId(rapportino.veicoloId) ? veicoliMap.get(getCleanId(rapportino.veicoloId)!)?.targa : "N/D",
-        tecniciIntervenuti: Array.from(tuttiITecnici.values()),
+        tecniciIntervenuti: tuttiITecnici,
         breveDescrizione: rapportino.descrizioneBreve || "",
         materialiImpiegati: rapportino.materialiImpiegati || "",
         lavoroEseguito: rapportino.lavoroEseguito || "",
@@ -113,13 +83,13 @@ const RapportinoPrint = React.forwardRef<HTMLDivElement, PrintProps>((props, ref
         firmaCliente: rapportino.firmaVettoriale || null,
     };
 
-  }, [data]);
+  }, [rapportino, tecniciMap, naviMap, luoghiMap, veicoliMap]);
 
   if (!enrichedData) {
     return (
         <Box ref={ref} className={className} sx={{ p: 4, textAlign: 'center' }}>
             <CircularProgress />
-            <Typography>Caricamento rapportino...</Typography>
+            <Typography>Caricamento dati per la stampa...</Typography>
         </Box>
     );
   }
@@ -149,7 +119,7 @@ const RapportinoPrint = React.forwardRef<HTMLDivElement, PrintProps>((props, ref
                 <TableHead sx={{ backgroundColor: '#404040' }}>
                     <TableRow>
                         <TableCell sx={{color: '#fff', fontWeight: 'bold', fontSize: '11pt'}}>Tecnici Intervenuti</TableCell>
-                        <TableCell sx={{color: '#fff', fontWeight: 'bold', fontSize: '11pt'}} align="right">Orari</TableCell>
+                        <TableCell sx={{color: '#fff', fontWeight: 'bold', fontSize: '11pt'}} align="right">Ore</TableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
@@ -171,7 +141,6 @@ const RapportinoPrint = React.forwardRef<HTMLDivElement, PrintProps>((props, ref
 
         <Divider sx={{ mt: 2, mb: 4, borderColor: '#2E75B5', borderWidth: '1px' }} />
 
-        {/* BLOCCO FIRME CORRETTO */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', pageBreakInside: 'avoid', mt: 4 }}>
             <Box sx={{ width: '48%' }}>
                 <Typography sx={{fontSize: '11pt', color: '#000', mb: 1}}>Per accettazione (firma del responsabile)</Typography>

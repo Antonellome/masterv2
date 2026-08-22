@@ -131,7 +131,7 @@ const LoginPage: React.FC = () => {
             {loading ? 'Caricamento...' : 'Accedi'}
           </Button>
           <Grid container justifyContent="flex-end">
-            <Grid item>
+            <Grid>
               <Link href="#" variant="body2" onClick={handlePasswordReset}>
                 Password dimenticata?
               </Link>

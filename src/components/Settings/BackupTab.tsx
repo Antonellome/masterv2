@@ -33,7 +33,6 @@ const BackupTab = () => {
 
             const db = getFirestore();
             for (const coll of collectionsToExport) {
-                console.log(`Esportando la collezione: ${coll}...`);
                 const querySnapshot = await getDocs(collection(db, coll));
                 allData[coll] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             }
@@ -93,7 +92,6 @@ const BackupTab = () => {
                         "utenti", "utenti_master", "veicoli", "versioning"
                     ];
 
-                    console.log("Inizio fase di cancellazione dati esistenti...");
                     for (const coll of collectionsToImport) {
                         if(allData[coll]) { 
                            const querySnapshot = await getDocs(collection(db, coll));
@@ -103,7 +101,6 @@ const BackupTab = () => {
                         }
                     }
                     await batch.commit();
-                    console.log("Cancellazione completata. Inizio scrittura nuovi dati...");
 
                     const secondBatch = writeBatch(db);
                     for (const collName in allData) {

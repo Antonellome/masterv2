@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { DataGrid, GridColDef, GridToolbar, GridActionsCellItem } from '@mui/x-data-grid';
 import { Box, TextField, Tooltip, Typography } from '@mui/material';
 import { Scadenza } from '@/models/definitions';
-import { useScadenzeStore } from '@/store/useScadenzeStore';
+import { useRapportiniStore } from '@/store/useRapportiniStore'; // CORRECTED IMPORT
 import { NotificationsActive, NotificationsOff, ErrorOutline, WarningAmber, HelpOutline, Event as EventIcon } from '@mui/icons-material';
 import dayjs from 'dayjs';
 
@@ -30,7 +30,8 @@ const getStatusProps = (status: Scadenza['status']) => {
 
 const ScadenzeList = ({ scadenze, filter }: ScadenzeListProps) => {
   const [searchText, setSearchText] = useState('');
-  const { toggleSilence } = useScadenzeStore();
+  // Use the central store to get the action
+  const { toggleScadenzaSilence } = useRapportiniStore();
 
   const filteredScadenze = useMemo(() => {
     return scadenze
@@ -55,7 +56,6 @@ const ScadenzeList = ({ scadenze, filter }: ScadenzeListProps) => {
             const { color, icon, label } = getStatusProps(params.row.status);
             return <Tooltip title={label}><Box sx={{ color }}>{icon}</Box></Tooltip>;
         },
-        // Ordina per severità dello stato
         sortComparator: (v1, v2, param1, param2) => {
             const order: Scadenza['status'][] = ['scaduto', 'imminente', 'in_scadenza', 'non_impostata', 'ok'];
             return order.indexOf(param1.value) - order.indexOf(param2.value);
@@ -90,14 +90,15 @@ const ScadenzeList = ({ scadenze, filter }: ScadenzeListProps) => {
         field: 'actions',
         type: 'actions',
         width: 100,
-        getActions: ({ id, row }) => [
+        getActions: ({ row }) => [ // row object is the Scadenza object
             <GridActionsCellItem
-                key={`silence-${id}`}
+                key={`silence-${row.id}`}
                 icon={row.silenced ? <NotificationsOff /> : <NotificationsActive />}
                 label={row.silenced ? 'Riattiva notifica' : 'Silenzia notifica'}
-                onClick={() => toggleSilence(id as string)}
+                // Call the correct action from the central store with the whole object
+                onClick={() => toggleScadenzaSilence(row)}
                 color="inherit"
-                disabled={row.status === 'non_impostata'} // Disabilita il silenziamento per date non impostate
+                disabled={row.status === 'non_impostata'} 
             />,
         ],
     }
@@ -123,7 +124,7 @@ const ScadenzeList = ({ scadenze, filter }: ScadenzeListProps) => {
         autoHeight
         initialState={{
           sorting: {
-            sortModel: [{ field: 'status', sort: 'asc' }], // Ordina per stato di default
+            sortModel: [{ field: 'status', sort: 'asc' }],
           },
           pagination: {
             paginationModel: { pageSize: 50 }

@@ -1,96 +1,94 @@
 
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '@/firebase'; // Assicura che questo punti alla tua istanza di functions
+import { functions } from '@/config/firebase'; // Corrected import path
 import type { Rapportino } from '@/models/definitions';
 
+// =============================================================================
+// NUOVO SERVICE LAYER (FASE R.2) - UNIFICATO E SICURO
+// Questo servizio utilizza le Cloud Functions SPECIFICHE e corrette, 
+// garantendo che tutta la logica di business risieda sul backend.
+// =============================================================================
+
 // Definisce l'input parziale per creare/aggiornare un rapportino.
-type RapportinoInputData = Partial<Omit<Rapportino, 'id' | 'createdAt' | 'updatedAt'>>;
+// Omettiamo i campi gestiti automaticamente dal backend.
+type RapportinoInputData = Partial<Omit<Rapportino, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy' | 'isDeleted'>>;
 
-// Definisce la struttura del payload per la nostra funzione UNIFICATA
-interface ManageRapportinoPayload {
-  action: 'create' | 'update' | 'delete';
-  id?: string; // Obbligatorio per update e delete
-  data?: RapportinoInputData; // Obbligatorio per create e update
-}
+// --- DEFINIZIONE DELLE FUNZIONI SPECIALIZZATE ---
 
-// Definisce la struttura della risposta attesa
-interface ManageRapportinoResponse {
-  success: boolean;
-  message?: string;
-  rapportinoId?: string; 
-}
+// Funzione per la creazione
+const createRapportinoFunction = httpsCallable<RapportinoInputData, { id: string }>(functions, 'createRapportino');
 
-// La singola funzione callable che punta al nostro nuovo endpoint UNIFICATO
-const manageRapportino = httpsCallable<ManageRapportinoPayload, ManageRapportinoResponse>(functions, 'manageRapportino');
+// Funzione per l'aggiornamento. Il payload richiede l'ID e i dati da modificare.
+const updateRapportinoFunction = httpsCallable<{ id: string } & RapportinoInputData, { success: boolean }>(functions, 'updateRapportino');
+
+// Funzione per l'eliminazione (soft delete)
+const deleteRapportinoFunction = httpsCallable<{ rapportinoId: string }, { success: boolean }>(functions, 'deleteRapportino');
+
 
 /**
  * Servizio Cloud per la gestione centralizzata dei rapportini.
- * Utilizza una singola Cloud Function (manageRapportino) con diverse azioni.
+ * Interamente basato su Cloud Functions specializzate per massima sicurezza e coerenza.
  */
 export const rapportinoCloudService = {
   /**
-   * Crea un nuovo rapportino.
-   * @param data L'oggetto rapportino da creare.
-   * @returns L'ID del rapportino creato.
+   * Crea un nuovo rapportino chiamando la funzione specializzata.
+   * @param data L'oggetto rapportino da creare (senza campi di sistema).
+   * @returns L'ID del rapportino appena creato.
    */
   create: async (data: RapportinoInputData): Promise<string> => {
-    console.log("Invio a 'manageRapportino' [create]:", data);
+    console.log("FASE R.2 -> Chiamata a 'createRapportino' con dati:", data);
     try {
-      const result = await manageRapportino({
-        action: 'create',
-        data: data,
-      });
-
-      if (result.data.success && result.data.rapportinoId) {
-        return result.data.rapportinoId;
+      // Passiamo direttamente l'oggetto 'data', come si aspetta la funzione corretta.
+      const result = await createRapportinoFunction(data);
+      
+      if (result.data.id) {
+        console.log(`FASE R.2 -> Successo! Rapportino creato con ID: ${result.data.id}`);
+        return result.data.id;
       } else {
-        throw new Error(result.data.message || "La funzione cloud non ha restituito un ID per il rapportino.");
+        throw new Error("La Cloud Function 'createRapportino' non ha restituito un ID.");
       }
     } catch (error: any) {
-      console.error("Errore durante la chiamata a 'manageRapportino' [create]:", error);
+      console.error("Errore DR CRITICO durante la chiamata a 'createRapportino':", error);
       throw new Error(`Creazione rapportino fallita: ${error.message}`);
     }
   },
 
   /**
-   * Aggiorna un rapportino esistente.
+   * Aggiorna un rapportino esistente chiamando la funzione specializzata.
    * @param id L'ID del rapportino da aggiornare.
    * @param data I campi del rapportino da aggiornare.
    */
   update: async (id: string, data: RapportinoInputData): Promise<void> => {
-    console.log(`Invio a 'manageRapportino' [update] (id: ${id}):`, data);
+    console.log(`FASE R.2 -> Chiamata a 'updateRapportino' (id: ${id}) con dati:`, data);
     try {
-      const result = await manageRapportino({
-        action: 'update',
-        id: id,
-        data: data,
-      });
+      // Il payload è un oggetto contenente sia l'id che i dati
+      const result = await updateRapportinoFunction({ id, ...data });
 
       if (!result.data.success) {
-        throw new Error(result.data.message || "L'aggiornamento è fallito senza un messaggio specifico.");
+        throw new Error("La Cloud Function 'updateRapportino' ha segnalato un fallimento.");
       }
+       console.log(`FASE R.2 -> Successo! Rapportino ${id} aggiornato.`);
     } catch (error: any) {
-      console.error(`Errore durante la chiamata a 'manageRapportino' [update]:`, error);
+      console.error(`Errore DR CRITICO durante la chiamata a 'updateRapportino':`, error);
       throw new Error(`Aggiornamento rapportino (id: ${id}) fallito: ${error.message}`);
     }
   },
 
   /**
-   * Elimina un rapportino (soft delete).
+   * Elimina (soft delete) un rapportino chiamando la funzione specializzata.
    * @param id L'ID del rapportino da eliminare.
    */
   delete: async (id: string): Promise<void> => {
-    console.log(`Invio a 'manageRapportino' [delete] (id: ${id})`);
+    console.log(`FASE R.2 -> Chiamata a 'deleteRapportino' (id: ${id})`);
      try {
-       const result = await manageRapportino({
-         action: 'delete',
-         id: id,
-       });
+       const result = await deleteRapportinoFunction({ rapportinoId: id });
+
        if (!result.data.success) {
-         throw new Error(result.data.message || "L'eliminazione è fallita senza un messaggio specifico.");
+         throw new Error("La Cloud Function 'deleteRapportino' ha segnalato un fallimento.");
        }
+       console.log(`FASE R.2 -> Successo! Rapportino ${id} marcato come eliminato.`);
     } catch (error: any) {
-      console.error(`Errore durante la chiamata a 'manageRapportino' [delete]:`, error);
+      console.error(`Errore DR CRITICO durante la chiamata a 'deleteRapportino':`, error);
       throw new Error(`Eliminazione rapportino (id: ${id}) fallita: ${error.message}`);
     }
   }

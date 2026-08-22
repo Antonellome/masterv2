@@ -1,6 +1,7 @@
+
 import React, { useMemo } from 'react';
 import {
-    Box, Paper, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress, Tooltip, Chip, Grid, Button
+    Box, Paper, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, CircularProgress, Tooltip, Chip, Grid, Button, Alert
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import dayjs, { Dayjs } from 'dayjs';
@@ -8,19 +9,19 @@ import 'dayjs/locale/it';
 import * as XLSX from 'xlsx';
 
 import { MatriceData, BloccoNaveData } from '@/hooks/useMatriceTecnici';
+import { useRapportiniStore } from '@/store/useRapportiniStore'; // Import the central store
 import { Ditta, TipoGiornata } from '@/models/definitions';
-import { useAnagraficaData } from '@/contexts/DataContext';
 
 dayjs.locale('it');
 
-// --- INTERFACCE E PROPS ---
+// --- INTERFACES AND PROPS ---
 interface MatriceResultProps {
-    isLoading: boolean;
+    matriceIsLoading: boolean; // Renamed to avoid conflict with store's loading
     matriceData: MatriceData | null;
     selectedDate: Dayjs | null;
 }
 
-// --- FUNZIONI HELPER ---
+// --- HELPER FUNCTIONS (unchanged) ---
 const getCleanId = (id: any): string => (typeof id === 'string' ? id : id?.id) || '';
 
 const getDayOfWeek = (day: number, month: number, year: number) => {
@@ -47,7 +48,7 @@ const parseValue = (val: string) => {
     return { ord, str, nott, assenza: null };
 };
 
-// --- COMPONENTI SECONDARI ---
+// --- SECONDARY COMPONENTS (unchanged, but now receive maps as props) ---
 
 const TotaliBlocco: React.FC<{ blocco: BloccoNaveData, tipiGiornataMap: Map<string, TipoGiornata> }> = ({ blocco, tipiGiornataMap }) => {
     const totali = useMemo(() => {
@@ -91,14 +92,14 @@ const TotaliBlocco: React.FC<{ blocco: BloccoNaveData, tipiGiornataMap: Map<stri
     );
 };
 
-const Legenda: React.FC<{tipiGiornata?: TipoGiornata[]}> = ({tipiGiornata}) => (
+const Legenda: React.FC<{tipiGiornata: TipoGiornata[]}> = ({tipiGiornata}) => (
     <Paper elevation={2} sx={{ p: 2, mt: 3, background: '#f9f9f9' }}>
         <Typography variant="h6" gutterBottom>Legenda</Typography>
         <Grid container spacing={1}>
-            <Grid item><Chip size="small" label="N = Ore Notturne" /></Grid>
-            <Grid item><Chip size="small" label="+X = Ore Straordinarie" /></Grid>
-            {tipiGiornata?.filter(tg => tg.nome && ['Ferie', 'Malattia', 'Permesso', 'Legge 104'].includes(tg.nome)).map(tg => (
-                 <Grid item key={tg.id}><Chip size="small" label={`${tg.nome.charAt(0)} = ${tg.nome}`} /></Grid>
+            <Grid><Chip size="small" label="N = Ore Notturne" /></Grid>
+            <Grid><Chip size="small" label="+X = Ore Straordinarie" /></Grid>
+            {tipiGiornata.filter(tg => tg.nome && ['Ferie', 'Malattia', 'Permesso', 'Legge 104'].includes(tg.nome)).map(tg => (
+                 <Grid key={tg.id}><Chip size="small" label={`${tg.nome.charAt(0)} = ${tg.nome}`} /></Grid>
             ))}
         </Grid>
     </Paper>
@@ -225,7 +226,7 @@ const MatriceRender: React.FC<{ blocco: BloccoNaveData, ditteMap: Map<string, Di
                                 </TableRow>
                             );
                         })}
-                        {/* Riga Totali Colonna */}
+                        {/* Column Totals Row */}
                         <TableRow>
                              <TableCell sx={{ fontWeight: 'bold', position: 'sticky', left: 0, zIndex: 10, background: '#e0e0e0'}}>TOTALI</TableCell>
                              {blocco.giorniDelMese.map(giorno => {
@@ -251,16 +252,28 @@ const MatriceRender: React.FC<{ blocco: BloccoNaveData, ditteMap: Map<string, Di
     );
 }
 
-// --- COMPONENTE PRINCIPALE ---
-const MatriceResult: React.FC<MatriceResultProps> = ({ isLoading, matriceData, selectedDate }) => {
-    const { ditte, tipiGiornata } = useAnagraficaData();
-    const ditteMap = useMemo(() => new Map(ditte?.map(d => [getCleanId(d.id), d]) || []), [ditte]);
-    const tipiGiornataMap = useMemo(() => new Map(tipiGiornata?.map(t => [t.id, t]) || []), [tipiGiornata]);
+// --- MAIN COMPONENT (Refactored to use the central store) ---
+const MatriceResult: React.FC<MatriceResultProps> = ({ matriceIsLoading, matriceData, selectedDate }) => {
+    // 1. Get all anagrafica data and global loading/error state from the central store.
+    const { ditteMap, tipiGiornata, tipiGiornataMap, loading: storeIsLoading, error } = useRapportiniStore(state => ({
+        ditteMap: state.ditteMap,
+        tipiGiornata: state.tipiGiornata,
+        tipiGiornataMap: state.tipiGiornataMap,
+        loading: state.loading,
+        error: state.error,
+    }));
 
-    if (isLoading) {
+    // 2. The component shows a loader if either the general data is loading OR the specific matrice data is being calculated.
+    if (storeIsLoading || matriceIsLoading) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress size={50} /></Box>;
     }
 
+    // 3. Handle global errors coming from the store (e.g., Firestore connection issues).
+    if (error) {
+        return <Alert severity="error">Si è verificato un errore nel caricamento dei dati: {error}</Alert>;
+    }
+
+    // 4. Handle the case where no data is available for the selected filters.
     if (!matriceData || Object.keys(matriceData).length === 0) {
         return (
             <Paper elevation={2} sx={{ p: 3, textAlign: 'center', mt: 4 }}>
@@ -270,6 +283,7 @@ const MatriceResult: React.FC<MatriceResultProps> = ({ isLoading, matriceData, s
         );
     }
 
+    // 5. Render the data. All required maps and arrays are now passed down from the store.
     return (
         <Box>
             {Object.values(matriceData).map(blocco => (

@@ -27,6 +27,9 @@ export {
 // Check-in - API Sicura per le Presenze (NUOVA AGGIUNTA FASE F2)
 export { createCheckin } from './checkin';
 
+// Notifiche - API per App Tecnici (NUOVA AGGIUNTA FASE T)
+export { getNotifiche, markNotificheAsRead, sendNotifica, deleteNotifiche, deleteNotificationBatch } from './notifiche';
+
 // Gestione Tecnici e Utenti
 export { createTecnico } from './createTecnico';
 export { amministrazione_gestisciUtenti } from './amministrazioneGestisciUtenti';

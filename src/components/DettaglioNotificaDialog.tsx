@@ -47,19 +47,13 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
         }
 
         setLoading(true);
-        console.log(`[DIAGNOSTICA] Apertura listener per notifica: ${notifica.id}`);
 
         const unsubscribe = onSnapshot(doc(db, 'notificheRichieste', notifica.id), (docSnapshot) => {
             if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
-                console.log("[DIAGNOSTICA] Dati ricevuti da Firestore:", data);
 
                 const readByData = Array.isArray(data.readBy) ? data.readBy : [];
                 
-                if (!Array.isArray(data.readBy)) {
-                    console.warn(`[DIAGNOSTICA] Il campo 'readBy' non è un array o è assente. Trovato:`, data.readBy);
-                }
-
                 readByData.sort((a, b) => {
                     const timeA = a.readAt?.toMillis() || 0;
                     const timeB = b.readAt?.toMillis() || 0;
@@ -67,20 +61,18 @@ const DettaglioNotificaDialog: React.FC<DettaglioNotificaDialogProps> = ({ open,
                 });
                 
                 setReaders(readByData);
-                console.log("[DIAGNOSTICA] Stato 'readers' aggiornato:", readByData);
 
             } else {
-                console.error(`[DIAGNOSTICA] Notifica con ID ${notifica.id} non trovata!`);
+                console.error(`Notifica con ID ${notifica.id} non trovata!`);
                 setReaders([]);
             }
             setLoading(false);
         }, (error) => {
-            console.error("[DIAGNOSTICA] Errore nel listener del dettaglio notifica:", error);
+            console.error("Errore nel listener del dettaglio notifica:", error);
             setLoading(false);
         });
 
         return () => {
-            console.log(`[DIAGNOSTICA] Chiusura listener per notifica: ${notifica.id}`);
             unsubscribe();
         }
 

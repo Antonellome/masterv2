@@ -1,47 +1,35 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-// RIPRISTINO: Re-importo 'db' e 'functions' dalla configurazione centrale.
-import { db, functions } from '@/config/firebase'; 
+// No longer need direct firebase imports here, the store handles it.
+import { functions } from '@/config/firebase'; 
 import { httpsCallable } from 'firebase/functions'; 
-import type { Rapportino, Tecnico, Nave, Luogo } from '@/models/definitions';
+import type { Rapportino } from '@/models/definitions';
 import RapportiniList from '@/components/Rapportini/RapportiniList';
 import RapportinoFormController from '@/components/Rapportini/RapportinoFormController';
 import { useAlert } from '@/contexts/AlertContext';
-import { useAnagraficaData } from '@/contexts/DataContext';
+// Import the Zustand store
+import { useRapportiniStore } from '@/store/useRapportiniStore';
 
 const GestioneRapportini = () => {
     const { showAlert } = useAlert();
-    const { 
-        tecnici, 
-        navi, 
-        luoghi, 
-        loading: loadingData,
-    } = useAnagraficaData();
 
-    const [rapportini, setRapportini] = useState<Rapportino[]>([]);
-    const [loadingRapportini, setLoadingRapportini] = useState(true);
+    // Get all data and state from the Zustand store
+    const {
+        rapportini,
+        tecniciMap,
+        naviMap,
+        luoghiMap,
+        loading: isLoading, // Directly use the loading state from the store
+    } = useRapportiniStore(state => ({
+        rapportini: state.rapportini,
+        tecniciMap: state.tecniciMap,
+        naviMap: state.naviMap,
+        luoghiMap: state.luoghiMap,
+        loading: state.loading,
+    }));
 
-    useEffect(() => {
-        const q = query(collection(db, 'rapportini'), where('deletedAt', '==', null));
-        
-        const unsubscribe = onSnapshot(q, 
-            (snapshot) => {
-                const rapportiniData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Rapportino[];
-                setRapportini(rapportiniData);
-                setLoadingRapportini(false);
-            },
-            (error) => {
-                console.error("Errore nel caricamento dei rapportini: ", error);
-                showAlert(`Errore nel caricamento dei rapportini: ${error.message}`, 'error');
-                setLoadingRapportini(false);
-            }
-        );
-
-        return () => unsubscribe();
-    }, [showAlert]);
-
+    // The logic for handling the form stays the same
     const [formOpen, setFormOpen] = useState(false);
     const [selectedRapportino, setSelectedRapportino] = useState<Rapportino | null>(null);
 
@@ -60,12 +48,12 @@ const GestioneRapportini = () => {
         setSelectedRapportino(null);
     };
 
+    // The delete logic is correct and uses a Cloud Function, so it stays.
     const handleDelete = async (reportId: string) => {
         if (!window.confirm("Sei sicuro di voler ELIMINARE DEFINITIVAMENTE questo rapportino? L'operazione è irreversibile.")) {
             return;
         }
         
-        // RIPRISTINO: Usiamo l'istanza delle functions importata direttamente.
         const deleteRapportino = httpsCallable(functions, 'deleteRapportino');
 
         try {
@@ -76,13 +64,7 @@ const GestioneRapportini = () => {
             showAlert(`Errore [${error.code}]: ${error.message}`, 'error');
         }
     };
-
-    const tecniciMap = useMemo(() => new Map(tecnici.map(t => [t.id, t])), [tecnici]);
-    const naviMap = useMemo(() => new Map(navi.map(n => [n.id, n.nome])), [navi]);
-    const luoghiMap = useMemo(() => new Map(luoghi.map(l => [l.id, l.nome])), [luoghi]);
-
-    const isLoading = loadingData || loadingRapportini;
-
+    
     return (
         <Box sx={{ p: 2 }}>
             <Typography variant="h4" gutterBottom sx={{ mb: 2 }}>

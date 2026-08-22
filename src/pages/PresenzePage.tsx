@@ -1,68 +1,150 @@
 
-import { useEffect, useMemo } from 'react';
-import { Typography, Box, CircularProgress, Alert } from '@mui/material';
-import { Timestamp } from 'firebase/firestore';
+import { useState, useMemo } from 'react';
+import { Typography, Box, CircularProgress, Alert, Paper, Grid, Autocomplete, TextField, Divider } from '@mui/material';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs, { Dayjs } from 'dayjs';
+import 'dayjs/locale/it';
 
-import { useCheckinStore } from '@/store/useCheckinStore';
-import { useGlobalStore } from '@/stores/globalStore';
-import PresenzeList from '@/components/Presenze/PresenzeList';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { Tecnico, Nave, Luogo } from '@/models/definitions';
+import { processaPresenze, ProcessedPresenze } from '@/utils/presenzeUtils';
+import TabellaOrariLavoro from '@/components/Presenze/TabellaOrariLavoro';
+import TabellaInterventi from '@/components/Presenze/TabellaInterventi';
+
+dayjs.locale('it');
 
 const PresenzePage = () => {
-    const { checkins, loading: checkinsLoading, error, subscribeToCheckins } = useCheckinStore();
-    const { navi, luoghi, loading: anagraficheLoading } = useGlobalStore();
+    const {
+        checkins, navi, luoghi, tecnici,
+        loading, error
+    } = useRapportiniStore();
 
-    useEffect(() => {
-        const unsubscribe = subscribeToCheckins();
-        return () => unsubscribe();
-    }, [subscribeToCheckins]);
+    // STATO DEI FILTRI
+    const [dataInizio, setDataInizio] = useState<Dayjs | null>(dayjs().startOf('month'));
+    const [dataFine, setDataFine] = useState<Dayjs | null>(dayjs().endOf('month'));
+    const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
+    const [selectedNave, setSelectedNave] = useState<Nave | null>(null);
+    const [selectedLuogo, setSelectedLuogo] = useState<Luogo | null>(null);
 
-    const naviMap = useMemo(() => new Map(navi.map(n => [n.id, n])), [navi]);
-    const luoghiMap = useMemo(() => new Map(luoghi.map(l => [l.id, l])), [luoghi]);
-
-    const rows = useMemo(() => {
-        return checkins.map(evento => {
-            // Funzione helper per la conversione sicura dei timestamp
-            const toDate = (ts: any) => ts instanceof Timestamp ? ts.toDate() : ts;
-
-            return {
-                id: evento.id,
-                tecnicoName: evento.tecnicoName || 'N/D',
-                tipo: evento.tipo,
-                luogo: evento.naveId 
-                    ? naviMap.get(evento.naveId)?.nome 
-                    : (evento.luogoId ? luoghiMap.get(evento.luogoId)?.nome : '--'),
-                // Aggiungo ENTRAMBI i timestamp al set di dati per la riga
-                timestampReale: toDate(evento.timestampReale),
-                timestampImpostato: toDate(evento.timestampImpostato),
-            };
+    // ELABORAZIONE DATI
+    const { orariLavoro, interventi }: ProcessedPresenze = useMemo(() => {
+        return processaPresenze(checkins, navi, luoghi, {
+            dataInizio: dataInizio,
+            dataFine: dataFine,
+            tecnico: selectedTecnico,
+            nave: selectedNave,
+            luogo: selectedLuogo,
         });
-    }, [checkins, naviMap, luoghiMap]);
-
-    const isLoading = checkinsLoading || anagraficheLoading;
-
-    if (isLoading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}>
-                <CircularProgress />
-            </Box>
-        );
-    }
+    }, [checkins, navi, luoghi, dataInizio, dataFine, selectedTecnico, selectedNave, selectedLuogo]);
 
     if (error) {
-        return (
-            <Box sx={{ p: 4 }}>
-                <Alert severity="error">{error}</Alert>
-            </Box>
-        );
+        return <Box sx={{ p: 4 }}><Alert severity="error">{`Errore caricamento dati: ${error}`}</Alert></Box>;
     }
 
+    // Liste ordinate per i menu a tendina
+    const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`)), [tecnici]);
+    const sortedNavi = useMemo(() => [...navi].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
+    const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => a.nome.localeCompare(b.nome)), [luoghi]);
+
     return (
-        <Box>
-            <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
-                Registro Presenze Tecnici
-            </Typography>
-            <PresenzeList rows={rows} loading={isLoading} />
-        </Box>
+        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
+            <Box sx={{ p: { xs: 1, sm: 2 }, display: 'flex', flexDirection: 'column', gap: 2}}>
+                <Typography variant="h5" component="h1">
+                    Report Presenze
+                </Typography>
+
+                <Paper elevation={3} sx={{ p: 2 }}>
+                    <Grid container spacing={2} alignItems="center">
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 2
+                            }}>
+                            <DatePicker
+                                label="Data Inizio"
+                                value={dataInizio}
+                                onChange={(newValue) => setDataInizio(newValue)}
+                                renderInput={(params) => <TextField {...params} size="small" fullWidth />}
+                            />
+                        </Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 2
+                            }}>
+                            <DatePicker
+                                label="Data Fine"
+                                value={dataFine}
+                                onChange={(newValue) => setDataFine(newValue)}
+                                renderInput={(params) => <TextField {...params} size="small" fullWidth />}
+                            />
+                        </Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 3
+                            }}>
+                            <Autocomplete
+                                options={sortedTecnici}
+                                getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
+                                value={selectedTecnico}
+                                onChange={(_, newValue) => setSelectedTecnico(newValue)}
+                                renderInput={(params) => <TextField {...params} label="Filtra per Tecnico" size="small" fullWidth/>}
+                            />
+                        </Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 2
+                            }}>
+                            <Autocomplete
+                                options={sortedNavi}
+                                getOptionLabel={(option) => option.nome}
+                                value={selectedNave}
+                                onChange={(_, newValue) => setSelectedNave(newValue)}
+                                renderInput={(params) => <TextField {...params} label="Filtra per Nave" size="small" fullWidth/>}
+                            />
+                        </Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 3
+                            }}>
+                            <Autocomplete
+                                options={sortedLuoghi}
+                                getOptionLabel={(option) => option.nome}
+                                value={selectedLuogo}
+                                onChange={(_, newValue) => setSelectedLuogo(newValue)}
+                                renderInput={(params) => <TextField {...params} label="Filtra per Luogo" size="small" fullWidth/>}
+                            />
+                        </Grid>
+                    </Grid>
+                </Paper>
+
+                {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+                ) : (
+                    <Paper elevation={3} sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <Box>
+                            <Typography variant="h6" component="h2" sx={{ mb: 1.5 }}>Orario di Lavoro Giornaliero</Typography>
+                            <TabellaOrariLavoro rows={orariLavoro} />
+                        </Box>
+                        <Divider />
+                        <Box>
+                             <Typography variant="h6" component="h2" sx={{ mb: 1.5 }}>Interventi su Luoghi/Navi</Typography>
+                             <TabellaInterventi rows={interventi} />
+                        </Box>
+                    </Paper>
+                )}
+
+            </Box>
+        </LocalizationProvider>
     );
 };
 

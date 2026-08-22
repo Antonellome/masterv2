@@ -83,13 +83,20 @@ const CheckinSection: React.FC = () => {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Visualizza i check-in giornalieri dei tecnici e filtra per nome o anagrafica.
             </Typography>
-
             <Paper sx={{ p: 2, mb: 3 }} variant="outlined">
                 <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={6}>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 6
+                        }}>
                         <TextField fullWidth label="Filtra per nome tecnico" variant="outlined" value={filtroNome} onChange={(e) => setFiltroNome(e.target.value)} />
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            sm: 6
+                        }}>
                         <FormControl fullWidth variant="outlined">
                             <InputLabel>Filtra per Nave/Luogo</InputLabel>
                             <Select value={filtroAnagrafica} label="Filtra per Nave/Luogo" onChange={(e) => setFiltroAnagrafica(e.target.value as string)}>
@@ -100,7 +107,6 @@ const CheckinSection: React.FC = () => {
                     </Grid>
                 </Grid>
             </Paper>
-
             {Object.keys(aggregatedData).length > 0 ? (
                 <Box>
                     {Object.entries(aggregatedData).sort((a,b) => a[0].localeCompare(b[0])).map(([anagrafica, data]) => (

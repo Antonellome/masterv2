@@ -1,19 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Box, Tabs, Tab, CircularProgress, Typography } from "@mui/material";
 import ScadenzeList from "@/components/Scadenze/ScadenzeList";
-import { useScadenzeStore } from "@/store/useScadenzeStore";
+import { useScadenze } from "@/hooks/useScadenze";
 
 const ScadenzePage = () => {
   const [filter, setFilter] = useState<"all" | "personali" | "veicoli" | "documenti">("all");
-  const { scadenze, loading, error, fetchScadenze } = useScadenzeStore();
+  
+  // Use the corrected hook, which draws data from the central store.
+  const { activeScadenze, silencedScadenze, loading, error } = useScadenze();
 
-  useEffect(() => {
-    fetchScadenze();
-  }, [fetchScadenze]);
+  // The useEffect for fetching is no longer needed, as DataHydrator handles it globally.
 
   const handleChange = (event: React.SyntheticEvent, newValue: "all" | "personali" | "veicoli" | "documenti") => {
     setFilter(newValue);
   };
+
+  // Combine all scadenze to be passed to the list component, which will handle the display logic.
+  const allScadenze = [...activeScadenze, ...silencedScadenze];
 
   return (
     <Box sx={{ p: 3 }}>
@@ -35,7 +38,7 @@ const ScadenzePage = () => {
 
       {loading && <CircularProgress />}
       {error && <Typography color="error">Errore nel caricamento: {error}</Typography>}
-      {!loading && !error && <ScadenzeList scadenze={scadenze} filter={filter} />}
+      {!loading && !error && <ScadenzeList scadenze={allScadenze} filter={filter} />}
 
     </Box>
   );
