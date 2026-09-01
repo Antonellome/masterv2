@@ -14,24 +14,28 @@ export const parseToDayjs = (value: any): Dayjs | null => {
     return null;
   }
 
-  // 1. È un oggetto con il metodo .toDate() (es. Timestamp di Firestore)?
+  // 1. È un oggetto con il metodo .toDate() (es. Timestamp di Firestore nel client)?
   if (typeof value.toDate === 'function') {
     return dayjs(value.toDate());
   }
 
-  // 2. È un oggetto con la proprietà `seconds` (es. un oggetto-simil-timestamp)?
-  if (typeof value === 'object' && typeof value.seconds === 'number') {
-    return dayjs(value.seconds * 1000);
+  // 2. È un oggetto-simil-timestamp serializzato da Firebase (con `seconds` o `_seconds`)?
+  if (typeof value === 'object' && value !== null) {
+    if (typeof value.seconds === 'number') {
+      return dayjs.unix(value.seconds);
+    }
+    // CORREZIONE DEFINITIVA: Gestisce anche il formato con underscore.
+    if (typeof value._seconds === 'number') {
+      return dayjs.unix(value._seconds);
+    }
   }
   
   // 3. È una stringa che sembra un oggetto JSON?
   if (typeof value === 'string' && value.trim().startsWith('{')) {
     try {
       const parsedJson = JSON.parse(value);
-      // Riprova a parsare l'oggetto JSON appena creato
-      if (parsedJson && typeof parsedJson.seconds === 'number') {
-        return dayjs(parsedJson.seconds * 1000);
-      }
+      // Riprova a parsare l'oggetto JSON appena creato (chiamata ricorsiva sicura)
+      return parseToDayjs(parsedJson);
     } catch (e) {
       // Il parsing JSON è fallito, procedi ai tentativi successivi.
     }

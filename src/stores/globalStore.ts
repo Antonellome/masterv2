@@ -1,157 +1,149 @@
 import { create } from 'zustand';
-import { User } from 'firebase/auth';
-import { Tecnico, Cliente, Veicolo, Cantiere, Ditta, TipoGiornata, Luogo, Nave, Rapportino, Checkin, Documento, Categoria } from '@/models/definitions';
+import { logger } from '@/utils/logger';
+import { db } from '@/db/database';
+import { getDocs, collection } from 'firebase/firestore';
+import { db as firestoreDb } from '@/config/firebase';
+import type { User } from 'firebase/auth';
+import type { GlobalState, GlobalActions, NotificationType, DialogState, CollectionName, Rapportino } from '@/models/definitions';
+import { Timestamp } from 'firebase/firestore';
 
-// 1. Definizioni dei tipi corrette per le Mappe
-interface AppState {
-  user: User | null;
-  profile: Tecnico | null;
-  isAdmin: boolean;
-  isAuthenticated: boolean;
-  isAuthLoading: boolean;
-  themeMode: 'dark' | 'light';
-  // Array di anagrafiche
-  tecnici: Tecnico[];
-  clienti: Cliente[];
-  veicoli: Veicolo[];
-  cantieri: Cantiere[];
-  ditte: Ditta[];
-  tipiGiornata: TipoGiornata[];
-  luoghi: Luogo[];
-  navi: Nave[];
-  categorie: Categoria[];
-  // Dati operativi
-  rapportini: Rapportino[];
-  checkins: Checkin[];
-  documenti: Documento[];
-  // MAPPE CORRETTE: memorizzano l'intero oggetto
-  tecniciMap: Map<string, Tecnico>;
-  clientiMap: Map<string, Cliente>;
-  naviMap: Map<string, Nave>;
-  luoghiMap: Map<string, Luogo>;
-  tipiGiornataMap: Map<string, TipoGiornata>;
-  // Stati dell'UI e della sincronizzazione
-  areAnagraficheLoading: boolean;
-  isSyncInProgress: boolean;
-  lastUpdated: Date | null;
-  notification: { open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' };
-  dialog: { open: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string; cancelText?: string; };
+// --- UTILITIES ---
+const toDateSafe = (timestamp: any): Date | null => {
+    if (!timestamp) return null;
+    if (timestamp instanceof Timestamp) return timestamp.toDate();
+    if (timestamp && typeof timestamp.seconds === 'number') {
+        try {
+            return new Timestamp(timestamp.seconds, timestamp.nanoseconds || 0).toDate();
+        } catch (e) { return null; }
+    }
+    const d = new Date(timestamp);
+    return !isNaN(d.getTime()) ? d : null;
+};
 
-  // Azioni definite nello store
-  addRapportinoToStore: (rapportino: Rapportino) => void;
-  updateRapportinoInStore: (rapportino: Rapportino) => void;
-  removeRapportino: (rapportinoId: string) => void;
-  getRapportinoById: (rapportinoId: string) => Rapportino | undefined;
-}
+const processRapportini = (docs: any[]): Rapportino[] => {
+    return docs.map(docData => {
+        const finalDate = toDateSafe(docData.data) || toDateSafe(docData.dataInizio) || toDateSafe(docData.createdAt);
+        if (!finalDate) {
+            logger.warn(`Rapportino scartato (ID: ${docData.id}) per mancanza di data valida.`);
+            return null;
+        }
+        const createdAtDate = toDateSafe(docData.createdAt) || finalDate;
+        const updatedAtDate = toDateSafe(docData.updatedAt) || createdAtDate;
+        const cleanData: any = { ...docData };
+        delete cleanData.dataInizio;
 
-interface AppActions {
-  setUserAndProfile: (user: User | null, profile: Tecnico | null) => void;
-  setAdminStatus: (isAdmin: boolean) => void;
-  setAuthLoading: (isLoading: boolean) => void;
-  toggleTheme: () => void;
-  logout: () => void;
-  setAnagrafiche: (data: Partial<Pick<AppState, 'tecnici' | 'clienti' | 'veicoli' | 'cantieri' | 'ditte' | 'tipiGiornata' | 'luoghi' | 'navi' | 'categorie'>>) => void;
-  setRapportini: (rapportini: Rapportino[]) => void;
-  setCheckins: (checkins: Checkin[]) => void;
-  setDocumenti: (documenti: Documento[]) => void;
-  setAnagraficheLoading: (loading: boolean) => void;
-  setIsSyncInProgress: (isSyncing: boolean) => void;
-  setLastUpdated: (date?: Date) => void;
-  showNotification: (message: string, severity: AppState['notification']['severity']) => void;
-  hideNotification: () => void;
-  showDialog: (options: Omit<AppState['dialog'], 'open' | 'onConfirm'> & { onConfirm: () => void }) => void;
-  hideDialog: () => void;
-}
+        return {
+            ...cleanData,
+            id: docData.id,
+            data: finalDate,
+            createdAt: createdAtDate,
+            updatedAt: updatedAtDate,
+            dettaglioOreTecnici: Array.isArray(cleanData.dettaglioOreTecnici) ? cleanData.dettaglioOreTecnici : [],
+        } as Rapportino;
+    }).filter((r): r is Rapportino => r !== null);
+};
 
-const initialState: Omit<AppState, 'addRapportinoToStore' | 'updateRapportinoInStore' | 'removeRapportino' | 'getRapportinoById'> = {
+const collectionConfig = {
+    anagrafiche: [
+        { name: 'tecnici' as CollectionName, table: db.tecnici },
+        { name: 'clienti' as CollectionName, table: db.clienti },
+        { name: 'ditte' as CollectionName, table: db.ditte },
+        { name: 'navi' as CollectionName, table: db.navi },
+        { name: 'luoghi' as CollectionName, table: db.luoghi },
+        { name: 'categorie' as CollectionName, table: db.categorie },
+        { name: 'tipi_giornata' as CollectionName, table: db.tipiGiornata },
+        { name: 'veicoli' as CollectionName, table: db.veicoli },
+    ],
+    rapportini: { name: 'rapportini' as CollectionName, table: db.rapportini, processor: processRapportini },
+    checkins: { name: 'checkin_giornalieri' as CollectionName, table: db.checkins },
+    documenti: { name: 'scadenze' as CollectionName, table: db.documenti },
+};
+
+
+// --- STORE ---
+const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
+  // STATO
+  appLoading: true,
+  authLoading: true,
+  isSyncing: false,
+  lastSync: null,
+  isSidebarOpen: true,
   user: null,
   profile: null,
   isAdmin: false,
-  isAuthenticated: false,
-  isAuthLoading: true,
-  themeMode: 'dark',
-  tecnici: [],
-  clienti: [],
-  veicoli: [],
-  cantieri: [],
-  ditte: [],
-  tipiGiornata: [],
-  luoghi: [],
-  navi: [],
-  categorie: [],
-  rapportini: [],
-  checkins: [],
-  documenti: [],
-  tecniciMap: new Map(),
-  clientiMap: new Map(),
-  naviMap: new Map(),
-  luoghiMap: new Map(),
-  tipiGiornataMap: new Map(),
-  areAnagraficheLoading: true,
-  isSyncInProgress: false,
-  lastUpdated: null,
-  notification: { open: false, message: '', severity: 'info' },
-  dialog: { open: false, title: '', message: '', onConfirm: () => {} },
-};
+  notification: { message: '', type: 'info', open: false },
+  dialog: { open: false, title: '', message: '' },
 
-export const useGlobalStore = create<AppState & AppActions>((set, get) => ({
-  ...(initialState as AppState),
-  setUserAndProfile: (user, profile) => set({
-    user,
-    profile,
-    isAuthenticated: !!user,
-    isAuthLoading: false,
-  }),
-  setAdminStatus: (isAdmin) => set({ isAdmin }),
-  setAuthLoading: (isLoading) => set({ isAuthLoading: isLoading }),
-  toggleTheme: () => set(state => {
-    const newThemeMode = state.themeMode === 'light' ? 'dark' : 'light';
-    localStorage.setItem('themeMode', newThemeMode);
-    return { themeMode: newThemeMode };
-  }),
-  logout: () => set(state => ({ ...initialState, isAuthLoading: false, themeMode: state.themeMode })),
-  
-  // 2. Logica `setAnagrafiche` corretta: crea mappe di oggetti completi
-  setAnagrafiche: (data) => {
-    const createObjectMap = <T extends { id: string }>(items: T[] = []): Map<string, T> => 
-        new Map(items.map(item => [item.id, item]));
-
-    set({
-      tecnici: data.tecnici || [],
-      clienti: data.clienti || [],
-      veicoli: data.veicoli || [],
-      cantieri: data.cantieri || [],
-      ditte: data.ditte || [],
-      tipiGiornata: data.tipiGiornata || [],
-      luoghi: data.luoghi || [],
-      navi: data.navi || [],
-      categorie: data.categorie || [],
-      // ORA LE MAPPE CONTENGONO L'OGGETTO INTERO
-      tecniciMap: createObjectMap(data.tecnici),
-      clientiMap: createObjectMap(data.clienti),
-      naviMap: createObjectMap(data.navi),
-      luoghiMap: createObjectMap(data.luoghi),
-      tipiGiornataMap: createObjectMap(data.tipiGiornata),
-      areAnagraficheLoading: false,
-    });
+  // AZIONI
+  setAppLoading: (loading) => set({ appLoading: loading }),
+  setAuthLoading: (loading) => set({ authLoading: loading }),
+  setLastSync: (syncDate) => set({ lastSync: syncDate }),
+  toggleSidebar: () => set(state => ({ isSidebarOpen: !state.isSidebarOpen })),
+  showNotification: (message, type: NotificationType = 'info') => {
+    set({ notification: { message, type, open: true } });
+    setTimeout(() => get().hideNotification(), 4000);
   },
-  setRapportini: (rapportini) => set({ rapportini: rapportini || [] }),
-  addRapportinoToStore: (rapportino) => set(state => ({ rapportini: [...state.rapportini, rapportino] })),
-  updateRapportinoInStore: (rapportino) => set(state => ({
-      rapportini: state.rapportini.map(r => r.id === rapportino.id ? rapportino : r)
-  })),
-  removeRapportino: (rapportinoId) => set(state => ({ 
-      rapportini: state.rapportini.filter(r => r.id !== rapportinoId) 
-  })),
-  getRapportinoById: (rapportinoId: string) => get().rapportini.find(r => r.id === rapportinoId),
+  hideNotification: () => set({ notification: { message: '', type: 'info', open: false } }),
+  showDialog: (options: Omit<DialogState, 'open'>) => set({ dialog: { ...options, open: true } }),
+  hideDialog: () => set({ dialog: { open: false, title: '', message: '' } }),
   
-  setCheckins: (checkins) => set({ checkins: checkins || [] }),
-  setDocumenti: (documenti) => set({ documenti: documenti || [] }),
-  setAnagraficheLoading: (loading) => set({ areAnagraficheLoading: loading }),
-  setIsSyncInProgress: (isSyncing) => set({ isSyncInProgress: isSyncing }),
-  setLastUpdated: (date = new Date()) => set({ lastUpdated: date }),
-  showNotification: (message, severity) => set({ notification: { open: true, message, severity } }),
-  hideNotification: () => set(state => ({ ...state, notification: { ...state.notification, open: false } })),
-  showDialog: (options) => set({ dialog: { ...options, open: true } }),
-  hideDialog: () => set(state => ({ ...state, dialog: { ...state.dialog, open: false } })),
+  setUserAndProfile: async (user, profile, isAdmin) => {
+    const currentUser = get().user;
+    if (user && currentUser?.uid !== user.uid) {
+        logger.log(`GlobalStore: Nuovo utente (uid: ${user.uid}), isAdmin: ${isAdmin}. Avvio sync.`);
+        set({ user, profile, isAdmin, isSyncing: true });
+        await get().runInitialSync();
+    } else if (!user) {
+        logger.log(`GlobalStore: Utente sloggato.`);
+        set({ user: null, profile: null, isAdmin: false });
+    } else {
+        set({ user, profile, isAdmin });
+    }
+  },
+
+  runInitialSync: async () => {
+    if (get().isSyncing) return;
+    logger.log('GlobalStore: Avvio sincronizzazione dati...');
+    set({ isSyncing: true, appLoading: true });
+
+    try {
+        const syncCollection = async (config: { name: CollectionName; table: any; processor?: (docs: any[]) => any[] }) => {
+            const snapshot = await getDocs(collection(firestoreDb, config.name));
+            if (snapshot.empty) return;
+            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const dataToStore = config.processor ? config.processor(docs) : docs;
+            if (dataToStore.length > 0) {
+                await config.table.bulkPut(dataToStore);
+            }
+        };
+
+        const allPromises = [
+            ...collectionConfig.anagrafiche.map(syncCollection),
+            syncCollection(collectionConfig.rapportini),
+            syncCollection(collectionConfig.checkins),
+            syncCollection(collectionConfig.documenti),
+        ];
+
+        await Promise.all(allPromises);
+        logger.log('*** Sincronizzazione dati COMPLETATA con successo. ***');
+        set({ lastSync: new Date() });
+
+    } catch (error) {
+        logger.error('ERRORE CRITICO durante la sincronizzazione.', error);
+    } finally {
+        set({ isSyncing: false, appLoading: false });
+        logger.log('GlobalStore: Fine ciclo di sincronizzazione.');
+    }
+  },
+
+  logout: () => {
+    logger.log(`GlobalStore: logout`);
+    set({ user: null, profile: null, isAdmin: false, isSyncing: false });
+    Object.values(collectionConfig.anagrafiche).forEach(c => c.table.clear());
+    collectionConfig.rapportini.table.clear();
+    collectionConfig.checkins.table.clear();
+    collectionConfig.documenti.table.clear();
+  },
 }));
+
+export { useGlobalStore };

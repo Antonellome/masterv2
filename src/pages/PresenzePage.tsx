@@ -1,12 +1,11 @@
-
 import { useState, useMemo } from 'react';
 import { Typography, Box, CircularProgress, Alert, Paper, Grid, Autocomplete, TextField, Divider } from '@mui/material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
-
-import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/database';
 import { Tecnico, Nave, Luogo } from '@/models/definitions';
 import { processaPresenze, ProcessedPresenze } from '@/utils/presenzeUtils';
 import TabellaOrariLavoro from '@/components/Presenze/TabellaOrariLavoro';
@@ -15,37 +14,37 @@ import TabellaInterventi from '@/components/Presenze/TabellaInterventi';
 dayjs.locale('it');
 
 const PresenzePage = () => {
-    const {
-        checkins, navi, luoghi, tecnici,
-        loading, error
-    } = useRapportiniStore();
+    // 1. CARICAMENTO REATTIVO DEI DATI DA DEXIE
+    const checkins = useLiveQuery(() => db.checkins.toArray(), []);
+    const tecnici = useLiveQuery(() => db.tecnici.toArray(), []);
+    const navi = useLiveQuery(() => db.navi.toArray(), []);
+    const luoghi = useLiveQuery(() => db.luoghi.toArray(), []);
 
-    // STATO DEI FILTRI
+    const isLoading = !checkins || !tecnici || !navi || !luoghi;
+
+    // 2. STATO DEI FILTRI (invariato)
     const [dataInizio, setDataInizio] = useState<Dayjs | null>(dayjs().startOf('month'));
     const [dataFine, setDataFine] = useState<Dayjs | null>(dayjs().endOf('month'));
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [selectedNave, setSelectedNave] = useState<Nave | null>(null);
     const [selectedLuogo, setSelectedLuogo] = useState<Luogo | null>(null);
 
-    // ELABORAZIONE DATI
+    // 3. ELABORAZIONE DATI CON useMemo (la logica interna non cambia)
     const { orariLavoro, interventi }: ProcessedPresenze = useMemo(() => {
-        return processaPresenze(checkins, navi, luoghi, {
+        if (isLoading) return { orariLavoro: [], interventi: [] };
+        return processaPresenze(checkins!, navi!, luoghi!, {
             dataInizio: dataInizio,
             dataFine: dataFine,
             tecnico: selectedTecnico,
             nave: selectedNave,
             luogo: selectedLuogo,
         });
-    }, [checkins, navi, luoghi, dataInizio, dataFine, selectedTecnico, selectedNave, selectedLuogo]);
-
-    if (error) {
-        return <Box sx={{ p: 4 }}><Alert severity="error">{`Errore caricamento dati: ${error}`}</Alert></Box>;
-    }
+    }, [isLoading, checkins, navi, luoghi, dataInizio, dataFine, selectedTecnico, selectedNave, selectedLuogo]);
 
     // Liste ordinate per i menu a tendina
-    const sortedTecnici = useMemo(() => [...tecnici].sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`)), [tecnici]);
-    const sortedNavi = useMemo(() => [...navi].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
-    const sortedLuoghi = useMemo(() => [...luoghi].sort((a, b) => a.nome.localeCompare(b.nome)), [luoghi]);
+    const sortedTecnici = useMemo(() => [...(tecnici || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [tecnici]);
+    const sortedNavi = useMemo(() => [...(navi || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
+    const sortedLuoghi = useMemo(() => [...(luoghi || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [luoghi]);
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
@@ -56,78 +55,51 @@ const PresenzePage = () => {
 
                 <Paper elevation={3} sx={{ p: 2 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 2
-                            }}>
+                        <Grid item xs={12} sm={6} md={2}>
                             <DatePicker
                                 label="Data Inizio"
                                 value={dataInizio}
                                 onChange={(newValue) => setDataInizio(newValue)}
-                                renderInput={(params) => <TextField {...params} size="small" fullWidth />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6,
-                                md: 2
-                            }}>
+                        <Grid item xs={12} sm={6} md={2}>
                             <DatePicker
                                 label="Data Fine"
                                 value={dataFine}
                                 onChange={(newValue) => setDataFine(newValue)}
-                                renderInput={(params) => <TextField {...params} size="small" fullWidth />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 4,
-                                md: 3
-                            }}>
+                        <Grid item xs={12} sm={4} md={3}>
                             <Autocomplete
                                 options={sortedTecnici}
-                                getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
+                                getOptionLabel={(option) => option.nome}
                                 value={selectedTecnico}
                                 onChange={(_, newValue) => setSelectedTecnico(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Filtra per Tecnico" size="small" fullWidth/>}
+                                renderInput={(params) => <TextField {...params} label="Filtra per Tecnico" />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 4,
-                                md: 2
-                            }}>
+                        <Grid item xs={12} sm={4} md={2}>
                             <Autocomplete
                                 options={sortedNavi}
                                 getOptionLabel={(option) => option.nome}
                                 value={selectedNave}
                                 onChange={(_, newValue) => setSelectedNave(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Filtra per Nave" size="small" fullWidth/>}
+                                renderInput={(params) => <TextField {...params} label="Filtra per Nave" />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 4,
-                                md: 3
-                            }}>
+                        <Grid item xs={12} sm={4} md={3}>
                             <Autocomplete
                                 options={sortedLuoghi}
                                 getOptionLabel={(option) => option.nome}
                                 value={selectedLuogo}
                                 onChange={(_, newValue) => setSelectedLuogo(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Filtra per Luogo" size="small" fullWidth/>}
+                                renderInput={(params) => <TextField {...params} label="Filtra per Luogo" />}
                             />
                         </Grid>
                     </Grid>
                 </Paper>
 
-                {loading ? (
+                {isLoading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
                 ) : (
                     <Paper elevation={3} sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>

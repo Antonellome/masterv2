@@ -1,13 +1,15 @@
-
 import { Navigate, Outlet } from 'react-router-dom';
-import { useGlobalStore } from '@/stores/globalStore';
+import { useAuthStore } from '@/stores/authStore';
 import { Box, CircularProgress } from '@mui/material';
 
 const ProtectedRoute = () => {
-  const user = useGlobalStore((state) => state.user);
-  const isAuthLoading = useGlobalStore((state) => state.isAuthLoading);
+  const { user, authLoading, isAdmin } = useAuthStore((state) => ({
+    user: state.user,
+    authLoading: state.authLoading,
+    isAdmin: state.isAdmin,
+  }));
 
-  if (isAuthLoading) {
+  if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -19,13 +21,14 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  // Qui è dove la magia accade. Questo Box fornisce il contenitore a piena altezza
-  // che mancava a MainLayout e a tutte le pagine figlie.
-  return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Outlet />
-    </Box>
-  );
+  // Se l'utente non è un admin, l'accesso è gestito a livello superiore in App.tsx,
+  // ma un doppio controllo qui non fa male.
+  if (!isAdmin) {
+      return <Navigate to="/login" replace />; // O una pagina di accesso negato dedicata se esistesse a una rotta pubblica
+  }
+
+  // Se l'utente è autenticato e admin, renderizza le pagine protette.
+  return <Outlet />;
 };
 
 export default ProtectedRoute;

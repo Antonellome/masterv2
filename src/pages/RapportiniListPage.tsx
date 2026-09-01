@@ -16,7 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
-// UNICO STORE DI VERITÀ
+// Store e servizi
 import { useGlobalStore } from '@/stores/globalStore'; 
 import { Rapportino, Tecnico, Nave, Cliente } from '@/models/definitions';
 import RapportiniTable from '@/components/Rapportini/RapportiniTable';
@@ -41,7 +41,6 @@ interface PrintState {
     rapportinoToPrint: Rapportino | null;
 }
 
-// Funzione per creare mappe da array, per performance
 const createMap = <T extends { id: string }>(items: T[]): Map<string, T> => {
     return new Map(items.map(item => [item.id, item]));
 };
@@ -49,7 +48,7 @@ const createMap = <T extends { id: string }>(items: T[]): Map<string, T> => {
 const RapportiniListPage = () => {
     const navigate = useNavigate();
     
-    // TUTTI I DATI DA UNICO STORE
+    // Hook allo store globale per ottenere dati e azioni
     const {
         rapportini, tecnici, clienti, navi, removeRapportino, showNotification, getRapportinoById, areAnagraficheLoading
     } = useGlobalStore(state => ({ 
@@ -63,7 +62,7 @@ const RapportiniListPage = () => {
         areAnagraficheLoading: state.areAnagraficheLoading,
     }));
 
-    // Creazione delle mappe una sola volta
+    // Mappe per la ricerca veloce delle anagrafiche
     const tecniciMap = useMemo(() => createMap(tecnici), [tecnici]);
     const naviMap = useMemo(() => createMap(navi), [navi]);
     const clientiMap = useMemo(() => createMap(clienti), [clienti]);
@@ -101,8 +100,6 @@ const RapportiniListPage = () => {
             if (filters.dataA && rapportinoDate.isAfter(filters.dataA, 'day')) return false;
             if (filters.tecnicoId && r.tecnicoId !== filters.tecnicoId && !(r.presenze || []).includes(filters.tecnicoId)) return false;
             if (filters.naveId && r.naveId !== filters.naveId) return false;
-            // La logica di filtro per clienteId potrebbe richiedere un campo clienteId sul rapportino
-            // if (filters.clienteId && r.clienteId !== filters.clienteId) return false; 
             return true;
         });
     }, [rapportini, filters]);
@@ -133,40 +130,49 @@ const RapportiniListPage = () => {
             handleCloseDeleteDialog();
         }
     };
+    
+    // NUOVA LOGICA DI STAMPA - Correzione AZIONE P.2
+    const handlePrint = useCallback((rapportinoStub: Rapportino) => {
+        const rapportinoCompleto = getRapportinoById(rapportinoStub.id); // Prende i dati completi dallo store
 
-    const handlePrint = useCallback(async (rapportinoStub: Rapportino) => {
-        const rapportinoToPrint = getRapportinoById(rapportinoStub.id);
-        if (!rapportinoToPrint) {
-            showNotification("Rapportino non trovato.", "error");
+        if (!rapportinoCompleto) {
+            showNotification("Dati del rapportino non trovati. Impossibile stampare.", "error");
             return;
         }
 
-        setPrintState({ isGenerating: true, pdfDataUrl: null, rapportinoToPrint });
-
-        // Il timeout permette a React di renderizzare il componente nascosto prima che html2canvas lo catturi
-        setTimeout(async () => {
-            if (printRef.current) {
-                try {
-                    const canvas = await html2canvas(printRef.current, { scale: 2.5, useCORS: true });
-                    const pdf = new jsPDF('p', 'mm', 'a4');
-                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                    const pdfHeight = pdf.internal.pageSize.getHeight();
-                    const imgData = canvas.toDataURL('image/png');
-                    const imgWidth = pdfWidth;
-                    const imgHeight = canvas.height * imgWidth / canvas.width;
-
-                    let position = 0;
-                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                    const pdfUrl = pdf.output('datauristring');
-                    setPrintState(prev => ({ ...prev, isGenerating: false, pdfDataUrl: pdfUrl }));
-                } catch (error) {
-                    console.error("Errore generazione PDF:", error);
-                    showNotification("Errore durante la creazione del PDF.", "error");
-                    setPrintState(prev => ({...prev, isGenerating: false }));
-                }
-            }
-        }, 100);
+        // Passa il rapportino completo allo stato di stampa per il rendering
+        setPrintState({ isGenerating: true, pdfDataUrl: null, rapportinoToPrint: rapportinoCompleto });
     }, [getRapportinoById, showNotification]);
+
+    // La generazione del PDF ora avviene in un side-effect quando `printState` cambia
+    React.useEffect(() => {
+        if (printState.isGenerating && printState.rapportinoToPrint && printRef.current) {
+            const generatePdf = async () => {
+                 setTimeout(async () => {
+                    if (!printRef.current) return;
+                    try {
+                        const canvas = await html2canvas(printRef.current, { scale: 2.5, useCORS: true });
+                        const pdf = new jsPDF('p', 'mm', 'a4');
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pdfHeight = pdf.internal.pageSize.getHeight();
+                        const imgData = canvas.toDataURL('image/png', 1.0);
+                        const imgWidth = pdfWidth;
+                        const imgHeight = canvas.height * imgWidth / canvas.width;
+
+                        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+                        const pdfUrl = pdf.output('datauristring');
+                        setPrintState(prev => ({ ...prev, isGenerating: false, pdfDataUrl: pdfUrl }));
+                    } catch (error) {
+                        console.error("Errore generazione PDF:", error);
+                        showNotification("Errore durante la creazione del PDF.", "error");
+                        setPrintState(prev => ({...prev, isGenerating: false, rapportinoToPrint: null }));
+                    }
+                }, 250); // Aumentato leggermente il timeout per sicurezza
+            };
+            generatePdf();
+        }
+    }, [printState.isGenerating, printState.rapportinoToPrint, showNotification]);
+
 
     const handleClosePrintDialog = () => setPrintState({ isGenerating: false, pdfDataUrl: null, rapportinoToPrint: null });
 
@@ -181,7 +187,6 @@ const RapportiniListPage = () => {
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({ files: [file], title: `Rapportino ${printState.rapportinoToPrint.id}` });
             } else {
-                // Fallback per il download
                 const link = document.createElement('a');
                 link.href = printState.pdfDataUrl;
                 link.download = fileName;
@@ -226,8 +231,7 @@ const RapportiniListPage = () => {
                         onRowClick={handleRowClick}
                         onEdit={handleEdit}
                         onDelete={handleOpenDeleteDialog}
-                        onPrint={handlePrint}
-                        // PASSAGGIO ESPLICITO DI DATI E STATO
+                        onPrint={handlePrint} // Il gestore `handlePrint` è stato aggiornato
                         tecniciMap={tecniciMap}
                         naviMap={naviMap}
                         loading={areAnagraficheLoading}
@@ -235,6 +239,7 @@ const RapportiniListPage = () => {
                 </Paper>
             </Box>
             
+            {/* Dialog di dettaglio - ORA USA ANCHE LUI IL NUOVO FLUSSO DI STAMPA */}
             {detailRapportino && (
                 <Dialog open={!!detailRapportino} onClose={handleCloseDetail} fullWidth maxWidth="lg" PaperProps={{ sx: { height: '90vh' } }}>
                     <DialogTitle>
@@ -242,26 +247,32 @@ const RapportiniListPage = () => {
                         <IconButton aria-label="close" onClick={handleCloseDetail} sx={{ position: 'absolute', right: 8, top: 8 }}><CloseIcon /></IconButton>
                     </DialogTitle>
                     <DialogContent dividers>
-                        {/* Passaggio di tutte le anagrafiche necessarie per la stampa */}
+                        {/* Passa tutte le anagrafiche, come prima */}
                         <RapportinoPrint rapportino={detailRapportino} tecnici={tecnici} navi={navi} clienti={clienti} />
                     </DialogContent>
                     <DialogActions>
                         <Button onClick={handleCloseDetail}>Chiudi</Button>
-                        <Button variant="contained" startIcon={<PrintIcon />} onClick={() => detailRapportino && handlePrint(detailRapportino)}>Stampa / PDF</Button>
+                        <Button variant="contained" startIcon={<PrintIcon />} onClick={() => handlePrint(detailRapportino)}>Stampa / PDF</Button>
                     </DialogActions>
                 </Dialog>
             )}
             
+            {/* Componente di rendering nascosto per la generazione del PDF */}
             {printState.rapportinoToPrint && (
-                 <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '210mm', background: 'white' }}>
+                 <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '210mm', background: 'white', zIndex: -1 }}>
                     <div ref={printRef}>
-                        <RapportinoPrint rapportino={printState.rapportinoToPrint} tecnici={tecnici} navi={navi} clienti={clienti} />
+                        <RapportinoPrint 
+                            rapportino={printState.rapportinoToPrint} 
+                            tecnici={tecnici} 
+                            navi={navi} 
+                            clienti={clienti} 
+                        />
                     </div>
                 </div>
             )}
 
             <PdfPreviewDialog
-                open={!!printState.pdfDataUrl}
+                open={!!printState.pdfDataUrl && !printState.isGenerating}
                 onClose={handleClosePrintDialog}
                 onShare={handleShare}
                 pdfDataUrl={printState.pdfDataUrl}

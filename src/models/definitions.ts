@@ -1,310 +1,113 @@
 
-import { Timestamp } from 'firebase/firestore';
+import type { Table } from 'dexie';
 
-export interface BaseEntity {
-  id: string;
+// ==========================================================================
+// TIPI DEL DATABASE LOCALE (DEXIE)
+// ==========================================================================
+
+export interface Anagrafica {
+    id?: number;
+    nome: string;
+    [key: string]: any;
 }
 
-// --- ANAGRAFICHE PRINCIPALI ---
-
-export interface Tecnico extends BaseEntity {
-  nome: string;
-  cognome: string;
-  email: string;
-  codiceFiscale?: string;
-  telefono?: string;
-  indirizzo?: string;
-  cap?: string;
-  citta?: string;
-  provincia?: string;
-  attivo: boolean;
-  appAccess?: boolean;
-  accessoApp?: boolean;
-  dittaId?: string;
-  categoriaId?: string;
-  tipoContratto?: string;
-  dataAssunzione?: Timestamp | Date | null;
-  numeroCartaIdentita?: string;
-  scadenzaCartaIdentita?: Timestamp | Date | null;
-  numeroPatente?: string;
-  categoriaPatente?: string;
-  scadenzaPatente?: Timestamp | Date | null;
-  numeroPassaporto?: string;
-  scadenzaPassaporto?: Timestamp | Date | null;
-  numeroCQC?: string;
-  scadenzaCQC?: Timestamp | Date | null;
-  scadenzaVisita?: Timestamp | Date | null;
-  scadenzaContratto?: Timestamp | Date | null;
-  scadenzaPrimoSoccorso?: Timestamp | Date | null;
-  scadenzaAntincendio?: Timestamp | Date | null;
-  scadenzaCorsoSicurezza?: Timestamp | Date | null;
-  scadenzaUnilav?: Timestamp | Date | null;
-  uid?: string;
-  fcmToken?: string;
-  tariffe?: Record<string, number>;
-  note?: string;
-  sincronizzazioneAttiva?: boolean;
-  dataSync?: Timestamp | Date | null;
-  updatedAt?: Timestamp | Date | null;
-  scadenzeSilenced?: Record<string, boolean>;
-}
-
-export interface Cliente extends BaseEntity {
-  nome: string;
-  indirizzo?: string;
-  citta?: string;
-  piva?: string;
-  codiceFiscale?: string;
-  email?: string;
-  telefono?: string;
-}
-
-export interface Categoria extends BaseEntity {
-  nome: string;
-}
-
-export interface Ditta extends BaseEntity {
-  nome: string;
-}
-
-export interface Veicolo extends BaseEntity {
-    anno?: string;
+export interface Rapportino {
     id: string;
-    kmAttuali?: string;
-    marca: string;
-    modello: string;
+    data: Date;
+    tecnicoId: string;
+    nomeLavoro: string;
+    oreLavorate?: number;
+    dettaglioOreTecnici: { tecnicoId: string; ore: number }[];
+    veicoloId?: string;
+    km?: number;
     note?: string;
-    scadenzaAssicurazione?: Timestamp | Date | string | null;
-    scadenzaBollo?: Timestamp | Date | string | null;
-    scadenzaRevisione?: Timestamp | Date | string | null;
-    scadenzaTachigrafo?: Timestamp | Date | string | null;
-    scadenzaTagliando?: Timestamp | Date | string | null;
-    targa: string;
-    tipo?: string;
-    scadenzeSilenced?: Record<string, boolean>;
+    clienteId?: string;
+    naveId?: string;
+    dittaId?: string;
+    luogoId?: string;
+    tipoGiornataId?: string;
+    isNoteChanged?: boolean;
+    isTask?: boolean;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
-// --- ANAGRAFICHE DI SUPPORTO ---
-
-export interface TipoGiornata extends BaseEntity {
-  nome: string;
-  categoria?: 'ordinaria' | 'straordinario' | 'trasferta' | 'special';
-  colore: string;
-  costo: number;
-  unita: 'h' | 'g';
-}
-
-export interface Nave extends BaseEntity {
-  nome: string;
-  clienteId: string;
-}
-
-export interface Luogo extends BaseEntity {
-  nome: string;
-  clienteId?: string; 
-}
-
-// --- DATI OPERATIVI (STRUTTURA UNIFICATA - FASE R.4) ---
-
-export interface DettaglioOreTecnici {
-  tecnicoId: string;
-  nome: string;
-  oraInizio?: string | null;
-  oraFine?: string | null;
-  ore?: number;
-  isManual?: boolean;
-}
-
-export interface Rapportino extends BaseEntity {
-  // --- CAMPI FONDAMENTALI (STANDARD R.4) ---
-  data: Timestamp | Date;
-  dataFine?: Timestamp | Date | null;
-  tecnicoId: string;
-  presenze: string[];
-  tipoGiornataId: string;
-  includeTrasferta: boolean;
-  trasfertaId?: string | null;
-
-  // --- DETTAGLI INTERVENTO ---
-  naveId?: string | null;
-  luogoId?: string | null;
-  veicoloId?: string | null;
-  ordineLavoro?: string | null;
-  descrizioneBreve?: string | null;
-  lavoroEseguito: string;
-  materialiImpiegati?: string | null;
-
-  // --- DETTAGLIO ORE (STANDARD R.4) ---
-  dettaglioOreTecnici: DettaglioOreTecnici[];
-
-  // --- FIRMA ---
-  firmaFirmatarioNome?: string | null;
-  firmaFirmatarioSocieta?: string | null;
-  firmaVettoriale?: string | null;
-
-  // --- METADATI DI SISTEMA ---
-  createdAt: Timestamp | Date;
-  createdBy: string;
-  updatedAt: Timestamp | Date;
-  updatedBy: string;
-  isLocked: boolean;
-  version: number;
-  
-  // --- CAMPO PER SINCRONIZZAZIONE LOCALE ---
-  isDirty?: 1 | 0;
-  isDeleted?: boolean;
-
-  // --- CAMPI LEGACY (mantenuti per compatibilità in lettura) ---
-  dataInizio?: any; 
-  approvato?: boolean;
-  note?: string;
-  oreLavoro?: number;
-  dettaglioOre?: any;
-}
-
-/**
- * Rappresenta un singolo evento di check-in/out generato dall'app Tecnici.
- * La struttura è definita e governata dal file `presenze_nuova.md`.
- */
-export interface Checkin extends BaseEntity {
-  tecnicoId: string;
-  tecnicoName: string;
-  tipo: "inizio_giornata" | "fine_giornata" | "check_in_luogo" | "check_out_luogo";
-  timestampImpostato: Timestamp | Date;
-  timestampReale: Timestamp | Date;
-  naveId?: string;
-  luogoId?: string;
-}
-
-
-// --- IMPOSTAZIONI E PROFILI ---
-
-export interface Impostazioni extends BaseEntity {
-    tariffe: {
-        tipoGiornataId: string;
-        costo: number;
-        unita: 'h' | 'g';
-    }[];
-}
-
-export interface UserProfile {
-  uid: string;
-  email: string | null;
-  nome: string | null;
-  cognome: string | null;
-  isAdmin: boolean;
-  isTecnico: boolean;
-  tecnicoId: string | null;
-}
-
-export interface MasterData {
-  clienti: Cliente[];
-  tecnici: Tecnico[];
-  tipiGiornata: TipoGiornata[];
-  navi: Nave[];
-  luoghi: Luogo[];
-  veicoli: Veicolo[];
-  categorie: Categoria[];
-  ditte: Ditta[];
-}
-
-// --- REPORTISTICA ---
-
-export interface RiepilogoVoce {
-  id: string;
-  nome: string;
-  colore: string;
-  unita: 'h' | 'g';
-  oreTotali: number;
-  giorni: number;
-  costo: number;
-  giorniSet?: Set<string>;
-}
-
-export interface RiepilogoMese {
-  dettaglio: Map<string, RiepilogoVoce>;
-  oreTotali: number;
-  oreOrdinarie: number;
-  oreStraordinarie: number;
-  giorniTotaliLavorati: number;
-  giorniTrasferta: number;
-  costoTotale: number;
-}
-
-// --- NOTIFICHE ---
-
-export interface NotificationTarget {
-    type: 'user' | 'category' | 'all';
+export interface Checkin {
     id: string;
-    name: string;
+    data: Date;
+    tecnicoId: string;
+    location: { latitude: number; longitude: number };
 }
 
-export interface NotificaInviata extends BaseEntity {
-  title: string;
-  body: string;
-  sentAt: Timestamp;
-  target: NotificationTarget;
-  recipientsCount: number;
-  fcmMessageId: string;
-  batchId?: string;
+export interface Documento {
+    id: string;
+    nome: string;
+    dataScadenza: Date;
+    tipo: 'personale' | 'veicolo' | 'attrezzatura';
+    ownerId: string;
 }
 
-// --- TIPI GENERICI ---
-export type Anagrafica = Cliente | Tecnico | Categoria | Ditta | Nave | Luogo | Veicolo | TipoGiornata;
+// ==========================================================================
+// TIPI DELLO STORE GLOBALE (ZUSTAND)
+// ==========================================================================
 
-export interface FormField {
-  name: string;
-  label: string;
-  type: 'text' | 'number' | 'email' | 'select' | 'date' | 'boolean' | 'password';
-  required?: boolean;
-  options?: { value: string; label: string }[];
-  defaultValue?: any;
+export type NotificationType = 'success' | 'error' | 'info' | 'warning';
+
+export interface NotificationState {
+    message: string;
+    type: NotificationType;
+    open: boolean;
 }
 
-// --- TIPI RICHIESTI DAL PIANO DI RECUPERO ---
-
-export interface Notifica extends BaseEntity {
-  title: string;
-  body: string;
-  createdAt: Timestamp | Date;
-  read: boolean;
-  linkTo?: string; 
-  fcmMessageId?: string;
+export interface DialogState {
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm?: () => void; 
+    cancelText?: string;
+    confirmText?: string;
 }
 
 /**
- * Rappresenta una singola scadenza aggregata da diverse collezioni (Tecnici, Veicoli, etc.)
- * per essere visualizzata nella pagina Scadenze.
+ * Stato globale della UI gestito da Zustand.
  */
-export interface Scadenza {
-  id: string; 
-  data: string; 
-  descrizione: string;
-  tipo: 'personali' | 'veicoli' | 'documenti';
-  status: 'ok' | 'in_scadenza' | 'imminente' | 'scaduto' | 'non_impostata';
-  silenced: boolean; 
-  riferimento: string; 
-  itemOriginaleId: string; 
-  collection: 'tecnici' | 'veicoli' | 'documenti';
-  campoOriginale: string; 
+export interface GlobalState {
+    appLoading: boolean;
+    lastSync: Date | null;
+    isSidebarOpen: boolean;
+    notification: NotificationState;
+    dialog: DialogState;
 }
 
-export type EventoGiornaliero = Rapportino | Checkin;
-
-export type CollectionName = 'rapportini' | 'tecnici' | 'clienti' | 'ditte' | 'navi' | 'luoghi' | 'categorie' | 'tipi_giornata' | 'veicoli' | 'checkin_giornalieri' | 'scadenze' | 'notifiche_inviate' | 'utenti' | 'impostazioni' | 'sync_manifest' | 'sync_queue_errors';
-
-
-export interface AnagraficaConfig {
-    [key: string]: {
-        collectionName: string;
-        title: string;
-        fields: FormField[];
-        columns: any[];//GridColDef[];
-        relations?: {
-            [key: string]: {
-                collection: string;
-                displayField: string;
-            }
-        }
-    }
+/**
+ * Azioni per modificare lo stato globale della UI.
+ */
+export interface GlobalActions {
+    setAppLoading: (loading: boolean) => void;
+    setLastSync: (syncDate: Date) => void;
+    setIsSidebarOpen: (isOpen: boolean) => void;
+    toggleSidebar: () => void;
+    showNotification: (message: string, type?: NotificationType) => void;
+    hideNotification: () => void;
+    showDialog: (options: Omit<DialogState, 'open'>) => void;
+    hideDialog: () => void;
 }
+
+// ==========================================================================
+// ALTRI TIPI
+// ==========================================================================
+
+export type CollectionName = 
+    | 'rapportini'
+    | 'tecnici'
+    | 'clienti'
+    | 'ditte'
+    | 'navi'
+    | 'luoghi'
+    | 'categorie'
+    | 'tipi_giornata'
+    | 'veicoli'
+    | 'checkin_giornalieri'
+    | 'scadenze';
+
+export type AnagraficaTable = Table<Anagrafica>;

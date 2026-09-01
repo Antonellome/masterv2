@@ -57,11 +57,9 @@ const columns: GridColDef<ScadenzaRow>[] = [
 ];
 
 const ScadenzeGrid = () => {
-    // Data is now fetched from the central Zustand store
-    const { veicoli, tecnici } = useRapportiniStore(state => ({
-        veicoli: state.veicoli,
-        tecnici: state.tecnici,
-    }));
+    // ULTIMATE FIX (R.6): Changed selector to prevent infinite loops.
+    const veicoli = useRapportiniStore(state => state.veicoli);
+    const tecnici = useRapportiniStore(state => state.tecnici);
 
     const rows: ScadenzaRow[] = [
         ...(veicoli || []).flatMap((v: Veicolo): ScadenzaRow[] => [

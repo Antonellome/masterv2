@@ -1,68 +1,51 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isAdmin() {
-      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return exists(/databases/$(database)/documents/utenti_master/$(request.auth.uid));
+    }
+    function isTecnico() {
+      return exists(/databases/$(database)/documents/tecnici/$(request.auth.uid));
     }
     function isSignedIn() {
       return request.auth != null;
     }
     function isOwner(resource) {
-      return resource.data.tecnicoId == request.auth.uid || resource.data.userId == request.auth.uid;
+      return request.auth.uid == resource.data.tecnicoId || request.auth.uid == resource.data.tecnicoScriventeId;
     }
     function isParticipant(resource) {
-      return request.auth.uid in resource.data.presenze;
+      return 'presenze' in resource.data && request.auth.uid in resource.data.presenze;
     }
 
-    // --- ANAGRAFICHE: LETTURA PER TUTTI I LOGGATI ---
+    // NUOVA REGOLA: Permette a tutti gli utenti loggati di leggere i metadati di sync
+    match /sync_state/{docId} {
+      allow read: if isSignedIn();
+    }
+
+    // Accesso a ruoli e utenti
+    match /utenti_master/{userId} { allow read, write: if isAdmin(); }
+    match /tecnici/{userId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // Anagrafiche (Lettura per utenti loggati, Scrittura per Admin)
     match /clienti/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /ditte/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /luoghi/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /navi/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /qualifiche/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /tecnici/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /categorie/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /tipiGiornata/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /veicoli/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /categorie/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /anagrafiche/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /tariffe_locali/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-
-    // --- REGOLA CHIAVE PER APP TECNICI ---
-    match /sync_manifest/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-      allow delete: if isAdmin();
+    
+    // Dati operativi
+    match /checkin_giornalieri/{docId} {
+      allow create: if isTecnico() && request.resource.data.tecnicoId == request.auth.uid;
+      allow read, update, delete: if isOwner(resource) || isAdmin();
     }
-
-    // --- RAPPORTINI ---
     match /rapportini/{id} {
-      allow read, update: if isAdmin() || isParticipant(resource);
-      allow create: if isSignedIn() && request.resource.data.tecnicoId == request.auth.uid;
-      allow delete: if isAdmin();
-    }
-
-    // --- NOTIFICHE (con il nome corretto 'notifications') ---
-    match /notifications/{id} {
-        allow read: if isAdmin() || isOwner(resource);
-        allow create: if isAdmin();
-        allow update: if isAdmin() || (isOwner(resource) && request.resource.data.keys().hasOnly(['isRead']));
-        allow delete: if isAdmin();
-    }
-
-    // --- SCADENZE (SOLO ADMIN) ---
-    match /scadenze/{id} {
-        allow read, write: if isAdmin();
-    }
-
-    // --- GESTIONE ADMIN ---
-    match /admins/{uid} {
-      allow read, write: if isAdmin();
-    }
-
-    match /utenti_master/{uid} {
-        allow read: if isAdmin() || request.auth.uid == uid;
-        allow write: if isAdmin();
+      allow list: if isAdmin() || isTecnico();
+      allow get: if isAdmin() || isOwner(resource) || isParticipant(resource);
+      allow create: if isTecnico() && request.resource.data.tecnicoScriventeId == request.auth.uid;
+      allow update, delete: if isOwner(resource) || isAdmin();
     }
   }
 }

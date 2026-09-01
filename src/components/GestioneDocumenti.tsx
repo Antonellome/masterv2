@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { useState, useCallback } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/database';
 import dayjs from 'dayjs';
 import type { Documento } from '@/models/definitions';
 import DocumentoForm from '@/components/Documenti/DocumentoForm';
@@ -14,28 +14,27 @@ import {
 import Add from '@mui/icons-material/Add';
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import DettaglioItemDialog from '@/components/common/DettaglioItemDialog';
-import { useRefresh } from '@/contexts/RefreshContext';
+import { logger } from '@/utils/logger';
 
-// Definizione di un tipo per l'oggetto dei dettagli
+const handleCloudSync = async (operation: 'create' | 'update' | 'delete', collectionName: string, data: any) => {
+    logger.log(`[Cloud Sync] ${operation} su ${collectionName}:`, data);
+    // Qui andrà la logica per chiamare la Cloud Function
+    return Promise.resolve();
+};
+
 interface ItemToView {
     titolo: string;
     dettagli: { label: string; value: string | React.ReactNode }[];
 }
 
-// Definizione di un tipo sicuro per gli input di data
-type DateInput = Timestamp | Date | string | null | undefined;
-
-// La funzione ora accetta il tipo sicuro e restituisce una stringa formattata o 'N/D'
-const safeFormatDate = (date: DateInput): string => {
+const safeFormatDate = (date: any): string => {
     if (!date) return 'N/D';
-    const dateObj = date instanceof Timestamp ? date.toDate() : date;
+    const dateObj = date instanceof Date ? date : new Date(date);
     const dayjsDate = dayjs(dateObj);
     return dayjsDate.isValid() ? dayjsDate.format('DD/MM/YYYY') : 'N/D';
 };
 
 const GestioneDocumenti: React.FC = () => {
-    const [documenti, setDocumenti] = useState<Documento[]>([]);
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [formOpen, setFormOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -43,36 +42,18 @@ const GestioneDocumenti: React.FC = () => {
     const [selectedDocumento, setSelectedDocumento] = useState<Documento | null>(null);
     const [itemToView, setItemToView] = useState<ItemToView | null>(null);
     const [documentoToDeleteId, setDocumentoToDeleteId] = useState<string | null>(null);
-    const { refreshKey } = useRefresh();
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const querySnapshot = await getDocs(collection(db, "documenti"));
-            const documentiData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Documento));
-            setDocumenti(documentiData);
-        } catch (err) {
-            console.error("Errore nel caricamento dei documenti:", err);
-            setError("Impossibile caricare l'elenco dei documenti.");
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-    }, [fetchData, refreshKey]);
+    // 1. Lettura reattiva da Dexie
+    const documenti = useLiveQuery(() => db.documenti.toArray(), []);
 
     const handleOpenForm = (documento: Documento | null = null) => {
         setSelectedDocumento(documento);
         setFormOpen(true);
     };
 
-    const handleCloseForm = (shouldRefresh: boolean) => {
+    const handleCloseForm = () => {
         setFormOpen(false);
         setSelectedDocumento(null);
-        if (shouldRefresh) fetchData();
     };
 
     const handleOpenConfirm = (id: string) => {
@@ -88,43 +69,56 @@ const GestioneDocumenti: React.FC = () => {
     const handleViewDetails = (documento: Documento) => {
         const dettagli = [
             { label: 'Nome', value: documento.nome },
-            { label: 'Descrizione', value: documento.descrizione },
-            { label: 'Scadenza 1', value: safeFormatDate(documento.scadenza1) },
-            { label: 'Scadenza 2', value: safeFormatDate(documento.scadenza2) },
+            { label: 'Tipo', value: documento.tipo },
+            { label: 'Data Scadenza', value: safeFormatDate(documento.dataScadenza) },
+            { label: 'Owner ID', value: documento.ownerId },
         ];
         setItemToView({ titolo: `Dettaglio ${documento.nome}`, dettagli });
         setDetailsOpen(true);
     };
 
-    const handleSave = async (documentoData: Partial<Documento>) => {
+    const handleSave = useCallback(async (formData: Partial<Documento>) => {
         try {
+            setError(null);
             if (selectedDocumento?.id) {
-                await updateDoc(doc(db, 'documenti', selectedDocumento.id), documentoData);
+                // UPDATE
+                const updatedData = { ...selectedDocumento, ...formData };
+                await db.documenti.update(selectedDocumento.id, updatedData);
+                await handleCloudSync('update', 'documenti', updatedData);
             } else {
-                await addDoc(collection(db, 'documenti'), documentoData);
+                // CREATE
+                const id = crypto.randomUUID();
+                const newDoc = { ...formData, id } as Documento;
+                await db.documenti.add(newDoc);
+                await handleCloudSync('create', 'documenti', newDoc);
             }
-            handleCloseForm(true);
-        } catch (error) {
-            console.error("Errore nel salvataggio del documento: ", error);
+            handleCloseForm();
+        } catch (err) {
+            const msg = 'Errore nel salvataggio del documento.';
+            logger.error(msg, err);
+            setError(msg);
         }
-    };
+    }, [selectedDocumento]);
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (documentoToDeleteId) {
             try {
-                await deleteDoc(doc(db, 'documenti', documentoToDeleteId));
-                fetchData();
-            } catch (error) {
-                console.error("Errore nell'eliminazione del documento: ", error);
+                setError(null);
+                await db.documenti.delete(documentoToDeleteId);
+                await handleCloudSync('delete', 'documenti', { id: documentoToDeleteId });
+            } catch (err) {
+                const msg = 'Errore nell'eliminazione del documento.';
+                logger.error(msg, err);
+                setError(msg);
             } finally {
                 handleCloseConfirm();
             }
         }
-    };
+    }, [documentoToDeleteId]);
 
-    const documentoDaEliminare = documenti.find(d => d.id === documentoToDeleteId);
+    const documentoDaEliminare = documenti?.find(d => d.id === documentoToDeleteId);
 
-    if (loading && !documenti.length) {
+    if (documenti === undefined) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><CircularProgress /></Box>;
     }
 
@@ -135,14 +129,12 @@ const GestioneDocumenti: React.FC = () => {
                 <Button variant="contained" startIcon={<Add />} onClick={() => handleOpenForm()}>Aggiungi Documento</Button>
             </Box>
 
-            {loading ? <CircularProgress /> : 
-                <DocumentiList 
-                    documenti={documenti}
-                    onEdit={handleOpenForm}
-                    onDelete={handleOpenConfirm}
-                    onViewDetails={handleViewDetails}
-                />
-            }
+            <DocumentiList 
+                documenti={documenti}
+                onEdit={handleOpenForm}
+                onDelete={handleOpenConfirm}
+                onViewDetails={handleViewDetails}
+            />
 
             <DocumentoForm
                 open={formOpen}

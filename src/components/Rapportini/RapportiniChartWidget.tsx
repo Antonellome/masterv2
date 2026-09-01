@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { collection, query, where, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db } from '@/config/firebase'; // <-- PERCORSO CORRETTO
 import { useCollectionData } from '@/hooks/useCollectionData';
 import dayjs from 'dayjs';
 import { Box, CircularProgress, Typography, Alert, useTheme } from '@mui/material';

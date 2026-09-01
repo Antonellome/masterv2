@@ -17,8 +17,6 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-// RIPRISTINO: Esportiamo di nuovo 'functions' per risolvere il SyntaxError
-// e tornare allo stato precedente, come da istruzioni.
-const functions = getFunctions(app, 'europe-west1');
+const functions = getFunctions(app, 'europe-west6');
 
 export { app, auth, db, functions };

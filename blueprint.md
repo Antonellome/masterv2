@@ -1,39 +1,49 @@
-# Blueprint di Sviluppo - Applicazione RISO M-O-V3
+CIAO
 
-## Panoramica
+# Blueprint del Progetto R-Evolution M-O-V 3
 
-Questo documento serve come fonte di verità per lo sviluppo e la manutenzione dell'ecosistema di applicazioni (App Master Office e App Tecnici). Traccia le decisioni architetturali, le strategie di refactoring e i piani d'azione per risolvere i problemi critici.
+## Overview
 
----
+Questo documento descrive l'architettura, le funzionalità e lo stato di avanzamento del backend per l'applicazione R-Evolution M-O-V 3, basato su Firebase Cloud Functions.
 
-## Stato Iniziale e Problema Rilevato
+Il file `risposta.md` contiene uno snapshot completo del codice sorgente di tutte le funzioni, salvato durante la fase di allineamento, e rappresenta una base di codice verificata e coerente.
 
-*... (Sezioni R.1 - R.4 invariate) ...*
+## Regole di Comunicazione
 
-### **FASE N.1: Implementazione e Bonifica Sistema di Notifiche (COMPLETATA)**
-*   **Obiettivo:** Correggere i bug critici, rendere sicuro e completare il sistema di notifiche bidirezionale tra l'App Master e l'App Tecnici.
+1.  **Regola del CIAO:** Inizia ogni commento in chat con "CIAO".
+2.  **Regola della Lingua ITALIANA:** Qui si commenta solo in ITALIANO.
 
-*   **Architettura Finale e Decisioni:**
-    1.  **Region Standardizzata:** Tutte le Cloud Functions sono state forzate ad operare in `europe-west1` per risolvere il bug critico `internal` causato da un disallineamento di region.
-    2.  **App Master (Invio):** Invia notifiche tramite la Cloud Function `sendNotifica`, riservata agli admin.
-    3.  **App Master (Cancellazione):** Utilizza la nuova Cloud Function `deleteNotificationBatch` per eliminare in modo sicuro intere cronologie di notifiche, centralizzando la logica sul backend.
-    4.  **App Tecnici (Ricezione):** 
-        *   Usa `getNotifiche` per recuperare la lista delle notifiche.
-        *   Usa `markNotificheAsRead` per segnare le notifiche come lette.
-        *   **NON usa `deleteNotifiche`**. Come da loro richiesta, l'eliminazione è gestita come un'azione di "nascondi" solo sul client (es. usando il localStorage).
+## Struttura e Design
 
-*   **Cloud Functions Implementate (`europe-west1`):**
-    *   `sendNotifica`: (Admin) Invia notifiche a target specifici.
-    *   `getNotifiche`: (Tecnico) Recupera le proprie notifiche.
-    *   `markNotificheAsRead`: (Tecnico) Segna le proprie notifiche come lette.
-    *   `deleteNotifiche`: (Tecnico/Admin) Funzione di eliminazione granulare, attualmente non usata dall'App Tecnici.
-    *   `deleteNotificationBatch`: (Admin) **NUOVA FUNZIONE** per eliminare in modo sicuro un intero lotto di notifiche dal backend.
+Il backend è composto da diverse Cloud Functions scritte in TypeScript, che gestiscono la logica di business principale dell'applicazione.
 
-*   **Piano d'Azione Eseguito:**
-    1.  **Risolto Bug Critico `internal`:** Identificato e risolto il problema della region, deployando tutte le funzioni in `europe-west1`. (FATTO)
-    2.  **Comunicato con App Tecnici:** Aggiornato `notifiche.md` con la soluzione, sbloccando il loro sviluppo. (FATTO)
-    3.  **Sviluppata Funzione di Cancellazione Sicura:** Creata e deployata la funzione `deleteNotificationBatch` per l'App Master. (FATTO)
-    4.  **Aggiornato Blueprint:** Documentate tutte le modifiche. (FATTO)
+### Elenco Funzioni Attuali:
 
-*   **Prossimi Passi (Refactoring App Master):**
-    *   Aggiornare il componente frontend `SentNotificationsList.tsx` nell'App Master per utilizzare la nuova funzione `deleteNotificationBatch` attraverso il `notificationService`, rimuovendo la logica di cancellazione dal client.
+*   **`syncAllAnagrafiche`**: Fornisce dati anagrafici essenziali (tecnici, clienti, navi, etc.) alle app client.
+*   **`createCheckin`**: Salva un nuovo check-in giornaliero per un tecnico.
+*   **`getCheckinsUpdates`**: Ottiene gli aggiornamenti dei check-in per un dato tecnico in modo incrementale.
+*   **`getAllRapportiniForSync`**: Sincronizza i report basandosi sulla presenza dei tecnici e gestisce il soft-delete.
+*   **`saveRapportino`**: Crea o aggiorna un report con controllo di proprietà.
+*   **`softDeleteRapportino`**: Esegue la cancellazione logica dei report previa verifica autore.
+*   **`saveFCMToken`**: Salva il token per le notifiche push.
+
+## Piano di Lavoro e Cronistoria
+
+### Sessione di Debugging Avanzato: Il Mistero dei Deploy Silenti
+
+1.  **Obiettivo:** Risolvere gli errori `internal` e `Manifest non trovato` che persistevano lato client.
+2.  **Causa Radice:** L'ispezione del file `firebase.json` ha rivelato che era completamente vuoto, rendendo i deploy inefficaci.
+3.  **Risoluzione:** Ripristino della configurazione di deploy corretta.
+
+### Sessione Risolutiva Finale (30 Agosto 2026): Allineamento Dati e Proprietà
+
+1.  **Obiettivo:** Risolvere la mancata visualizzazione dei 300+ report storici e implementare la logica di proprietà.
+2.  **Problema Identificato:** È stata rilevata una discrepanza critica tra il codice proposto inizialmente (che cercava il campo `tecniciIds`) e la realtà del database Firestore, che utilizza invece il campo **`presenze`** per l'elenco dei tecnici coinvolti.
+3.  **Implementazione VERSIONE 11:** È stata deployata la versione definitiva delle Cloud Functions (`functions/src/rapportini.ts`) che:
+    *   Utilizza `presenze` con operatore `array-contains` per la sincronizzazione dei dati.
+    *   Utilizza **`tecnicoScriventeId`** come campo di riferimento per i permessi di proprietà (ownership). Solo l'autore può modificare o cancellare un report.
+    *   Gestisce correttamente il **soft-delete** tramite il flag `isDeleted`, garantendo che i dati storici (dove il campo era assente) rimangano visibili.
+4.  **Configurazione Indici:** Sono stati configurati e attivati con successo gli indici compositi necessari su Firestore:
+    *   Collezione `rapportini`: `presenze` (Array) + `updatedAt` (Decrescente).
+    *   Collezione `checkin_giornalieri`: `tecnicoId` (Ascendente) + `updatedAt` (Decrescente).
+5.  **Stato Finale:** Il backend è ora **DEFINITIVO**, allineato alla struttura dati storica e protetto da logiche di accesso sicure. Il sistema è pienamente operativo per la sincronizzazione dell'app tecnici.

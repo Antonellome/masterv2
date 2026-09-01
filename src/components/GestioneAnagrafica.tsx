@@ -1,122 +1,144 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { useGlobalStore } from '@/stores/globalStore';
-import * as api from '@/services/api';
+import { useState, useMemo, useCallback } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/database'; 
+import { syncService } from '@/services/syncService'; // IMPORTA IL NUOVO SERVIZIO
+import { Anagrafica } from '@/models/definitions';
+import { logger } from '@/utils/logger';
+import { 
+    Box, Button, CircularProgress, Alert, Typography, Grid, Paper, 
+    Tabs, Tab, TextField, Autocomplete
+} from '@mui/material';
+import Add from '@mui/icons-material/Add';
+import AnagraficaForm from './AnagraficaForm';
+import AnagraficaTable from './AnagraficaTable';
+import ConfirmationDialog from '@/components/ConfirmationDialog';
 
-// Definiamo un tipo per i campi del form per maggiore chiarezza
-interface FormField {
-  name: string;
-  label: string;
-  type: string;
-  required?: boolean;
-}
+const ANAGRAFICA_TABS = [
+    { label: 'Tecnici', collection: 'tecnici' },
+    { label: 'Clienti', collection: 'clienti' },
+    { label: 'Navi', collection: 'navi' },
+    { label: 'Luoghi', collection: 'luoghi' },
+    { label: 'Ditte', collection: 'ditte' },
+    { label: 'Veicoli', collection: 'veicoli' },
+    { label: 'Tipi Giornata', collection: 'tipiGiornata' },
+];
 
-interface GestioneAnagraficaProps {
-  collectionName: string;
-  columns: GridColDef[];
-  title: string;
-  fields: FormField[]; // Aggiungiamo i campi del form come prop
-}
+const GestioneAnagrafica: React.FC = () => {
+    const [currentTab, setCurrentTab] = useState(0);
+    const [formOpen, setFormOpen] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<Anagrafica | null>(null);
+    const [itemToDelete, setItemToDelete] = useState<Anagrafica | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ collectionName, columns, title, fields }) => {
-  const data = useGlobalStore((state) => state[collectionName]);
-  const [loading, setLoading] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+    const collectionName = ANAGRAFICA_TABS[currentTab].collection as keyof typeof db;
 
-  // Funzione per inizializzare il form
-  const getInitialFormData = (rowData = {}) => {
-    const initialData = {};
-    fields.forEach(field => {
-      initialData[field.name] = rowData[field.name] || '';
-    });
-    return { ...rowData, ...initialData };
-  };
+    // 1. Lettura reattiva da Dexie basata sulla tabella corrente
+    const items = useLiveQuery(() => db.table(collectionName).toArray(), [collectionName], []);
 
-  const handleOpenDialog = (rowData = {}) => {
-    setFormData(getInitialFormData(rowData));
-    setDialogOpen(true);
-  };
+    const handleOpenForm = (item: Anagrafica | null = null) => {
+        setEditingItem(item);
+        setFormOpen(true);
+    };
+    const handleCloseForm = () => {
+        setFormOpen(false);
+        setEditingItem(null);
+    };
 
-  const handleCloseDialog = () => {
-    setDialogOpen(false);
-  };
+    const handleOpenConfirm = (item: Anagrafica) => {
+        setItemToDelete(item);
+        setConfirmOpen(true);
+    };
+    const handleCloseConfirm = () => {
+        setConfirmOpen(false);
+        setItemToDelete(null);
+    };
 
-  const handleFormChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [event.target.name]: event.target.value });
-  };
+    // 2. SALVATAGGIO: Prima Dexie, poi chiama il syncService
+    const handleSave = useCallback(async (formData: Partial<Anagrafica>) => {
+        setError(null);
+        const collection = ANAGRAFICA_TABS[currentTab].collection;
+        try {
+            if (editingItem?.id) {
+                // Update
+                const updatedData = { ...editingItem, ...formData };
+                await db.table(collection).update(editingItem.id, updatedData);
+                await syncService.sync('update', 'anagrafiche', { collection, id: editingItem.id, payload: formData });
+            } else {
+                // Create
+                const id = crypto.randomUUID();
+                const newItem = { ...formData, id } as Anagrafica;
+                await db.table(collection).add(newItem);
+                await syncService.sync('create', 'anagrafiche', { collection, payload: newItem });
+            }
+            handleCloseForm();
+        } catch (err) {
+            const msg = "Errore nel salvataggio.";
+            logger.error(msg, err);
+            setError(msg);
+        }
+    }, [editingItem, currentTab]);
 
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const dataToSave = { ...formData };
-      delete dataToSave.id; // Rimuoviamo l'id per non sovrascriverlo in Firestore
+    // 3. ELIMINAZIONE: Prima Dexie, poi chiama il syncService
+    const handleDelete = useCallback(async () => {
+        if (!itemToDelete) return;
+        setError(null);
+        const collection = ANAGRAFICA_TABS[currentTab].collection;
+        try {
+            await db.table(collection).delete(itemToDelete.id!);
+            await syncService.sync('delete', 'anagrafiche', { collection, id: itemToDelete.id! });
+        } catch (err) {
+            const msg = "Errore nell'eliminazione.";
+            logger.error(msg, err);
+            setError(msg);
+        } finally {
+            handleCloseConfirm();
+        }
+    }, [itemToDelete, currentTab]);
 
-      if (formData.id) {
-        await api.updateDocument(collectionName, formData.id, dataToSave);
-      } else {
-        await api.createDocument(collectionName, dataToSave);
-      }
-      // TODO: Aggiungere logica di refresh e notifica successo
-    } catch (error) {
-      console.error('Save failed:', error);
-      // TODO: Aggiungere notifica di errore
+    if (items === undefined) {
+        return <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>;
     }
-    setLoading(false);
-    handleCloseDialog();
-  };
-  
-  // Aggiungiamo le azioni di modifica ed eliminazione alle colonne
-  const actionColumn: GridColDef = {
-    field: 'actions',
-    headerName: 'Azioni',
-    sortable: false,
-    renderCell: (params) => (
-      <Box>
-        <Button onClick={() => handleOpenDialog(params.row)}>Modifica</Button>
-        {/* Aggiungere qui il pulsante elimina con conferma */}
-      </Box>
-    ),
-  };
 
-  return (
-    <Box sx={{ height: '100%', width: '100%' }}>
-      <Typography variant="h4" gutterBottom>{title}</Typography>
-      <Button variant="contained" onClick={() => handleOpenDialog()}>Aggiungi {title}</Button>
-      <DataGrid
-        rows={data || []}
-        columns={[...columns, actionColumn]} // Aggiungiamo la colonna azioni
-        loading={loading}
-        autoHeight
-        // Altre props...
-      />
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} fullWidth maxWidth="sm">
-        <DialogTitle>{formData.id ? 'Modifica' : 'Aggiungi'} {title}</DialogTitle>
-        <DialogContent>
-          {fields.map((field) => (
-            <TextField
-              key={field.name}
-              autoFocus={fields.indexOf(field) === 0}
-              margin="dense"
-              name={field.name}
-              label={field.label}
-              type={field.type}
-              required={field.required}
-              fullWidth
-              variant="standard"
-              onChange={handleFormChange}
-              value={formData[field.name] || ''}
+    return (
+        <Box sx={{ width: '100%' }}>
+            <Tabs value={currentTab} onChange={(_, newValue) => setCurrentTab(newValue)} variant="scrollable" scrollButtons="auto">
+                {ANAGRAFICA_TABS.map(tab => <Tab key={tab.collection} label={tab.label} />)}
+            </Tabs>
+
+            <Paper sx={{ p: 2, mt: 2 }} variant="outlined">
+                {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">{ANAGRAFICA_TABS[currentTab].label}</Typography>
+                    <Button variant="contained" startIcon={<Add />} onClick={() => handleOpenForm()}>
+                        Nuovo
+                    </Button>
+                </Box>
+
+                <AnagraficaTable 
+                    items={items}
+                    onEdit={handleOpenForm}
+                    onDelete={handleOpenConfirm}
+                />
+            </Paper>
+
+            <AnagraficaForm 
+                open={formOpen}
+                onClose={handleCloseForm}
+                onSave={handleSave}
+                item={editingItem}
+                collectionName={collectionName}
             />
-          ))}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Annulla</Button>
-          <Button onClick={handleSave} disabled={loading}>{loading ? <CircularProgress size={24} /> : 'Salva'}</Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
-  );
+
+            <ConfirmationDialog 
+                open={confirmOpen}
+                onClose={handleCloseConfirm}
+                onConfirm={handleDelete}
+                title="Conferma Eliminazione"
+                description={`Sei sicuro di voler eliminare "${itemToDelete?.nome}"? L\'azione è irreversibile.`}
+            />
+        </Box>
+    );
 };
 
 export default GestioneAnagrafica;

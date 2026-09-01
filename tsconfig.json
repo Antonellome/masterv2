@@ -21,5 +21,10 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "functions" 
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

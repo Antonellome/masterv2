@@ -1,127 +1,223 @@
-# Dettagli Tecnici per l'Integrazione della Cloud Function `createRapportino`
+# Piano di Correzione Definitivo per il Backend
 
-Ciao,
-
-ecco le informazioni precise che hai richiesto riguardo all'invio dei rapportini dalla nostra applicazione. Le ho raccolte analizzando il codice sorgente per garantire la massima accuratezza e risolvere il problema una volta per tutte.
-
-### 1. URL Completo della Richiesta
-
-L'URL a cui inviamo i dati del rapportino è:
-`https://us-central1-riso-project-app.cloudfunctions.net/createRapportino`
-
-### 2. Metodo HTTP Utilizzato
-
-Utilizziamo il metodo **POST**.
-
-### 3. Struttura Esatta del Corpo della Richiesta (JSON)
-
-L'oggetto JSON che inviamo nel corpo della richiesta include tutti i campi del rapportino. Un esempio completo della sua struttura è il seguente:
-
-```json
-{
-    "id": "3bb6ad66-a078-4cb0-b0f6-9d304e8c8183",
-    "data": "2026-08-15T21:27:17.844Z",
-    "tecnicoId": "IDAvSZayB1XBnF4E8CLHJAoYpqe2",
-    "nome": "Rapportino-15/08/2026",
-    "oreLavoro": 8,
-    "tipoGiornataId": "lavoro_ordinario",
-    "ordineLavoro": "ODL-12345",
-    "isMultiDay": false,
-    "dettaglioOre": [
-        {
-            "tecnicoId": "IDAvSZayB1XBnF4E8CLHJAoYpqe2",
-            "nome": "Antonio Scuderi",
-            "oraInizio": "08:30",
-            "oraFine": "17:30",
-            "pausa": "01:00",
-            "ore": 8
-        }
-    ],
-    "presenze": ["IDAvSZayB1XBnF4E8CLHJAoYpqe2"],
-    "trasfertaId": "italia_nord",
-    "veicoloId": "veicolo_01",
-    "kmPercorsi": 150,
-    "naveId": "nave_xyz",
-    "luogoId": "cantiere_abc",
-    "descrizioneBreve": "Manutenzione ordinaria",
-    "lavoroEseguito": "Controlli eseguiti su motore principale, sostituito filtro olio.",
-    "materialiImpiegati": "Filtro olio-A123, 5 litri olio 10W40.",
-    "firmaVettoriale": "M10,90 C10,90...",
-    "firmaFirmatarioNome": "Mario Rossi",
-    "firmaFirmatarioSocieta": "Cliente SpA"
-}
-```
-
-### 4. Header HTTP Inviati
-
-Gli header che inviamo sono due e sono fondamentali:
-
-1.  **`Content-Type`**: `application/json`
-2.  **`Authorization`**: `Bearer [ID_TOKEN_UTENTE]`
-
-L'header per l'autenticazione viene formattato esattamente come `Bearer ` (con lo spazio) seguito dall'ID token di Firebase dell'utente che sta effettuando la richiesta.
-
-### 5. Descrizione dei Campi Inviati
-
-Ecco la descrizione dei campi principali. Molti campi sono opzionali e potrebbero non essere presenti in ogni richiesta.
-
--   `id`: (Stringa) ID univoco del rapportino, generato dal client (formato UUIDv4).
--   `data`: (Stringa) La data principale del rapportino in formato stringa **ISO 8601 UTC** (es. `2026-08-15T21:27:17.844Z`).
--   `tecnicoId`: (Stringa) L'ID Firebase dell'utente (UID) che ha creato il rapportino.
--   `nome`: (Stringa) Un nome descrittivo per il rapportino, di solito generato automaticamente.
--   `oreLavoro`: (Numero) Un totale generico di ore di lavoro. Il dato più preciso è in `dettaglioOre`.
--   `tipoGiornataId`: (Stringa) L'ID del tipo di giornata selezionato (es. `lavoro_ordinario`, `ferie`, `malattia`).
--   `ordineLavoro`: (Stringa, opzionale) Il numero dell'ordine di lavoro associato.
--   `isMultiDay`: (Booleano) `true` se il rapportino copre un periodo di più giorni (es. ferie).
--   `dettaglioOre`: (Array di oggetti) Contiene i dettagli orari per ogni tecnico. Ogni oggetto ha:
-    -   `tecnicoId`: (Stringa) ID del tecnico.
-    -   `nome`: (Stringa) Nome del tecnico.
-    -   `oraInizio`, `oraFine`, `pausa`: (Stringhe, formato `HH:mm`) Orari di lavoro e pausa.
-    -   `ore`: (Numero) Ore totali calcolate per quel tecnico.
--   `presenze`: (Array di stringhe) Contiene gli ID di **tutti i tecnici** presenti, incluso il creatore.
--   `trasfertaId`: (Stringa, opzionale) L'ID del tipo di trasferta (es. `italia_nord`, `estero`).
--   `veicoloId`: (Stringa, opzionale) L'ID del veicolo utilizzato.
--   `kmPercorsi`: (Numero, opzionale) Chilometri percorsi.
--   `naveId`: (Stringa, opzionale) L'ID della nave/impianto.
--   `luogoId`: (Stringa, opzionale) L'ID del cantiere/luogo.
--   `descrizioneBreve`: (Stringa, opzionale) Un riassunto dell'intervento.
-    `lavoroEseguito`: (Stringa, opzionale) Descrizione dettagliata dei lavori.
--   `materialiImpiegati`: (Stringa, opzionale) Elenco dei materiali.
--   `firmaVettoriale`: (Stringa, opzionale) La firma del cliente in formato vettoriale (es. SVG path data).
--   `firmaFirmatarioNome`: (Stringa, opzionale) Nome e cognome del firmatario.
--   `firmaFirmatarioSocieta`: (Stringa, opzionale) Società del firmatario.
+Questo documento contiene tutte le configurazioni e il codice corretti per risolvere i problemi di CORS, regione e accesso ai dati. Le istruzioni devono essere seguite esattamente.
 
 ---
 
-### Esempio Concreto (dal log di errore)
+## AZIONE 1: Risolvere l'errore `internal` delle Cloud Functions
 
-Come da tua istruzione, aggiungo l'esempio del rapportino bloccato in coda, basato sui dati reali presenti nei log. L'operazione precedente è stata da te interrotta per permettere questa aggiunta.
+**Causa:** Le dipendenze delle funzioni non sono state installate prima del deploy. 
+**Soluzione:** Eseguire i seguenti comandi in ordine dalla root del progetto.
 
-Questo è l'esatto payload che sta causando l'errore `TypeError: Failed to fetch`:
+```bash
+# 1. Vai nella cartella delle funzioni
+cd functions
 
-```json
-{
-    "id": "3bb6ad66-a078-4cb0-b0f6-9d304e8c8183",
-    "nome": "Rapportino-15/08/2026",
-    "data": "2026-08-15T21:27:17.844Z",
-    "oreLavoro": 8,
-    "tecnicoId": "IDAvSZayB1XBnF4E8CLHJAoYpqe2",
-    "ordineLavoro": "",
-    "isMultiDay": false,
-    "dettaglioOre": [],
-    "presenze": [],
-    "trasfertaId": "",
-    "veicoloId": "",
-    "kmPercorsi": 0,
-    "naveId": "",
-    "luogoId": "",
-    "descrizioneBreve": "",
-    "lavoroEseguito": "",
-    "materialiImpiegati": "",
-    "firmaVettoriale": null,
-    "firmaFirmatarioNome": "",
-    "firmaFirmatarioSocieta": ""
+# 2. Installa tutte le dipendenze necessarie
+npm install
+
+# 3. Torna alla directory principale
+cd ..
+
+# 4. Esegui di nuovo il deploy SOLO delle funzioni
+firebase deploy --only functions
+```
+
+---
+
+## AZIONE 2: Risolvere l'errore `Missing or insufficient permissions`
+
+**Causa:** Le regole di Firestore non permettono la lettura dei metadati di sincronizzazione.
+**Soluzione:** Sostituire l'intero contenuto del file `firestore.rules` con quello sottostante e fare il deploy.
+
+### `firestore.rules` (Completo e Corretto)
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/utenti_master/$(request.auth.uid));
+    }
+    function isTecnico() {
+      return exists(/databases/$(database)/documents/tecnici/$(request.auth.uid));
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(resource) {
+      return request.auth.uid == resource.data.tecnicoId || request.auth.uid == resource.data.tecnicoScriventeId;
+    }
+    function isParticipant(resource) {
+      return 'presenze' in resource.data && request.auth.uid in resource.data.presenze;
+    }
+
+    // NUOVA REGOLA: Permette a tutti gli utenti loggati di leggere i metadati di sync
+    match /sync_state/{docId} {
+      allow read: if isSignedIn();
+    }
+
+    // Accesso a ruoli e utenti
+    match /utenti_master/{userId} { allow read, write: if isAdmin(); }
+    match /tecnici/{userId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+
+    // Anagrafiche (Lettura per utenti loggati, Scrittura per Admin)
+    match /clienti/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /ditte/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /luoghi/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /navi/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /categorie/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /tipiGiornata/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /veicoli/{d} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    
+    // Dati operativi
+    match /checkin_giornalieri/{docId} {
+      allow create: if isTecnico() && request.resource.data.tecnicoId == request.auth.uid;
+      allow read, update, delete: if isOwner(resource) || isAdmin();
+    }
+    match /rapportini/{id} {
+      allow list: if isAdmin() || isTecnico();
+      allow get: if isAdmin() || isOwner(resource) || isParticipant(resource);
+      allow create: if isTecnico() && request.resource.data.tecnicoScriventeId == request.auth.uid;
+      allow update, delete: if isOwner(resource) || isAdmin();
+    }
+  }
 }
 ```
 
-Spero che queste informazioni siano complete e sufficienti per allineare la Cloud Function. Grazie.
+**Comando per il deploy delle regole:**
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+---
+
+## AZIONE 3: Creazione Manuale dell'Indice Firestore
+
+**Quando:** Questa azione va eseguita **DOPO** aver risolto i problemi precedenti.
+
+1.  **Eseguire l'app** dopo aver completato le Azioni 1 e 2.
+2.  **Aprire la Console per Sviluppatori** del browser (tasto `F12`).
+3.  L'errore `internal` sarà sparito, ma ora vedrai un errore `FAILED_PRECONDITION`. Il messaggio di errore conterrà un **lungo URL**.
+4.  **Cliccare su quell'URL**. Si aprirà la console di Firebase per creare l'indice mancante.
+5.  **Cliccare "Crea Indice"** e attendere che diventi "Attivo".
+
+---
+
+## RIFERIMENTO: Codice Cloud Functions (`functions/src/index.ts`)
+
+Questo codice è già stato fornito ma è qui per riferimento. **NON necessita di modifiche.** L'Azione 1 lo farà funzionare.
+
+```typescript
+import { initializeApp } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+
+setGlobalOptions({ region: "europe-west6" });
+
+initializeApp();
+const db = getFirestore();
+
+const corsOptions = { cors: true };
+
+export const sync_manifest = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const collections = ["clienti", "navi", "luoghi", "ditte", "categorie", "tipiGiornata", "veicoli", "tecnici"];
+    const manifest: { [key: string]: number } = {};
+    const now = Date.now();
+    for (const collName of collections) {
+        manifest[collName] = now;
+    }
+    manifest["global"] = now;
+    return { data: manifest };
+});
+
+export const syncAllAnagrafiche = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const collections = ["clienti", "navi", "luoghi", "ditte", "categorie", "tipiGiornata", "veicoli", "tecnici"];
+    const snapshots = await Promise.all(collections.map(c => db.collection(c).get()));
+    const results: { [key: string]: any } = {};
+    snapshots.forEach((snapshot, index) => {
+        const collName = collections[index];
+        results[collName] = { data: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })), timestamp: Date.now() };
+    });
+    return results;
+});
+
+export const createRapportino = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const uid = request.auth.uid;
+    const rapportinoData = request.data;
+    rapportinoData.tecnicoScriventeId = uid;
+    rapportinoData.createdBy = uid;
+    rapportinoData.updatedBy = uid;
+    rapportinoData.createdAt = FieldValue.serverTimestamp();
+    rapportinoData.updatedAt = FieldValue.serverTimestamp();
+    rapportinoData.isDeleted = false;
+    const ref = await db.collection("rapportini").add(rapportinoData);
+    return { id: ref.id };
+});
+
+export const updateRapportino = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const uid = request.auth.uid;
+    const { id, ...rapportinoData } = request.data;
+    if (!id) throw new HttpsError("invalid-argument", "L'ID del rapportino è obbligatorio.");
+    const docRef = db.collection("rapportini").doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) throw new HttpsError("not-found", "Rapportino non trovato.");
+    if (doc.data()?.tecnicoScriventeId !== uid) throw new HttpsError("permission-denied", "Non hai i permessi per modificare questo rapportino.");
+    rapportinoData.tecnicoScriventeId = uid;
+    rapportinoData.updatedBy = uid;
+    rapportinoData.updatedAt = FieldValue.serverTimestamp();
+    await docRef.update(rapportinoData);
+    return { id };
+});
+
+export const deleteRapportino = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const uid = request.auth.uid;
+    const { rapportinoId } = request.data;
+    if (!rapportinoId) throw new HttpsError("invalid-argument", "L'ID del rapportino è obbligatorio.");
+    const docRef = db.collection("rapportini").doc(rapportinoId);
+    const doc = await docRef.get();
+    if (!doc.exists) throw new HttpsError("not-found", "Rapportino non trovato.");
+    if (doc.data()?.tecnicoScriventeId !== uid) throw new HttpsError("permission-denied", "Non hai i permessi per eliminare questo rapportino.");
+    await docRef.update({ isDeleted: true, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+    return { id: rapportinoId };
+});
+
+export const getAllRapportiniForSync = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const { lastSyncTimestamp, tecnicoId } = request.data;
+    if (tecnicoId !== request.auth.uid) throw new HttpsError("permission-denied", "ID tecnico non valido.");
+    let query = db.collection("rapportini").where("presenze", "array-contains", tecnicoId);
+    if (lastSyncTimestamp > 0) query = query.where("updatedAt", ">", new Date(lastSyncTimestamp));
+    const snapshot = await query.get();
+    const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    return { data };
+});
+
+export const createCheckin = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const checkinData = request.data;
+    checkinData.tecnicoId = request.auth.uid;
+    checkinData.timestampReale = FieldValue.serverTimestamp();
+    const ref = await db.collection("checkin_giornalieri").add(checkinData);
+    return { id: ref.id };
+});
+
+export const getCheckinsUpdates = onCall(corsOptions, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Autenticazione richiesta.");
+    const { lastSyncTimestamp, tecnicoId } = request.data;
+    if (tecnicoId !== request.auth.uid) throw new HttpsError("permission-denied", "ID tecnico non valido.");
+    let query = db.collection("checkin_giornalieri").where("tecnicoId", "==", tecnicoId);
+    if (lastSyncTimestamp > 0) query = query.where("timestampReale", ">", new Date(lastSyncTimestamp));
+    const snapshot = await query.get();
+    const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    return { data };
+});
+```

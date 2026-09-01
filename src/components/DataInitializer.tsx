@@ -1,135 +1,73 @@
-
 import { useEffect, useRef } from 'react';
-import { collection, onSnapshot, Unsubscribe, Timestamp } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { useAuthStore } from '@/stores/authStore';
 import { useRapportiniStore } from '@/store/useRapportiniStore';
-import type { CollectionName, Rapportino } from '@/models/definitions';
+import { db } from '@/db/database';
+import { rapportinoCloudService } from '@/services/rapportinoCloudService';
+import { anagraficheService } from '@/services/anagraficheService';
 import { logger } from '@/utils/logger';
+import { parseToDayjs } from '@/utils/dateUtils';
+import { Rapportino } from '@/models/definitions';
 
-if (typeof (window as any).isDataInitializerActive === 'undefined') {
-    (window as any).isDataInitializerActive = false;
-}
-
-const collectionsToSync: { name: CollectionName; stateKey: keyof Omit<typeof useRapportiniStore.getState, 'loading' | 'error' | 'setData' | 'setLoading' | 'setError' | 'toggleScadenzaSilence' | 'getRapportinoById'> }[] = [
-    { name: 'rapportini', stateKey: 'rapportini' },
-    { name: 'tecnici', stateKey: 'tecnici' },
-    { name: 'clienti', stateKey: 'clienti' },
-    { name: 'ditte', stateKey: 'ditte' },
-    { name: 'navi', stateKey: 'navi' },
-    { name: 'luoghi', stateKey: 'luoghi' },
-    { name: 'categorie', stateKey: 'categorie' },
-    { name: 'tipi_giornata', stateKey: 'tipiGiornata' },
-    { name: 'veicoli', stateKey: 'veicoli' },
-    { name: 'checkin_giornalieri', stateKey: 'checkins' },
-    { name: 'scadenze', stateKey: 'scadenze' },
-];
-
-const toDateSafe = (timestamp: any): Date | null => {
-    if (!timestamp) return null;
-    if (timestamp instanceof Timestamp) return timestamp.toDate();
-    if (typeof timestamp.toDate === 'function') return timestamp.toDate();
-    const d = new Date(timestamp);
-    if (!isNaN(d.getTime())) return d;
-    if (typeof timestamp === 'object' && 'seconds' in timestamp && 'nanoseconds' in timestamp) {
-        return new Timestamp(timestamp.seconds, timestamp.nanoseconds).toDate();
-    }
-    return null;
+const sanitizeRapportinoForDexie = (rapportino: any): Rapportino => {
+    const finalDate = parseToDayjs(rapportino.data)?.toDate() || new Date();
+    return {
+        ...rapportino,
+        id: rapportino.id,
+        data: finalDate,
+        createdAt: parseToDayjs(rapportino.createdAt)?.toDate() || finalDate,
+        updatedAt: parseToDayjs(rapportino.updatedAt)?.toDate() || finalDate,
+    } as Rapportino;
 };
 
 export const DataInitializer = () => {
-    const { setData, setLoading, setError } = useRapportiniStore();
-    const listenersInitialized = useRef(new Set<string>());
+    const { user } = useAuthStore();
+    const { setLoading, setData } = useRapportiniStore();
+    const syncStarted = useRef(false);
 
     useEffect(() => {
-        if ((window as any).isDataInitializerActive) {
-            logger.warn('Istanza di DataInitializer già attiva. Salto per evitare conflitti HMR.');
-            return;
-        }
-        (window as any).isDataInitializerActive = true;
-
-        setLoading(true);
-        const unsubscribers: Unsubscribe[] = [];
-        const totalListeners = collectionsToSync.length;
-
-        logger.log('DataInitializer: Avvio dei listener Firestore (Standard R.4)...');
-
-        collectionsToSync.forEach(({ name, stateKey }) => {
+        const performSync = async () => {
+            if (!user || syncStarted.current) return;
+            syncStarted.current = true;
+            setLoading(true);
+            logger.log("[DataInitializer] AVVIO SYNC AMMINISTRATORE.");
             try {
-                const q = collection(db, name);
-                const unsubscribe = onSnapshot(q, 
-                    (snapshot) => {
-                        let processedData: any[];
-                        
-                        if (name === 'rapportini') {
-                            const validDocs: Rapportino[] = [];
-                            let discardedCount = 0;
+                const anagraficheData = await anagraficheService.getAll();
+                
+                await db.rapportini.clear();
 
-                            for (const doc of snapshot.docs) {
-                                const docData = { id: doc.id, ...doc.data() };
+                // CORREZIONE: Usa il nuovo servizio senza `user.uid`
+                const lastSync = await db.sync_status.get('lastRapportiniSync');
+                const lastSyncTimestamp = lastSync?.value || 0;
+                const rapportiniToSync = await rapportinoCloudService.getUpdates(lastSyncTimestamp);
+                
+                if (rapportiniToSync && rapportiniToSync.length > 0) {
+                    const sanitizedRapportini = rapportiniToSync.map(sanitizeRapportinoForDexie);
+                    await db.rapportini.bulkPut(sanitizedRapportini);
+                    const newLastSync = new Date().getTime();
+                    await db.sync_status.put({ id: 'lastRapportiniSync', value: newLastSync });
+                }
 
-                                const finalDate = toDateSafe(docData.data) || toDateSafe(docData.dataInizio) || toDateSafe(docData.createdAt);
+                const allRapportiniFromDb = await db.rapportini.toArray();
+                const finalPayload = {
+                    ...anagraficheData,
+                    rapportini: allRapportiniFromDb
+                };
+                setData(finalPayload);
 
-                                if (finalDate) {
-                                    const createdAtDate = toDateSafe(docData.createdAt) || finalDate;
-                                    const updatedAtDate = toDateSafe(docData.updatedAt) || createdAtDate;
-                                    
-                                    const cleanData: any = { ...docData };
-                                    delete cleanData.dataInizio;
-                                    delete cleanData.dettaglioOre; // Pulizia da campi errati
-
-                                    validDocs.push({
-                                        ...cleanData,
-                                        id: doc.id,
-                                        data: finalDate,
-                                        createdAt: createdAtDate,
-                                        updatedAt: updatedAtDate,
-                                        // Assicura che il campo standard sia sempre un array
-                                        dettaglioOreTecnici: cleanData.dettaglioOreTecnici || [],
-                                    } as Rapportino);
-                                } else {
-                                    logger.warn(`DataInitializer: Rapportino scartato (ID: ${doc.id}) - nessuna data valida trovata.`);
-                                    discardedCount++;
-                                }
-                            }
-                            
-                            logger.log(`DataInitializer: Processati ${snapshot.docs.length} rapportini. Validi: ${validDocs.length}, Scartati: ${discardedCount}.`);
-                            processedData = validDocs;
-
-                        } else {
-                            processedData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        }
-                        
-                        setData({ [stateKey]: processedData } as any);
-
-                        if (!listenersInitialized.current.has(name)) {
-                            listenersInitialized.current.add(name);
-                            if (listenersInitialized.current.size === totalListeners) {
-                                setLoading(false);
-                                logger.log('DataInitializer: Tutte le collezioni sono state caricate. Inizializzazione R.4 completata.');
-                            }
-                        }
-                    },
-                    (error) => {
-                        logger.error(`DataInitializer: Errore caricamento collezione [${name}]:`, error);
-                        setError(`Errore caricamento ${name}: ${error.message}`);
-                        setLoading(false);
-                    }
-                );
-                unsubscribers.push(unsubscribe);
-            } catch (error) {
-                logger.error(`DataInitializer: Setup del listener fallito per [${name}]:`, error);
-                setError(`Setup fallito per ${name}`);
+            } catch (error: any) {
+                logger.error("[DataInitializer] Errore critico durante sync admin.", error);
+            } finally {
                 setLoading(false);
+                logger.log("[DataInitializer] SYNC AMMINISTRATORE TERMINATO.");
             }
-        });
+        };
+
+        performSync();
 
         return () => {
-            logger.log('DataInitializer: Pulizia dei listener Firestore e rilascio del lock.');
-            unsubscribers.forEach(unsub => unsub());
-            (window as any).isDataInitializerActive = false;
+            syncStarted.current = false;
         };
-        
-    }, [setData, setLoading, setError]);
+    }, [user, setLoading, setData]);
 
     return null;
 };

@@ -1,5 +1,6 @@
+
 import { ListItemButton, ListItemIcon, ListItemText, useTheme } from '@mui/material';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 interface NavMenuItemProps {
@@ -10,19 +11,25 @@ interface NavMenuItemProps {
 
 const NavMenuItem = ({ to, text, icon }: NavMenuItemProps) => {
     const theme = useTheme();
-    const location = useLocation();
-
-    const isActive = location.pathname.startsWith(to) && (to !== '/dashboard' || location.pathname === '/dashboard');
 
     return (
         <ListItemButton
             component={NavLink}
             to={to}
-            selected={isActive}
+            // `NavLink` gestirà automaticamente lo stato "attivo".
+            // Non è necessario usare `selected` o calcolare `isActive` manualmente.
             sx={{
                 margin: theme.spacing(0.5, 1.5),
                 borderRadius: theme.shape.borderRadius,
-                '&.Mui-selected': {
+                color: theme.palette.text.secondary,
+                '& .MuiListItemIcon-root': {
+                    color: theme.palette.text.secondary,
+                },
+                '&:hover': {
+                    backgroundColor: theme.palette.action.hover,
+                },
+                // Stile per il link attivo (quando la classe .active è presente)
+                '&.active': {
                     backgroundColor: theme.palette.primary.main,
                     color: theme.palette.primary.contrastText,
                     '& .MuiListItemIcon-root, & .MuiListItemText-primary': {
@@ -32,15 +39,6 @@ const NavMenuItem = ({ to, text, icon }: NavMenuItemProps) => {
                         backgroundColor: theme.palette.primary.dark,
                     },
                 },
-                '&:not(.Mui-selected)': {
-                    color: theme.palette.text.secondary,
-                     '& .MuiListItemIcon-root': {
-                        color: theme.palette.text.secondary,
-                    },
-                    '&:hover': {
-                        backgroundColor: theme.palette.action.hover,
-                    }
-                }
             }}
         >
             <ListItemIcon>

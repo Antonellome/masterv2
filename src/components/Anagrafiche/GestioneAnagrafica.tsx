@@ -1,187 +1,186 @@
-
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Box, Typography, Alert, CircularProgress } from '@mui/material';
 import {
-  DataGrid,
-  GridColDef,
-  GridRowModel,
-  GridActionsCellItem,
-  GridRowModesModel,
-  GridRowModes,
-  GridToolbar,
+  DataGrid, GridColDef, GridRowModel, GridActionsCellItem, GridRowModesModel, GridRowModes, GridToolbar
 } from '@mui/x-data-grid';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
-
-import { useGlobalStore } from '@/stores/globalStore';
-import { Anagrafica, AnagraficaKey } from '@/models/definitions';
-import { api } from '@/services/api';
-import { syncAnagrafiche } from '@/services/SyncService';
-import { anagraficheConfig, AnagraficaConfig } from '@/config/anagrafiche.config';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/database';
+import { Anagrafica } from '@/models/definitions';
+import { anagraficheConfig, AnagraficaConfig, AnagraficaKey } from '@/config/anagrafiche.config';
+import { logger } from '@/utils/logger';
 import AnagraficaForm from './AnagraficaForm';
 
-// --- COMPONENTE INTERNO CON LA LOGICA E GLI HOOKS ---
+// TODO: Implementare le chiamate alle Cloud Functions per create, update, delete.
+const handleCloudSync = async (operation: 'create' | 'update' | 'delete', collectionName: string, data: any) => {
+  logger.log(`[Cloud Sync] ${operation} su ${collectionName}:`, data);
+  // Qui andrà la logica per chiamare la Cloud Function
+  // Esempio: const { data: result } = await httpsCallable(functions, 'updateAnagrafica')(data);
+  return Promise.resolve(); // Simula una chiamata asincrona
+};
+
 interface AnagraficaGridProps {
   anagraficaType: AnagraficaKey;
   config: AnagraficaConfig;
 }
 
 const AnagraficaGrid: React.FC<AnagraficaGridProps> = ({ anagraficaType, config }) => {
-  const data = useGlobalStore((state) => state[config.collectionName as keyof typeof state]) as Anagrafica[];
-  const isLoading = useGlobalStore((state) => state.areAnagraficheLoading);
-  const allData = useGlobalStore((state) => state);
-
-  const [rows, setRows] = useState<Anagrafica[]>([]);
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({});
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setRows(data || []);
-  }, [data]);
+  // 1. Lettura reattiva dei dati da Dexie
+  const rows = useLiveQuery(() => 
+    (db as any)[config.collectionName].toArray()
+  , [], []);
 
-  const { columns, fields } = useMemo(() => {
-    if (!config.relations) {
-      return { columns: config.columns, fields: config.fields };
+  // 2. Gestione reattiva delle relazioni per le colonne
+  const finalColumns = useMemo(() => {
+    const resolvedColumns = [...config.columns];
+    if (config.relations) {
+      Object.keys(config.relations).forEach(field => {
+        const relation = config.relations![field];
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        const relationData = useLiveQuery(() => (db as any)[relation.collection].toArray(), []);
+        
+        if (relationData) {
+          const relationMap = new Map(relationData.map((item) => [item.id, item[relation.displayField] as string]));
+          const valueOptions = relationData.map((item) => ({ value: item.id, label: item[relation.displayField] as string }));
+          
+          const colIndex = resolvedColumns.findIndex((col) => col.field === field);
+          if (colIndex !== -1) {
+            resolvedColumns[colIndex] = {
+              ...resolvedColumns[colIndex],
+              valueOptions,
+              valueFormatter: (value: string) => relationMap.get(value) || value
+            };
+          }
+        }
+      });
     }
-    const newColumns = [...config.columns];
-    const newFields = [...config.fields];
-    Object.keys(config.relations).forEach((field) => {
-      const relation = config.relations![field];
-      const relationData = allData[relation.collection as keyof typeof allData] as Anagrafica[];
-      if (!relationData) return;
-      const relationMap = new Map(relationData.map((item) => [item.id, item[relation.displayField] as string]));
-      const valueOptions = relationData.map((item) => ({ value: item.id, label: item[relation.displayField] as string }));
-      
-      const colIndex = newColumns.findIndex((col) => col.field === field);
-      if (colIndex !== -1) {
-        newColumns[colIndex] = { ...newColumns[colIndex], valueOptions, valueFormatter: (value: string) => relationMap.get(value) || value };
-      }
-      
-      const fieldIndex = newFields.findIndex((f) => f.name === field);
-      if (fieldIndex !== -1) {
-        newFields[fieldIndex] = { ...newFields[fieldIndex], options: valueOptions };
-      }
-    });
-    return { columns: newColumns, fields: newFields };
-  }, [config, allData]);
-    
-  const handleRowEditStart = () => {};
-  const handleRowEditStop = () => {};
 
-  const handleEditClick = useCallback((id: string) => () => {
-    setRowModesModel((prevModel) => ({ ...prevModel, [id]: { mode: GridRowModes.Edit } }));
-  }, []);
+    // Aggiunge la colonna delle azioni
+    return [...resolvedColumns, {
+        field: 'actions', type: 'actions', headerName: 'Azioni', width: 100, cellClassName: 'actions',
+        getActions: ({ id }) => {
+          const isInEditMode = rowModesModel[id]?.mode === GridRowModes.Edit;
+          if (isInEditMode) {
+            return [
+              <GridActionsCellItem icon={<SaveIcon />} label="Salva" onClick={() => setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })} />,
+              <GridActionsCellItem icon={<CancelIcon />} label="Annulla" onClick={() => setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View, ignoreModifications: true } })} />,
+            ];
+          }
+          return [
+            <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={() => setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } })} />,
+            <GridActionsCellItem icon={<DeleteIcon />} label="Elimina" onClick={handleDelete(id as string)} />,
+          ];
+        },
+      }
+    ];
+  }, [config, rowModesModel]);
 
-  const handleSaveClick = useCallback((id: string) => () => {
-    setRowModesModel((prevModel) => ({ ...prevModel, [id]: { mode: GridRowModes.View } }));
-  }, []);
-  
-  const handleCancelClick = useCallback((id: string) => () => {
-    setRowModesModel((prevModel) => ({
-      ...prevModel,
-      [id]: { mode: GridRowModes.View, ignoreModifications: true },
-    }));
-    const editedRow = rows.find((row) => row.id === id);
-    if ((editedRow as any)?.isNew) {
-      setRows((prevRows) => prevRows.filter((row) => row.id !== id));
-    }
-  }, [rows]);
+  // 3. Operazioni CRUD che modificano Dexie e poi (TODO) sincronizzano col cloud
 
   const processRowUpdate = useCallback(async (newRow: GridRowModel<Anagrafica>) => {
     try {
       setError(null);
-      const updatedRow = await api.generic.update(config.collectionName, newRow.id, newRow as Partial<Anagrafica>);
-      await syncAnagrafiche();
-      return updatedRow;
+      const table = (db as any)[config.collectionName];
+      await table.update(newRow.id, newRow);
+      await handleCloudSync('update', config.collectionName, newRow);
+      logger.log(`[Dexie] Aggiornato ${config.collectionName} con id ${newRow.id}`);
+      return newRow;
     } catch (err) {
-      const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
-      setError(`Salvataggio fallito: ${newError}`);
-      throw new Error(newError);
+      const errorMsg = err instanceof Error ? err.message : 'Errore sconosciuto';
+      setError(`Salvataggio fallito: ${errorMsg}`);
+      logger.error(`[Dexie] Errore aggiornamento ${config.collectionName}:`, err);
+      throw new Error(errorMsg);
     }
   }, [config.collectionName]);
 
-  const handleDeleteClick = useCallback((id: string) => async () => {
+  const handleDelete = useCallback((id: string) => async () => {
     if (!window.confirm('Sei sicuro di voler eliminare questo elemento?')) return;
     try {
       setError(null);
-      await api.generic.delete(config.collectionName, id);
-      await syncAnagrafiche();
+      const table = (db as any)[config.collectionName];
+      await table.delete(id);
+      await handleCloudSync('delete', config.collectionName, { id });
+      logger.log(`[Dexie] Eliminato ${config.collectionName} con id ${id}`);
     } catch (err) {
-      const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
-      setError(`Eliminazione fallita: ${newError}`);
+      const errorMsg = err instanceof Error ? err.message : 'Errore sconosciuto';
+      setError(`Eliminazione fallita: ${errorMsg}`);
+      logger.error(`[Dexie] Errore eliminazione ${config.collectionName}:`, err);
     }
   }, [config.collectionName]);
 
   const handleAdd = useCallback(async (newItem: Omit<Anagrafica, 'id'>) => {
     try {
-      setError(null);
-      await api.generic.create(config.collectionName, newItem);
-      await syncAnagrafiche();
+        setError(null);
+        const table = (db as any)[config.collectionName];
+        // Dexie si aspetta l'id per 'add', ma Firestore lo genera.
+        // Per ora, usiamo un ID temporaneo se necessario o lo omettiamo se la tabella ha `++id`.
+        const itemToAdd = { ...newItem, id: newItem.id || crypto.randomUUID() };
+        await table.add(itemToAdd);
+        await handleCloudSync('create', config.collectionName, itemToAdd);
+        logger.log(`[Dexie] Aggiunto nuovo elemento a ${config.collectionName}`);
     } catch (err) {
-      const newError = err instanceof Error ? err.message : 'Errore sconosciuto';
-      setError(`Creazione fallita: ${newError}`);
+        const errorMsg = err instanceof Error ? err.message : 'Errore sconosciuto';
+        setError(`Creazione fallita: ${errorMsg}`);
+        logger.error(`[Dexie] Errore creazione ${config.collectionName}:`, err);
     }
   }, [config.collectionName]);
 
-  const finalColumns: GridColDef[] = useMemo(() => [
-    ...columns,
-    {
-      field: 'actions',
-      type: 'actions',
-      headerName: 'Azioni',
-      width: 100,
-      cellClassName: 'actions',
-      getActions: ({ id }) => {
-        const isInEditMode = rowModesModel[id as string]?.mode === GridRowModes.Edit;
-        if (isInEditMode) {
-          return [
-            <GridActionsCellItem icon={<SaveIcon />} label="Salva" onClick={handleSaveClick(id as string)} />,
-            <GridActionsCellItem icon={<CancelIcon />} label="Annulla" onClick={handleCancelClick(id as string)} />,
-          ];
-        }
-        return [
-          <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={handleEditClick(id as string)} />,
-          <GridActionsCellItem icon={<DeleteIcon />} label="Elimina" onClick={handleDeleteClick(id as string)} />,
-        ];
-      },
-    },
-  ], [rowModesModel, columns, handleSaveClick, handleCancelClick, handleEditClick, handleDeleteClick]);
+  // La gestione dei campi per il form rimane la stessa, ma potrebbe beneficiare delle relazioni caricate
+  const formFields = useMemo(() => {
+    const newFields = [...config.fields];
+      if (config.relations) {
+        Object.keys(config.relations).forEach(field => {
+           // eslint-disable-next-line react-hooks/rules-of-hooks
+           const relationData = useLiveQuery(() => (db as any)[config.relations![field].collection].toArray());
+           if(relationData) {
+              const fieldIndex = newFields.findIndex((f) => f.name === field);
+              if (fieldIndex !== -1) {
+                 newFields[fieldIndex] = {
+                    ...newFields[fieldIndex],
+                    options: relationData.map(item => ({value: item.id, label: item.nome}))
+                 };
+              }
+           }
+        });
+    }
+    return newFields;
+  }, [config.fields, config.relations]);
+
+
+  if (!rows) {
+    return <CircularProgress />;
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
       <Typography variant="h4" gutterBottom>{config.title}</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      <AnagraficaForm fields={fields} onSubmit={handleAdd} />
+      <AnagraficaForm fields={formFields} onSubmit={handleAdd} />
       <Box sx={{ flex: 1, width: '100%', mt: 2 }}>
-        {isLoading ? (
-          <CircularProgress />
-        ) : (
-          <DataGrid
-            rows={rows}
-            columns={finalColumns}
-            editMode="row"
-            rowModesModel={rowModesModel}
-            onRowModesModelChange={setRowModesModel}
-            onRowEditStart={handleRowEditStart}
-            onRowEditStop={handleRowEditStop}
-            processRowUpdate={processRowUpdate}
-            onProcessRowUpdateError={(err) => setError(`Update Error: ${String(err)}`)}
-            slots={{ toolbar: GridToolbar }}
-            slotProps={{
-              toolbar: { showQuickFilter: true },
-            }}
-            density="compact"
-          />
-        )}
+        <DataGrid
+          rows={rows}
+          columns={finalColumns}
+          getRowId={(row) => row.id} // Assicura che DataGrid usi il nostro ID
+          editMode="row"
+          rowModesModel={rowModesModel}
+          onRowModesModelChange={setRowModesModel}
+          processRowUpdate={processRowUpdate}
+          onProcessRowUpdateError={(err) => setError(`Update Error: ${String(err)}`)}
+          slots={{ toolbar: GridToolbar }}
+          slotProps={{ toolbar: { showQuickFilter: true } }}
+          density="compact"
+        />
       </Box>
     </Box>
   );
 };
 
-
-// --- COMPONENTE WRAPPER CHE GESTISCE LA CONFIGURAZIONE ---
 interface GestioneAnagraficaProps {
   anagraficaType: AnagraficaKey;
 }
@@ -190,15 +189,13 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
   const config = anagraficheConfig[anagraficaType];
 
   if (!config) {
-    console.error(`Configurazione non trovata per l'anagrafica: ${anagraficaType}`);
     return <Alert severity="error">Errore di configurazione: anagrafica "{anagraficaType}" non trovata.</Alert>;
   }
 
-  // Renderizza il componente con la logica solo se la config esiste
   return (
-      <Box sx={{height: 'calc(100vh - 120px)', p: 1}}>
-        <AnagraficaGrid anagraficaType={anagraficaType} config={config} />
-      </Box>
+    <Box sx={{ height: 'calc(100vh - 120px)', p: 1 }}>
+      <AnagraficaGrid anagraficaType={anagraficaType} config={config} />
+    </Box>
   );
 };
 

@@ -5,51 +5,26 @@ import {
     onAuthStateChanged,
     User
 } from 'firebase/auth';
-import { auth } from '@/config/firebase';
-import { useGlobalStore } from '@/stores/globalStore';
-import { firestoreService } from '@/services/firestoreService';
+import { auth } from '@/firebase-config'; 
+import { useAuthStore } from '@/stores/authStore';
+import { logger } from '@/utils/logger';
 
 export const authService = {
     /**
-     * Esegue il login manuale basandosi ESCLUSIVAMENTE sul custom claim 'admin'.
-     * Impedisce l'accesso a chiunque non sia amministratore.
+     * Esegue il login dell'utente.
+     * La logica di controllo permessi e aggiornamento dello stato è DEMANDATA
+     * all'hook useAuthInitializer che ascolta l'evento onAuthStateChanged.
      */
     login: async (email: string, pass: string) => {
-        console.log("[AuthService] Inizio login manuale basato su permessi ADMIN...");
+        logger.log("[AuthService] Tentativo di login...");
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-            const user = userCredential.user;
-
-            if (!user) {
-                throw new Error("Credenziali non valide.");
-            }
-
-            // 1. FORZIAMO L'AGGIORNAMENTO DEL TOKEN PER LEGGERE I PERMESSI
-            console.log("[AuthService] Verifico i permessi dell'utente...");
-            const idTokenResult = await user.getIdTokenResult(true); // true = forza refresh
-
-            // 2. REGOLA DI ACCESSO INAPPELLABILE
-            const isAdmin = idTokenResult.claims.admin === true;
-
-            if (isAdmin) {
-                // 3. SUCCESSO: L'utente è un admin
-                console.log("[AuthService] Accesso consentito: l'utente è un AMMINISTRATORE.");
-                // Il profilo tecnico non viene cercato né richiesto.
-                // Le altre modifiche (authHooks, globalStore) gestiranno lo stato.
-                useGlobalStore.getState().setUserAndProfile(user, null); // Passiamo null per il profilo
-                useGlobalStore.getState().setAdminStatus(true);
-            } else {
-                // 4. FALLIMENTO: L'utente non è un admin, ACCESSO NEGATO.
-                console.warn("[AuthService] ACCESSO NEGATO: l'utente non è un amministratore.");
-                await signOut(auth);
-                useGlobalStore.getState().logout();
-                throw new Error("Accesso negato: solo gli amministratori possono entrare.");
-            }
+            // Si limita a eseguire il sign-in. La gestione dello stato utente, 
+            // dei claims e dei profili è demandata centralmente all'hook useAuthInitializer.
+            await signInWithEmailAndPassword(auth, email, pass);
+            logger.log("[AuthService] signInWithEmailAndPassword completato. In attesa del listener onAuthStateChanged.");
         } catch (error) {
-            console.error("[AuthService] Errore durante il login manuale:", error);
-            await signOut(auth); // Assicura che l'utente sia disconnesso in caso di qualsiasi errore
-            useGlobalStore.getState().logout();
-            // Rilanciamo l'errore per mostrarlo nella UI (es. "Credenziali errate" o "Accesso negato")
+            logger.error("[AuthService] Errore durante signInWithEmailAndPassword:", error);
+            // Rilanciamo l'errore per gestirlo nella UI (es. notifica "credenziali errate").
             throw error;
         }
     },
@@ -60,10 +35,11 @@ export const authService = {
     logout: async () => {
         try {
             await signOut(auth);
-            useGlobalStore.getState().logout();
-            console.log("[AuthService] Logout completato.");
+            // La pulizia dello stato Zustand viene ora gestita centralmente dal listener
+            // onAuthStateChanged in useAuthInitializer, che rileverà l'assenza di un utente.
+            logger.log("[AuthService] Logout completato.");
         } catch (error) {
-            console.error("[AuthService] Errore durante il logout:", error);
+            logger.error("[AuthService] Errore durante il logout:", error);
             throw error;
         }
     },

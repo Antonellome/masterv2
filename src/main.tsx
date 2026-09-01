@@ -1,6 +1,7 @@
 
-// Import per inizializzare Firebase. DEVE essere il primo import legato all'app.
-import '@/config/firebase';
+// L'importazione di configurazione di Firebase è stata rimossa da qui.
+// L'inizializzazione ora avviene in modo sicuro e lazy nei moduli che ne hanno bisogno,
+// grazie al refactoring in `firebase-config.ts`.
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';

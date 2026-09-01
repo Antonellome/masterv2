@@ -1,0 +1,21 @@
+{
+  "appName": "MASTER",
+  "appType": "backend",
+  "description": "Backend Firebase che contiene Cloud Functions, logica di business e regole Firestore per il progetto. Serve l'applicazione frontend TECNICI.",
+  "techStack": [
+    "Firebase-Functions",
+    "TypeScript",
+    "Firestore"
+  ],
+  "counterparts": [
+    {
+      "appName": "TECNICI",
+      "appType": "frontend"
+    }
+  ],
+  "keyFiles": {
+    "functionsEntryPoint": "functions/src/index.ts",
+    "firestoreRules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

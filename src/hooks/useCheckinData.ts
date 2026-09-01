@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, onSnapshot, documentId, getDocs, Timestamp } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db } from '@/config/firebase'; // <-- PERCORSO CORRETTO
 import type { Checkin, CheckinData, Tecnico, Anagrafica, FiltriCheckin } from '@/models/definitions';
 
 interface RawCheckinDocument {
@@ -85,14 +85,12 @@ export const useCheckinData = (formattedDate: string) => {
                 const luoghiMap = new Map(luoghiSnap.docs.map(doc => [doc.id, { id: doc.id, ...doc.data(), tipo: 'luogo' as const } as Anagrafica]));
                 const naviMap = new Map(naviSnap.docs.map(doc => [doc.id, { id: doc.id, ...doc.data(), tipo: 'nave' as const } as Anagrafica]));
 
-                // **Logica di business finale: Un documento grezzo può generare più eventi.**
                 const finalCheckins: CheckinData[] = [];
 
                 for (const raw of rawCheckins) {
                     const tecnico = tecniciMap.get(raw.tecnicoId);
                     if (!tecnico) continue; // Un evento senza tecnico non è valido
 
-                    // Controlla l'evento LUOGO
                     if (raw.luogoId) {
                         const luogo = luoghiMap.get(raw.luogoId);
                         if (luogo) {
@@ -107,7 +105,6 @@ export const useCheckinData = (formattedDate: string) => {
                         }
                     }
 
-                    // Controlla l'evento NAVE
                     if (raw.naveId) {
                         const nave = naviMap.get(raw.naveId);
                         if (nave) {
@@ -141,7 +138,7 @@ export const useCheckinData = (formattedDate: string) => {
     }, [formattedDate]);
 
     const filteredCheckins = useMemo(() => {
-         const { ricercaTecnico, luoghiSelezionati, naviSelezionate } = filtri;
+        const { ricercaTecnico, luoghiSelezionati, naviSelezionate } = filtri;
         if (!ricercaTecnico && luoghiSelezionati.length === 0 && naviSelezionate.length === 0) {
             return allCheckins;
         }
@@ -150,7 +147,7 @@ export const useCheckinData = (formattedDate: string) => {
             const tecnicoMatch = !ricercaTecnico || (checkin.tecnico && checkin.tecnico.id === ricercaTecnico);
             
             const anagrafica = checkin.anagrafica;
-            if (!anagrafica) return false; // Se non c'è anagrafica, non può matchare i filtri
+            if (!anagrafica) return false;
 
             const noAnagraficaFilters = luoghiSelezionati.length === 0 && naviSelezionate.length === 0;
 

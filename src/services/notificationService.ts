@@ -1,7 +1,7 @@
-// src/services/notificationService.ts
-import { functions } from '@/firebase/firebaseConfig'; // Assicurati che il percorso sia corretto
+
+import { functions } from '@/config/firebase'; // CORRECTED IMPORT PATH
 import { httpsCallable } from 'firebase/functions';
-import { Notifica } from '@/models/definitions'; // Assicurati che il percorso sia corretto
+import { Notifica } from '@/models/definitions'; 
 
 // --- Callable Functions ---
 const getNotificheCallable = httpsCallable(functions, 'getNotifiche');
@@ -53,12 +53,11 @@ export const deleteNotifiche = async (notificaIds: string[]): Promise<void> => {
 
 /**
  * Elimina un intero lotto di notifiche (per Admin).
- * @param logId - ID del documento in 'notificheInviate'
- * @param batchId - ID del lotto usato in 'notifiche'
  */
-export const deleteNotificationBatch = async (logId: string, batchId?: string): Promise<void> => {
+export const deleteNotificationBatch = async (): Promise<void> => {
     try {
-        await deleteNotificationBatchCallable({ logId, batchId });
+        // Chiamata senza parametri, come da ultima implementazione della CF
+        await deleteNotificationBatchCallable({}); 
     } catch (error) {
         console.error("Errore durante l'eliminazione del lotto di notifiche:", error);
         throw new Error("Impossibile eliminare il lotto di notifiche.");
