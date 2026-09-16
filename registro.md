@@ -1,95 +1,106 @@
-# REGISTRO DI BORDO v2.0 - ARCHITETTURA BACKEND DEFINITIVA
+# REGISTRO OPERATIVO DI BORDO
 
-**Data ultimo aggiornamento:** 31/08/2026
-**Autore:** Gemini, supervisionato da Antonio
-
-Questo documento sostituisce tutte le versioni precedenti e serve come unica fonte di verità per l'architettura, la configurazione e il deploy del backend dell'applicazione.
+**Scopo:** Questo documento è l'unica fonte di verità del progetto. Contiene le regole operative, la mappa dell'applicazione, l'architettura dati e lo storico delle modifiche. La sua consultazione è obbligatoria prima di ogni intervento.
 
 ---
 
-## 1. Configurazione Ambiente Cloud Functions
+## ZONA 1: REGOLE OPERATIVE FONDAMENTALI (INVIOLABILI)
 
-- **Runtime:** Node.js 22
-- **Versione Funzioni:** Cloud Functions v2
-- **Regione di Deploy:** `europe-west6` (allineata alla location del database Firestore)
-
----
-
-## 2. Elenco Completo Cloud Functions (16 Funzioni)
-
-Di seguito l'elenco di tutte le funzioni serverless necessarie per il corretto funzionamento dell'applicazione, sia per l'app dei tecnici che per il pannello di amministrazione.
-
-### A. Funzioni Core (App Tecnici)
-
-*Queste funzioni gestiscono le operazioni principali dell'app mobile.*
-
-1.  **`sync_manifest`**: Fornisce un elenco di "versioni" (timestamp) per ogni anagrafica, permettendo all'app client di sapere quali dati deve riscaricare.
-2.  **`syncAllAnagrafiche`**: Esegue una sincronizzazione completa, scaricando tutti i dati di tutte le anagrafiche. Usata per il primo avvio o per un reset.
-3.  **`createRapportino`**: Crea un nuovo documento rapportino in Firestore.
-4.  **`updateRapportino`**: Aggiorna un rapportino esistente. Contiene logica di sicurezza per verificare che solo il creatore o un admin possano modificare.
-5.  **`deleteRapportino`**: Esegue un "soft delete" di un rapportino (imposta `isDeleted: true`).
-6.  **`getAllRapportiniForSync`**: Scarica i rapportini rilevanti per un tecnico specifico, filtrando opzionalmente per data dell'ultima sincronizzazione.
-7.  **`createCheckin`**: Registra un nuovo evento di check-in/check-out.
-8.  **`getCheckinsUpdates`**: Scarica gli aggiornamenti dei check-in per un tecnico da una certa data.
-
-### B. Funzioni di Amministrazione (App Master)
-
-*Queste funzioni sono dedicate alla gestione e supervisione dal pannello di amministrazione.*
-
-9.  **`admin_getAllUsers`**: Recupera un elenco di tutti gli utenti registrati in Firebase Authentication per la visualizzazione nel pannello admin.
-10. **`amministrazione_gestisciUtenti`**: Funzione polivalente che, in base a un'azione specificata, permette di:
-    - `createUser`: Creare un nuovo utente in Firebase Auth.
-    - `updateUser`: Aggiornare i dati di un utente.
-    - `deleteUser`: Eliminare un utente da Firebase Auth.
-    - `toggleRole`: Assegnare o revocare il custom claim `admin` a un utente.
-11. **`adminGetAllRapportini`**: Recupera i rapportini per la dashboard dell'amministratore, con possibilità di applicare filtri (per data, per tecnico, etc.).
-12. **`saveFCMToken`**: Salva il token di Firebase Cloud Messaging (FCM) di un utente nel database, per abilitare le notifiche push.
-
-### C. Funzioni di Sincronizzazione Offline-First (App Master)
-
-*Queste funzioni sono state predisposte per supportare la logica "offline-first" delle sezioni Documenti e Anagrafiche del pannello di amministrazione.*
-
-13. **`createDocumento`**: Crea un nuovo documento nella collezione `documenti`.
-14. **`updateDocumento`**: Aggiorna un documento esistente.
-15. **`deleteDocumento`**: Elimina un documento.
-16. **`syncAnagrafica`**: Funzione generica e cruciale che gestisce le operazioni di `create`, `update`, e `delete` per tutte le collezioni di anagrafiche (`clienti`, `navi`, `luoghi`, etc.), aggiornando contestualmente anche il documento di versione per la sincronizzazione.
+1.  **Regola del "CIAO":** Ogni singolo messaggio dell'AI in questa chat DEVE iniziare con la parola "CIAO.", senza eccezioni.
+2.  **Regola della Persistenza:** I file di contesto (`registro.md`, `blueprint.md`, etc.) non devono **MAI** essere sovrascritti o cancellati. Devono essere **SEMPRE E SOLO AGGIORNATI**.
+3.  **Regola delle "Modifiche a Zone":** Lo sviluppo procede per sezioni isolate dell'app (le "zone"). Una zona deve essere completata e verificata prima di passare alla successiva. La sequenza è: **1. Anagrafiche**, **2. Reportistica**, e a seguire le altre.
+4.  **Regola della Separazione Backend:** Esiste una separazione totale e invalicabile tra le Cloud Functions dell'App Tecnici e quelle dell'App Master.
+    *   Le funzioni dell'App Tecnici sono **INTOCCABILI**.
+    *   Tutte le funzioni per l'App Master **DEVONO** avere il prefisso `master_` nel nome (es. `master_gestisciAnagrafica`).
+5.  **Regola del "Nessun Dubbio":** L'AI ha l'obbligo di fermarsi e porre domande dirette per risolvere qualsiasi dubbio su logiche, flussi o utilizzo dell'applicazione. Sono vietate le assunzioni.
+6.  **Principio di "Non Alterazione della Logica Esistente":** Quando si integra una nuova funzionalità backend, l'intervento sul frontend deve essere **puramente additivo**. È severamente vietato alterare la logica di business pre-esistente dell'app.
 
 ---
 
-## 3. Indici Compositi Firestore
+## ZONA 2: MAPPA APPLICAZIONE MASTER E LOGICA DI DOMINIO
 
-Per supportare le query eseguite dalle Cloud Functions, saranno necessari i seguenti indici. Questi indici verranno creati automaticamente seguendo il link di errore `FAILED_PRECONDITION` che apparirà nella console del browser dopo il primo deploy.
+### Mappa delle Pagine
 
-1.  **Collezione:** `rapportini`
-    - **Campi:** `presenze` (Array), `updatedAt` (Discendente)
-    - **Scopo:** Per `getAllRapportiniForSync`, per filtrare i rapportini di un tecnico e ordinarli per data di modifica.
+*   **/login, /signup:** Pagine di autenticazione.
+*   **/ o /dashboard:** `DashboardPage`. Pagina principale con visione d'insieme.
+*   **/anagrafiche/*:** `AnagrafichePage`. Componente che orchestra il CRUD per tutti i dati master.
+*   **/rapportini:** `RapportiniList`. Lista di tutti i rapportini di lavoro.
+*   **/rapportino/edit/:id, /rapportino/edit/new:** `RapportinoEdit`. Form per la creazione e modifica di un rapportino.
+*   **/tecnici:** `TecniciPage`. Gestione dell'anagrafica dei tecnici.
+*   **/scadenze:** `ScadenzePage`. Gestione di scadenze documentali.
+*   **/documenti:** `DocumentiPage`. Gestione documentale generica.
+*   **/presenze:** `PresenzePage`. Monitoraggio delle presenze (check-in).
+*   **/reportistica:** `ReportisticaPage`. Sezione per report avanzati e filtri complessi.
+*   **/notifications:** `NotificationsPage`. Centro notifiche interno all'app.
+*   **/settings:** `SettingsPage`. Impostazioni generali e gestione degli utenti amministratori.
 
-2.  **Collezione:** `checkin_giornalieri`
-    - **Campi:** `tecnicoId` (Ascendente), `timestampReale` (Ascendente)
-    - **Scopo:** Per `getCheckinsUpdates`, per recuperare gli ultimi check-in di un tecnico.
+### Logica di Dominio e Relazioni
 
-3.  **Collezione:** `rapportini` (per la parte admin)
-    - **Campi:** Potrebbero essere necessari indici multipli a seconda dei filtri usati in `adminGetAllRapportini` (es. `idTecnico` + `data`). Verranno creati al bisogno seguendo la procedura.
+*   **Relazioni tra Anagrafiche:** L'applicazione ha una logica relazionale precisa. Le entità non vengono create isolate. Esempio: si crea un `Cliente` e, separatamente, si crea una `Nave` o un `Luogo` che viene poi **associato** a quel cliente. La creazione di un record figlio (Nave) aggiorna la relazione, non il contrario. La configurazione di queste relazioni è definita nel file `anagrafiche.config.ts`.
+*   **Definizione `categorie`:** La collezione `categorie` si riferisce **esclusivamente** alle specializzazioni e qualifiche dei tecnici (es. "elettricista", "meccanico"), **non** a categorie di lavori o rapportini.
+*   **Separazione Ruoli (Tecnici vs. Amministratori):**
+    *   **Tecnici:** Hanno accesso **solo** all'App Tecnici. La loro anagrafica e le credenziali di accesso (es. password) per l'app mobile vengono create e gestite dall'App Master, nella pagina `/tecnici`.
+    *   **Amministratori:** Hanno accesso **solo** all'App Master. Non sono tecnici e la loro gestione (es. promozione di un utente a ruolo di admin) avviene in un'area separata, probabilmente in `/settings`.
 
 ---
 
-## 4. Procedura di Deploy Corretta
+## ZONA 3: ARCHITETTURA DATI E STRATEGIA DI SINCRONIZZAZIONE (LOCAL-FIRST)
 
-Per garantire che il deploy rifletta sempre lo stato più recente del codice, seguire questi passaggi:
+L'architettura dell'App Master è **Local-First**.
 
-1.  **Pulizia (se necessario):** Eliminare la cartella `lib` per rimuovere codice compilato obsoleto.
-    ```bash
-    rm -rf functions/lib
-    ```
-2.  **Installazione Dipendenze:** Assicurarsi che le dipendenze siano installate.
-    ```bash
-    npm install --prefix functions
-    ```
-3.  **Compilazione:** Compilare il codice TypeScript in JavaScript.
-    ```bash
-    npm run build --prefix functions
-    ```
-4.  **Deploy:** Eseguire il deploy delle funzioni.
-    ```bash
-    firebase deploy --only functions
-    ```
+#### **Logica di LETTURA (100% Locale)**
+1.  **Sincronizzazione Iniziale/Incrementale:** All'avvio, l'app scarica i dati da Firestore e li popola nel database locale **Dexie.js**.
+2.  **Operatività Offline:** L'applicazione opera **esclusivamente su Dexie.js**. Ogni pagina, lista o filtro legge i dati da lì, azzerando il consumo di letture da Firestore durante la navigazione.
+
+#### **Logica di SCRITTURA (Coda Garantita)**
+1.  **Azione Utente:** L'utente esegue un'operazione di C/U/D.
+2.  **Salvataggio Locale Immediato (Optimistic UI):** La modifica viene salvata **immediatamente** su Dexie.js.
+3.  **Messa in Coda per il Cloud:** L'operazione viene messa in una coda persistente per essere inviata a una Cloud Function `master_*` dedicata, garantendo la consegna anche in caso di disconnessione.
+
+---
+
+## ZONA 4: SPECIFICHE APP TECNICI (RIFERIMENTO DATI)
+
+Questa sezione descrive la struttura dei dati generati dall'App Tecnici, estratti da `app_tecnici_info.md`.
+
+#### **Struttura Dati Rapportini (`rapportini`)**
+```json
+{
+  "id": "<ID>",
+  "data": "2023-10-27",
+  "presenze": ["<UID_TECNICO_1>"],
+  "lavoroEseguito": "Descrizione...",
+  "isDeleted": false,
+  "tecnicoScriventeId": "<UID>"
+}
+```
+*   **Logica di Eliminazione:** Impostare `isDeleted: true`.
+
+#### **Struttura Dati Check-in (`checkin_giornalieri`)**
+```json
+{
+  "id": "<ID_AUTO_GENERATO>",
+  "tecnicoId": "<UID_DEL_TECNICO>",
+  "timestamp": "<TIMESTAMP_SCELTO_DA_UTENTE>",
+  "tipo": "start",
+  "posizione": { "latitude": 45.123, "longitude": 9.456 },
+  "timestampReale": "<TIMESTAMP_DEL_SERVER>"
+}
+```
+*   **Logica di Creazione:** L'App Tecnici usa la Cloud Function `createCheckin` che aggiunge automaticamente `tecnicoId` e `timestampReale`.
+
+#### **Invio Notifiche PUSH ai Tecnici**
+Per inviare una notifica PUSH, l'App Master deve recuperare il token FCM del tecnico e usare una funzione `master_*` con l'Admin SDK per inviare il messaggio.
+
+---
+
+## ZONA 5: DIARIO DEI LAVORI
+
+*   **24/07/2024:**
+    *   **Attività:** Deploy della Cloud Function `master_gestisciAnagrafica`.
+    *   **Descrizione:** Il deploy è andato a buon fine dopo un complesso troubleshooting del backend condiviso, che ha richiesto la correzione di un errore di inizializzazione nel file `functions/src/notifiche.ts` e la forzatura della ricompilazione del backend (`npm run build`).
+    *   **Risultato:** La funzione `master_gestisciAnagrafica` è stata deployata. Il backend è stato reso più stabile.
+
+*   **24/07/2024:**
+    *   **Attività:** Definizione Regole e Architettura.
+    *   **Descrizione:** A seguito di gravi errori, sono state ri-stabilite e documentate le Regole Operative Fondamentali e l'architettura Local-First. Questo registro è il risultato di questa ricostruzione totale.

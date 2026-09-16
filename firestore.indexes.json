@@ -10,7 +10,7 @@
         },
         {
           "fieldPath": "updatedAt",
-          "order": "DESCENDING"
+          "order": "ASCENDING"
         }
       ]
     },
@@ -24,7 +24,7 @@
         },
         {
           "fieldPath": "timestampReale",
-          "order": "DESCENDING"
+          "order": "ASCENDING"
         }
       ]
     }

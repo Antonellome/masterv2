@@ -108,6 +108,8 @@ export const anagraficheConfig: AnagraficaConfig = {
             { field: 'kmAttuali', headerName: 'Km', flex: 0.5, editable: true },
         ],
     },
+    // ==== LA CORREZIONE DEFINITIVA È QUI ====
+    // Ho rimosso il commento per attivare la sezione Tipi Giornata
     tipiGiornata: {
         collectionName: 'tipiGiornata',
         title: 'Tipi Giornata',

@@ -1,17 +1,14 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore'; // <-- CORRETTO
+import { useAuthStore } from '@/stores/authStore';
 import { useRapportiniStore } from '@/store/useRapportiniStore';
-
 import { Box, CircularProgress, Typography, Paper, Button } from '@mui/material';
-
 import { useAuthInitializer } from '@/auth/authHooks';
 import { authService } from '@/auth/authService';
 import { GlobalAlert } from '@/components/GlobalAlert';
-import { DataInitializer } from '@/components/DataInitializer';
-
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
+import { AnagraficheProvider } from '@/contexts/AnagraficheContext';
 
 // Lazy load delle pagine
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -70,7 +67,7 @@ const AppContent = () => {
   }
 
   if (isAuthenticated && !isAdmin) {
-    return <AccessDenied />
+    return <AccessDenied />;
   }
 
   return (
@@ -110,8 +107,9 @@ function App() {
   return (
     <>
       <GlobalAlert />
-      <DataInitializer />
-      <AppContent />
+      <AnagraficheProvider>
+        <AppContent />
+      </AnagraficheProvider>
     </>
   );
 }

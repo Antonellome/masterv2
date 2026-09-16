@@ -11,7 +11,7 @@ import GestioneLuoghi from '@/components/Anagrafiche/GestioneLuoghi';
 import GestioneDitte from '@/components/Anagrafiche/GestioneDitte';
 import GestioneCategorie from '@/components/Anagrafiche/GestioneCategorie';
 import GestioneVeicoli from '@/components/Anagrafiche/GestioneVeicoli';
-import GestioneTipiGiornata from '@/components/Anagrafiche/GestioneTipiGiornata'; // <-- ECCO L'IMPORT MANCANTE
+import GestioneTipiGiornata from '@/components/Anagrafiche/GestioneTipiGiornata'; 
 
 const AnagrafichePage = () => {
     const location = useLocation();
@@ -65,7 +65,7 @@ const AnagrafichePage = () => {
                   <Route path="ditte" element={<GestioneDitte />} />
                   <Route path="categorie" element={<GestioneCategorie />} />
                   <Route path="veicoli" element={<GestioneVeicoli />} />
-                  <Route path="tipiGiornata" element={<GestioneTipiGiornata />} /> {/* <-- ECCO LA ROTTA MANCANTE */}
+                  <Route path="tipiGiornata" element={<GestioneTipiGiornata />} />
                 </Routes>
             </Box>
         </Box>

@@ -3,11 +3,13 @@ import { create } from 'zustand';
 import { logger } from '@/utils/logger';
 import type { User } from 'firebase/auth';
 import { collection, Timestamp, getDocs } from 'firebase/firestore';
-import { db as firestoreDb } from '@/config/firebase'; 
+import { db as firestoreDb } from '@/config/firebase';
 import { db as localDb } from '@/db/database';
 import { useGlobalStore } from '@/stores/globalStore';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
 import type { CollectionName, Rapportino } from '@/models/definitions';
 
+// Funzione di utilità per la conversione sicura di timestamp a Date
 const toDateSafe = (timestamp: any): Date | null => {
     if (!timestamp) return null;
     if (timestamp instanceof Timestamp) return timestamp.toDate();
@@ -20,6 +22,7 @@ const toDateSafe = (timestamp: any): Date | null => {
     return !isNaN(d.getTime()) ? d : null;
 };
 
+// Processa i rapportini per garantire la coerenza dei dati
 const processRapportini = (docs: any[]): Rapportino[] => {
     return docs.map(docData => {
         const finalDate = toDateSafe(docData.data) || toDateSafe(docData.dataInizio) || toDateSafe(docData.createdAt);
@@ -30,7 +33,7 @@ const processRapportini = (docs: any[]): Rapportino[] => {
         const createdAtDate = toDateSafe(docData.createdAt) || finalDate;
         const updatedAtDate = toDateSafe(docData.updatedAt) || createdAtDate;
         const cleanData: any = { ...docData };
-        delete cleanData.dataInizio;
+        delete cleanData.dataInizio; // Rimuove campo legacy se presente
 
         return {
             ...cleanData,
@@ -43,6 +46,7 @@ const processRapportini = (docs: any[]): Rapportino[] => {
     }).filter((r): r is Rapportino => r !== null);
 };
 
+// Configurazione centralizzata delle collezioni e tabelle locali
 const collectionConfig = {
     anagrafiche: [
         { name: 'tecnici' as CollectionName, table: localDb.tecnici },
@@ -64,15 +68,28 @@ interface AuthState {
   profile: any | null;
   isAdmin: boolean;
   authLoading: boolean;
-  isSyncing: boolean; 
+  isSyncing: boolean;
 }
 
 interface AuthActions {
   setUserAndProfile: (user: User | null, profile: any | null, isAdmin: boolean) => Promise<void>;
   setAuthLoading: (loading: boolean) => void;
-  runInitialSync: () => Promise<void>;
+  runInitialSync: () => Promise<void>; // DEVE essere una Promise
   logout: () => void;
 }
+
+// Sincronizza una singola collezione da Firestore a Dexie
+const syncCollection = async (config: { name: CollectionName; table: any; processor?: (docs: any[]) => any[] }) => {
+    const snapshot = await getDocs(collection(firestoreDb, config.name));
+    if (snapshot.empty) return;
+    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const dataToStore = config.processor ? config.processor(docs) : docs;
+    if (dataToStore.length > 0) {
+        await config.table.bulkPut(dataToStore);
+    }
+};
+
+let syncPromise: Promise<void> | null = null;
 
 const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   user: null,
@@ -88,68 +105,96 @@ const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
   setUserAndProfile: async (user, profile, isAdmin) => {
     const currentUser = get().user;
-    // Se l'utente è nuovo o diverso, avvia la sincronizzazione
     if (user && currentUser?.uid !== user.uid) {
-        logger.log(`AuthStore: Nuovo utente (uid: ${user.uid}), isAdmin: ${isAdmin}. Avvio sync.`);
-        set({ user, profile, isAdmin, isSyncing: true });
-        await get().runInitialSync();
+        logger.log(`AuthStore: Nuovo utente (uid: ${user.uid}), isAdmin: ${isAdmin}.`);
+        set({ user, profile, isAdmin });
+        await get().runInitialSync(); // Attende la fine della sincronizzazione
     } else if (!user) {
         logger.log(`AuthStore: Utente sloggato.`);
-        set({ user: null, profile: null, isAdmin: false });
+        get().logout(); // Usa l'azione interna per pulire tutto
     } else {
-        // Aggiorna lo stato anche se l'utente è lo stesso (es. refresh dei permessi)
-        set({ user, profile, isAdmin });
+        set({ user, profile, isAdmin }); // Aggiorna i dati per l'utente corrente
     }
   },
 
-  runInitialSync: async () => {
-    if (get().isSyncing) {
-        logger.log('Sync già in corso. Salto.');
-        return;
+  runInitialSync: () => {
+    if (syncPromise) {
+        logger.log('Sync già in corso. Accodo alla Promise esistente.');
+        return syncPromise;
     }
-    logger.log('AuthStore: Avvio sincronizzazione dati...');
+
+    logger.log('AuthStore: Avvio sincronizzazione dati centralizzata...');
     set({ isSyncing: true });
     useGlobalStore.getState().setAppLoading(true);
+    useRapportiniStore.getState().setLoading(true);
 
-    try {
-        const syncCollection = async (config: { name: CollectionName; table: any; processor?: (docs: any[]) => any[] }) => {
-            const snapshot = await getDocs(collection(firestoreDb, config.name));
-            if (snapshot.empty) return;
-            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const dataToStore = config.processor ? config.processor(docs) : docs;
-            if (dataToStore.length > 0) {
-                await config.table.bulkPut(dataToStore);
-            }
-        };
+    syncPromise = (async () => {
+        try {
+            const allPromises = [
+                ...collectionConfig.anagrafiche.map(syncCollection),
+                syncCollection(collectionConfig.rapportini),
+                syncCollection(collectionConfig.checkins),
+                syncCollection(collectionConfig.documenti),
+            ];
+            await Promise.all(allPromises);
+            logger.log('*** SYNC FIRESTORE -> DEXIE COMPLETATO ***');
 
-        const allPromises = [
-            ...collectionConfig.anagrafiche.map(syncCollection),
-            syncCollection(collectionConfig.rapportini),
-            syncCollection(collectionConfig.checkins),
-            syncCollection(collectionConfig.documenti),
-        ];
+            // Popola lo store Zustand dai dati appena salvati su Dexie
+            const anagraficheData = {
+                tecnici: await localDb.tecnici.toArray(),
+                clienti: await localDb.clienti.toArray(),
+                ditte: await localDb.ditte.toArray(),
+                navi: await localDb.navi.toArray(),
+                luoghi: await localDb.luoghi.toArray(),
+                categorie: await localDb.categorie.toArray(),
+                tipiGiornata: await localDb.tipiGiornata.toArray(),
+                veicoli: await localDb.veicoli.toArray(),
+            };
+            const rapportini = await localDb.rapportini.toArray();
+            useRapportiniStore.getState().setData({ ...anagraficheData, rapportini });
+            logger.log('*** HYDRATION DEXIE -> ZUSTAND COMPLETATO ***');
 
-        await Promise.all(allPromises);
-        logger.log('*** Sincronizzazione dati COMPLETATA con successo. ***');
-        useGlobalStore.getState().setLastSync(new Date());
+            useGlobalStore.getState().setLastSync(new Date());
 
-    } catch (error) {
-        logger.error('ERRORE CRITICO durante la sincronizzazione.', error);
-    } finally {
-        set({ isSyncing: false });
-        useGlobalStore.getState().setAppLoading(false);
-        logger.log('AuthStore: Fine ciclo di sincronizzazione.');
-    }
+        } catch (error) {
+            logger.error('ERRORE CRITICO durante la sincronizzazione centralizzata.', error);
+        } finally {
+            set({ isSyncing: false });
+            useGlobalStore.getState().setAppLoading(false);
+            useRapportiniStore.getState().setLoading(false);
+            logger.log('AuthStore: Fine ciclo di sincronizzazione centralizzata.');
+            syncPromise = null;
+        }
+    })();
+
+    return syncPromise;
   },
 
   logout: () => {
-    logger.log(`AuthStore: logout`);
-    set({ user: null, profile: null, isAdmin: false, isSyncing: false });
-    // Pulisci i dati locali al logout
-    Object.values(collectionConfig.anagrafiche).forEach(c => c.table.clear());
-    collectionConfig.rapportini.table.clear();
-    collectionConfig.checkins.table.clear();
-    collectionConfig.documenti.table.clear();
+    logger.log(`AuthStore: Eseguo logout completo e pulizia dati.`);
+    set({ user: null, profile: null, isAdmin: false, isSyncing: false, authLoading: false });
+    useRapportiniStore.getState().setLoading(false); // Ferma il loading allo sloggarsi
+    
+    const tablesToClear = [
+      ...collectionConfig.anagrafiche.map(c => c.table),
+      collectionConfig.rapportini.table,
+      collectionConfig.checkins.table,
+      collectionConfig.documenti.table,
+    ];
+
+    const cleanupPromises = tablesToClear.map(table => {
+      if (!table || typeof table.clear !== 'function') {
+        logger.warn("Tentativo di pulire una tabella non valida o inesistente.", table);
+        return Promise.resolve();
+      }
+      return table.clear();
+    });
+
+    Promise.all(cleanupPromises).then(() => {
+        logger.log('Tabelle Dexie svuotate con successo.');
+    }).catch(err => {
+        logger.error('Errore durante la pulizia di Dexie al logout:', err);
+    });
   },
 }));
 

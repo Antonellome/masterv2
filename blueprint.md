@@ -1,49 +1,39 @@
-CIAO
+# BLUEPRINT OPERATIVO - APP MASTER
 
-# Blueprint del Progetto R-Evolution M-O-V 3
+**Data ultimo aggiornamento:** 17/09/2026
 
-## Overview
+---
 
-Questo documento descrive l'architettura, le funzionalità e lo stato di avanzamento del backend per l'applicazione R-Evolution M-O-V 3, basato su Firebase Cloud Functions.
+## 1. Regole Strategiche Fondamentali
 
-Il file `risposta.md` contiene uno snapshot completo del codice sorgente di tutte le funzioni, salvato durante la fase di allineamento, e rappresenta una base di codice verificata e coerente.
+**IMPORTANTE: QUESTA SEZIONE NON DEVE ESSERE MAI MODIFICATA.**
 
-## Regole di Comunicazione
+1.  **Consultazione del Registro:** Prima di iniziare qualsiasi lavoro o analisi, consultare sempre il file `registro.md`. Esso contiene i dettagli tecnici, la mappa dell'applicazione, la lista delle Cloud Functions e il diario di tutte le modifiche. È la nostra fonte primaria di verità tecnica.
 
-1.  **Regola del CIAO:** Inizia ogni commento in chat con "CIAO".
-2.  **Regola della Lingua ITALIANA:** Qui si commenta solo in ITALIANO.
+2.  **Separazione Totale delle Cloud Functions:** Esiste una separazione invalicabile tra il backend dell'App Tecnici e quello dell'App Master.
+    *   Le funzioni dell'App Tecnici **NON DEVONO MAI** essere toccate, modificate, chiamate o analizzate.
+    *   Tutte le funzioni create per l'App Master **DEVONO** iniziare con il prefisso `master_` (es. `master_gestisciAnagrafica`).
 
-## Struttura e Design
+3.  **Lavoro per "Zone":** Lo sviluppo procede per sezioni isolate e autonome dell'app (le "zone"). Una zona deve essere completata e testata prima di passare alla successiva. L'ordine è definito nel `registro.md`.
 
-Il backend è composto da diverse Cloud Functions scritte in TypeScript, che gestiscono la logica di business principale dell'applicazione.
+4.  **Regole di Comunicazione:**
+    *   Ogni messaggio inizia con "CIAO.".
+    *   Se emergono dubbi sulla logica o sul funzionamento dell'app, è obbligatorio fermarsi e chiedere chiarimenti.
 
-### Elenco Funzioni Attuali:
+---
 
-*   **`syncAllAnagrafiche`**: Fornisce dati anagrafici essenziali (tecnici, clienti, navi, etc.) alle app client.
-*   **`createCheckin`**: Salva un nuovo check-in giornaliero per un tecnico.
-*   **`getCheckinsUpdates`**: Ottiene gli aggiornamenti dei check-in per un dato tecnico in modo incrementale.
-*   **`getAllRapportiniForSync`**: Sincronizza i report basandosi sulla presenza dei tecnici e gestisce il soft-delete.
-*   **`saveRapportino`**: Crea o aggiorna un report con controllo di proprietà.
-*   **`softDeleteRapportino`**: Esegue la cancellazione logica dei report previa verifica autore.
-*   **`saveFCMToken`**: Salva il token per le notifiche push.
+## 2. Piano di Lavoro Corrente
 
-## Piano di Lavoro e Cronistoria
+**ATTENZIONE: QUESTA SEZIONE VERRÀ MODIFICATA AD OGNI AVANZAMENTO.**
 
-### Sessione di Debugging Avanzato: Il Mistero dei Deploy Silenti
+*   **ZONA ATTUALE:** **Anagrafiche** (`/anagrafiche/*`)
 
-1.  **Obiettivo:** Risolvere gli errori `internal` e `Manifest non trovato` che persistevano lato client.
-2.  **Causa Radice:** L'ispezione del file `firebase.json` ha rivelato che era completamente vuoto, rendendo i deploy inefficaci.
-3.  **Risoluzione:** Ripristino della configurazione di deploy corretta.
+*   **Obiettivo:** Completare la bonifica della zona assicurando che tutte le operazioni di Creazione, Modifica ed Eliminazione (CRUD) vengano gestite da una nuova Cloud Function dedicata (`master_gestisciAnagrafica`) e che non vi sia alcun accesso diretto a Firestore.
 
-### Sessione Risolutiva Finale (30 Agosto 2026): Allineamento Dati e Proprietà
+*   **Stato Avanzamento:**
+    1.  **Creazione Funzione Backend:** **FATTO** (Funzione `master_gestisciAnagrafica` già deployata come da `registro.md`).
+    2.  **Creazione Servizio Frontend:** **FATTO** (Creato `src/services/anagraficheService.ts`).
+    3.  **Collegamento UI:** **FATTO** (Modificato `GestioneAnagrafica.tsx` per usare il nuovo servizio).
 
-1.  **Obiettivo:** Risolvere la mancata visualizzazione dei 300+ report storici e implementare la logica di proprietà.
-2.  **Problema Identificato:** È stata rilevata una discrepanza critica tra il codice proposto inizialmente (che cercava il campo `tecniciIds`) e la realtà del database Firestore, che utilizza invece il campo **`presenze`** per l'elenco dei tecnici coinvolti.
-3.  **Implementazione VERSIONE 11:** È stata deployata la versione definitiva delle Cloud Functions (`functions/src/rapportini.ts`) che:
-    *   Utilizza `presenze` con operatore `array-contains` per la sincronizzazione dei dati.
-    *   Utilizza **`tecnicoScriventeId`** come campo di riferimento per i permessi di proprietà (ownership). Solo l'autore può modificare o cancellare un report.
-    *   Gestisce correttamente il **soft-delete** tramite il flag `isDeleted`, garantendo che i dati storici (dove il campo era assente) rimangano visibili.
-4.  **Configurazione Indici:** Sono stati configurati e attivati con successo gli indici compositi necessari su Firestore:
-    *   Collezione `rapportini`: `presenze` (Array) + `updatedAt` (Decrescente).
-    *   Collezione `checkin_giornalieri`: `tecnicoId` (Ascendente) + `updatedAt` (Decrescente).
-5.  **Stato Finale:** Il backend è ora **DEFINITIVO**, allineato alla struttura dati storica e protetto da logiche di accesso sicure. Il sistema è pienamente operativo per la sincronizzazione dell'app tecnici.
+*   **Passi Successivi:**
+    1.  **Verifica e Test:** Provare le operazioni di modifica, creazione e cancellazione da interfaccia per confermare il corretto funzionamento dell'intero flusso (UI -> Servizio -> Cloud Function -> Firestore).

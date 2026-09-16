@@ -51,7 +51,9 @@ const collectionConfig = {
         { name: 'navi' as CollectionName, table: db.navi },
         { name: 'luoghi' as CollectionName, table: db.luoghi },
         { name: 'categorie' as CollectionName, table: db.categorie },
-        { name: 'tipi_giornata' as CollectionName, table: db.tipiGiornata },
+        //  ==== LA CORREZIONE È QUI ==== 
+        // Il nome della collezione in Firestore è 'tipiGiornata' (camelCase), non 'tipi_giornata'
+        { name: 'tipiGiornata' as CollectionName, table: db.tipiGiornata },
         { name: 'veicoli' as CollectionName, table: db.veicoli },
     ],
     rapportini: { name: 'rapportini' as CollectionName, table: db.rapportini, processor: processRapportini },

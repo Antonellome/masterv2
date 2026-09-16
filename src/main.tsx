@@ -17,17 +17,18 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { attemptDbRecovery } from './db/recovery';
 
 // ESEGUI IL CONTROLLO DI RECUPERO PRIMA DI QUALSIASI ALTRA COSA
-attemptDbRecovery().then(() => {
-  // Solo se il recupero non ha forzato un reload, monta l'app.
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <ThemeProvider>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={it}>
-            <App />
-          </LocalizationProvider>
-        </Router>
-      </ThemeProvider>
-    </React.StrictMode>
-  );
-});
+attemptDbRecovery();
+
+// L'app viene SEMPRE renderizzata, anche se il recupero del DB fallisce.
+// La gestione degli errori del DB avverrà all'interno dell'app.
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ThemeProvider>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={it}>
+          <App />
+        </LocalizationProvider>
+      </Router>
+    </ThemeProvider>
+  </React.StrictMode>
+);
