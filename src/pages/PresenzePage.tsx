@@ -55,21 +55,36 @@ const PresenzePage = () => {
 
                 <Paper elevation={3} sx={{ p: 2 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 2
+                            }}>
                             <DatePicker
                                 label="Data Inizio"
                                 value={dataInizio}
                                 onChange={(newValue) => setDataInizio(newValue)}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={2}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 2
+                            }}>
                             <DatePicker
                                 label="Data Fine"
                                 value={dataFine}
                                 onChange={(newValue) => setDataFine(newValue)}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={4} md={3}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 3
+                            }}>
                             <Autocomplete
                                 options={sortedTecnici}
                                 getOptionLabel={(option) => option.nome}
@@ -78,7 +93,12 @@ const PresenzePage = () => {
                                 renderInput={(params) => <TextField {...params} label="Filtra per Tecnico" />}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={4} md={2}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 2
+                            }}>
                             <Autocomplete
                                 options={sortedNavi}
                                 getOptionLabel={(option) => option.nome}
@@ -87,7 +107,12 @@ const PresenzePage = () => {
                                 renderInput={(params) => <TextField {...params} label="Filtra per Nave" />}
                             />
                         </Grid>
-                        <Grid item xs={12} sm={4} md={3}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 4,
+                                md: 3
+                            }}>
                             <Autocomplete
                                 options={sortedLuoghi}
                                 getOptionLabel={(option) => option.nome}

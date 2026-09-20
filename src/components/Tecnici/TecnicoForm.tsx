@@ -1,9 +1,10 @@
 
 import { useEffect, useState } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Grid, 
+    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, 
     FormControlLabel, Switch, MenuItem, Paper, Typography, CircularProgress, Autocomplete, Box, IconButton, InputAdornment
 } from '@mui/material';
+import Grid from '@mui/material/Unstable_Grid2';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { Timestamp } from 'firebase/firestore';
@@ -21,7 +22,7 @@ const FormSection = ({ title, children }: { title: string, children: React.React
         <Typography variant="h6" gutterBottom sx={{ mb: 2, color: 'primary.main' }}>
             {title}
         </Typography>
-        <Grid container spacing={2.5}>
+        <Grid container spacing={2.5} sx={{ width: '100%' }}>
             {children}
         </Grid>
     </Paper>
@@ -78,13 +79,11 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
         }
     }, [open, tecnico]);
 
-    // Logica per la generazione automatica della password
     useEffect(() => {
         if (isNewTecnico && formData.appAccess && !password) {
             const generatedPassword = passwordGenerator();
             setPassword(generatedPassword);
         }
-        // Se l'accesso viene disabilitato, puliamo la password
         if (isNewTecnico && !formData.appAccess) {
             setPassword('');
         }
@@ -107,9 +106,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
     const handleSave = () => {
         const dataToSave: Partial<Tecnico> & { password?: string } = { ...formData };
         
-        // Includi SEMPRE la password se l'accesso è abilitato per un nuovo tecnico
         if (isNewTecnico && formData.appAccess) {
-            // Se per qualche motivo la password è vuota, ne genera una nuova come fallback.
             dataToSave.password = password || passwordGenerator(); 
         }
 
@@ -126,11 +123,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
     };
 
     const renderDatePicker = (label: string, name: keyof Tecnico) => (
-        <Grid
-            size={{
-                xs: 12,
-                md: 6
-            }}>
+        <Grid xs={12} md={6}>
             <DatePicker
                 label={label}
                 value={formData[name] ? dayjs(formData[name] as any) : null}
@@ -149,61 +142,32 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                 <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
                     
                     <FormSection title="Anagrafica e Ruolo">
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6
-                            }}><TextField name="cognome" label="Cognome" value={formData.cognome || ''} onChange={handleChange} fullWidth required /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6
-                            }}><TextField name="nome" label="Nome" value={formData.nome || ''} onChange={handleChange} fullWidth required /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6
-                            }}><Autocomplete
+                        <Grid xs={12} sm={6}><TextField name="cognome" label="Cognome" value={formData.cognome || ''} onChange={handleChange} fullWidth required /></Grid>
+                        <Grid xs={12} sm={6}><TextField name="nome" label="Nome" value={formData.nome || ''} onChange={handleChange} fullWidth required /></Grid>
+                        <Grid xs={12} sm={6}><Autocomplete
                                 options={ditte}
                                 getOptionLabel={(option) => option.nome}
                                 value={ditte.find(d => d.id === formData.dittaId) || null}
                                 onChange={(_, newValue) => handleAutocompleteChange('dittaId', newValue ? newValue.id : null)}
                                 renderInput={(params) => <TextField {...params} label="Ditta" fullWidth required />}
                             /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6
-                            }}><Autocomplete
+                        <Grid xs={12} sm={6}><Autocomplete
                                 options={categorie}
                                 getOptionLabel={(option) => option.nome}
                                 value={categorie.find(c => c.id === formData.categoriaId) || null}
                                 onChange={(_, newValue) => handleAutocompleteChange('categoriaId', newValue ? newValue.id : null)}
                                 renderInput={(params) => <TextField {...params} label="Categoria" fullWidth />}
                             /></Grid>
-                        <Grid
-                            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center'}}
-                            size={{
-                                xs: 12,
-                                sm: 12
-                            }}>
+                        <Grid xs={12} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                             <FormControlLabel control={<Switch name="attivo" checked={formData.attivo ?? true} onChange={handleChange} />} label="Tecnico Attivo" />
                         </Grid>
                     </FormSection>
 
                     <FormSection title="Accesso App e Recapiti">
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6
-                            }}><TextField name="email" label="Email" value={formData.email || ''} onChange={handleChange} fullWidth required/></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 6
-                            }}><TextField name="telefono" label="Telefono" value={formData.telefono || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} sm={6}><TextField name="email" label="Email" value={formData.email || ''} onChange={handleChange} fullWidth required/></Grid>
+                        <Grid xs={12} sm={6}><TextField name="telefono" label="Telefono" value={formData.telefono || ''} onChange={handleChange} fullWidth /></Grid>
                         
-                        <Grid size={12}>
+                        <Grid xs={12}>
                              <FormControlLabel control={<Switch name="appAccess" checked={formData.appAccess ?? false} onChange={handleChange} disabled={!isNewTecnico} />} label="Crea utente e abilita accesso all'app" />
                              { !isNewTecnico && (
                                 <Typography variant="caption" color="text.secondary" display="block" ml={4}>
@@ -213,7 +177,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                         </Grid>
                         
                         {isNewTecnico && formData.appAccess && (
-                            <Grid size={12}>
+                            <Grid xs={12}>
                                 <TextField 
                                     name="password" 
                                     label="Password di Accesso (generata automaticamente)"
@@ -240,30 +204,14 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                             </Grid>
                         )}
                         
-                        <Grid size={12}><TextField name="indirizzo" label="Indirizzo" value={formData.indirizzo || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 5
-                            }}><TextField name="citta" label="Città" value={formData.citta || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 3
-                            }}><TextField name="provincia" label="Provincia" value={formData.provincia || ''} onChange={handleChange} fullWidth inputProps={{ maxLength: 2 }} /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                sm: 4
-                            }}><TextField name="cap" label="CAP" value={formData.cap || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12}><TextField name="indirizzo" label="Indirizzo" value={formData.indirizzo || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} sm={5}><TextField name="citta" label="Città" value={formData.citta || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} sm={3}><TextField name="provincia" label="Provincia" value={formData.provincia || ''} onChange={handleChange} fullWidth inputProps={{ maxLength: 2 }} /></Grid>
+                        <Grid xs={12} sm={4}><TextField name="cap" label="CAP" value={formData.cap || ''} onChange={handleChange} fullWidth /></Grid>
                     </FormSection>
 
                     <FormSection title="Dettagli Contrattuali">
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 6
-                            }}>
+                        <Grid xs={12} md={6}>
                              <Autocomplete
                                 options={TIPI_CONTRATTO}
                                 getOptionLabel={(option) => option.label}
@@ -272,55 +220,23 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                                 renderInput={(params) => <TextField {...params} label="Tipo Contratto" fullWidth />}
                             />
                         </Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 6
-                            }}></Grid> {/* Spacer */}
+                        <Grid xs={12} md={6}></Grid> {/* Spacer */}
                         {renderDatePicker("Data Assunzione", 'dataAssunzione')}
                         {renderDatePicker("Scadenza Contratto", 'scadenzaContratto')}
                         {renderDatePicker("Scadenza UNILAV", 'scadenzaUnilav')}
                     </FormSection>
 
                     <FormSection title="Documenti e Scadenze">
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 6
-                            }}><TextField name="codiceFiscale" label="Codice Fiscale" value={formData.codiceFiscale || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 6
-                            }}></Grid> {/* Spacer */}
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 6
-                            }}><TextField name="numeroCartaIdentita" label="Numero Carta Identità" value={formData.numeroCartaIdentita || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} md={6}><TextField name="codiceFiscale" label="Codice Fiscale" value={formData.codiceFiscale || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} md={6}></Grid> {/* Spacer */}
+                        <Grid xs={12} md={6}><TextField name="numeroCartaIdentita" label="Numero Carta Identità" value={formData.numeroCartaIdentita || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza Carta Identità", 'scadenzaCartaIdentita')}
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 6
-                            }}><TextField name="numeroPassaporto" label="Numero Passaporto" value={formData.numeroPassaporto || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} md={6}><TextField name="numeroPassaporto" label="Numero Passaporto" value={formData.numeroPassaporto || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza Passaporto", 'scadenzaPassaporto')}
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 4
-                            }}><TextField name="numeroPatente" label="Numero Patente" value={formData.numeroPatente || ''} onChange={handleChange} fullWidth /></Grid>
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 2
-                            }}><TextField name="categoriaPatente" label="Cat. Patente" value={formData.categoriaPatente || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} md={4}><TextField name="numeroPatente" label="Numero Patente" value={formData.numeroPatente || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} md={2}><TextField name="categoriaPatente" label="Cat. Patente" value={formData.categoriaPatente || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza Patente", 'scadenzaPatente')}
-                        <Grid
-                            size={{
-                                xs: 12,
-                                md: 6
-                            }}><TextField name="numeroCQC" label="Numero CQC" value={formData.numeroCQC || ''} onChange={handleChange} fullWidth /></Grid>
+                        <Grid xs={12} md={6}><TextField name="numeroCQC" label="Numero CQC" value={formData.numeroCQC || ''} onChange={handleChange} fullWidth /></Grid>
                         {renderDatePicker("Scadenza CQC", 'scadenzaCQC')}
                     </FormSection>
                     
@@ -332,7 +248,7 @@ const TecnicoForm: React.FC<TecnicoFormProps> = ({ open, onClose, onSave, tecnic
                     </FormSection>
 
                      <FormSection title="Note">
-                        <Grid size={12}><TextField name="note" label="Note generali sul tecnico" value={formData.note || ''} onChange={handleChange} fullWidth multiline rows={4} /></Grid>
+                        <Grid xs={12}><TextField name="note" label="Note generali sul tecnico" value={formData.note || ''} onChange={handleChange} fullWidth multiline rows={4} /></Grid>
                     </FormSection>
 
                 </LocalizationProvider>

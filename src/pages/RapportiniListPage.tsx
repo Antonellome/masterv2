@@ -215,11 +215,31 @@ const RapportiniListPage = () => {
                 <Paper elevation={2} sx={{ p: 2.5, mb: 3, borderRadius: 2 }}>
                     <Typography variant="h6" gutterBottom>Filtri</Typography>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={3}><DatePicker label="Dal" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><DatePicker label="Al" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={tecnici} getOptionLabel={o => `${o.cognome} ${o.nome}`} value={tecnici.find(t => t.id === filters.tecnicoId) || null} onChange={(_, v) => handleFilterChange('tecnicoId', v?.id || null)} renderInput={(params) => <TextField {...params} label="Tecnico" />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><Autocomplete options={navi} getOptionLabel={o => o.nome || ''} value={navi.find(n => n.id === filters.naveId) || null} onChange={(_, v) => handleFilterChange('naveId', v?.id || null)} renderInput={(params) => <TextField {...params} label="Nave" />} /></Grid>
-                        <Grid item xs={12} display="flex" justifyContent="flex-end" gap={1}>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><DatePicker label="Dal" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><DatePicker label="Al" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><Autocomplete options={tecnici} getOptionLabel={o => `${o.cognome} ${o.nome}`} value={tecnici.find(t => t.id === filters.tecnicoId) || null} onChange={(_, v) => handleFilterChange('tecnicoId', v?.id || null)} renderInput={(params) => <TextField {...params} label="Tecnico" />} /></Grid>
+                        <Grid
+                            size={{
+                                xs: 12,
+                                sm: 6,
+                                md: 3
+                            }}><Autocomplete options={navi} getOptionLabel={o => o.nome || ''} value={navi.find(n => n.id === filters.naveId) || null} onChange={(_, v) => handleFilterChange('naveId', v?.id || null)} renderInput={(params) => <TextField {...params} label="Nave" />} /></Grid>
+                        <Grid display="flex" justifyContent="flex-end" gap={1} size={12}>
                             <Button onClick={resetFilters} variant="outlined">Azzera</Button>
                         </Grid>
                     </Grid>
@@ -238,7 +258,7 @@ const RapportiniListPage = () => {
                     />
                 </Paper>
             </Box>
-            
+
             {/* Dialog di dettaglio - ORA USA ANCHE LUI IL NUOVO FLUSSO DI STAMPA */}
             {detailRapportino && (
                 <Dialog open={!!detailRapportino} onClose={handleCloseDetail} fullWidth maxWidth="lg" PaperProps={{ sx: { height: '90vh' } }}>
@@ -256,7 +276,7 @@ const RapportiniListPage = () => {
                     </DialogActions>
                 </Dialog>
             )}
-            
+
             {/* Componente di rendering nascosto per la generazione del PDF */}
             {printState.rapportinoToPrint && (
                  <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '210mm', background: 'white', zIndex: -1 }}>

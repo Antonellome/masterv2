@@ -10,8 +10,7 @@ import { logger } from '@/utils/logger';
  * Applica una regola di accesso rigida: solo gli amministratori possono procedere.
  */
 export const useAuthInitializer = () => {
-    // Estrae solo le azioni necessarie, lo stato verrà gestito internamente
-    const { setUserAndProfile, logout, setAuthLoading } = useAuthStore.getState();
+    const { setUserAndProfile, setAuthLoading } = useAuthStore.getState();
     const { setAppLoading } = useGlobalStore.getState();
 
     useEffect(() => {
@@ -27,27 +26,28 @@ export const useAuthInitializer = () => {
                     logger.log(`[AuthInitializer] L'utente è admin? ${isAdmin}`);
 
                     if (isAdmin) {
-                        // Chiamata UNIFICATA: passa utente e permessi INSIEME
                         await setUserAndProfile(user, null, true);
                     } else {
                         logger.warn("[AuthInitializer] L'utente non è admin. Logout forzato.");
-                        await authService.logout(); 
+                        await authService.logout();
                         await setUserAndProfile(null, null, false);
+                        setAppLoading(false); // Sblocca l'app per mostrare AccessDenied
                     }
 
                 } catch (error) {
                     logger.error("[AuthInitializer] Errore critico durante la verifica dei permessi:", error);
                     await authService.logout();
                     await setUserAndProfile(null, null, false);
+                    setAppLoading(false); // Sblocca l'app per mostrare l'errore
                 }
 
             } else {
                 logger.log("[AuthInitializer] Nessun utente Firebase. Stato pulito.");
                 await setUserAndProfile(null, null, false);
+                setAppLoading(false); // Sblocca l'app per mostrare la pagina di login
             }
             
             setAuthLoading(false);
-            setAppLoading(false);
         });
 
         return () => {

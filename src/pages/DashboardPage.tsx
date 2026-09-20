@@ -1,3 +1,4 @@
+
 import { useMemo, useState, useEffect } from 'react';
 import {
     Box, Typography, CircularProgress, Alert, Card, CardContent, Tabs, Tab,
@@ -8,7 +9,7 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Unstable_Grid2';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/db'; // Importa il DB locale
+import { db } from '@/db/database'; // Importa il DB locale
 import type { Rapportino, Tecnico, Nave, Luogo, Checkin, Cliente, TipoGiornata } from '../models/definitions';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';

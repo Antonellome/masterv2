@@ -1,35 +1,33 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { anagraficheConfig } from '../config/anagrafiche.config';
+import { anagraficheConfig, AnagraficaKey } from '../config/anagrafiche.config';
+import { useGlobalStore } from '@/stores/globalStore';
+import { logger } from '@/utils/logger';
 
-// Definiamo i tipi per l'input della funzione
 interface GestisciAnagraficaPayload {
   collectionName: string;
   operation: 'create' | 'update' | 'delete';
   data: any;
 }
 
-// Otteniamo un'istanza di Firebase Functions
 const functions = getFunctions();
-
-// Creiamo un riferimento alla nostra Cloud Function 'master_gestisciAnagrafica'
 const gestisciAnagrafica = httpsCallable<GestisciAnagraficaPayload, { success: boolean; id: string }>(functions, 'master_gestisciAnagrafica');
 
 /**
- * Servizio unificato per la gestione delle anagrafiche tramite Cloud Function.
- * Centralizza le operazioni di creazione, modifica ed eliminazione.
+ * Servizio unificato per la gestione delle anagrafiche, ora allineato con il Modello Ibrido.
+ * Esegue l'operazione di scrittura tramite Cloud Function e, in caso di successo,
+ * avvia una sincronizzazione mirata per aggiornare la cache locale (Dexie).
  *
- * @param collectionName - Il nome della collezione (es. 'clienti', 'navi').
+ * @param collectionName - Il nome della collezione Firestore (es. 'clienti', 'navi').
  * @param operation - L'operazione da eseguire: 'create', 'update', o 'delete'.
- * @param data - L'oggetto dati per l'operazione. Per 'update' e 'delete', deve contenere un 'id'.
+ * @param data - L'oggetto dati per l'operazione. Deve contenere un 'id' per update e delete.
  * @returns L'esito dell'operazione dalla Cloud Function.
  */
 export const anagraficheService = async (
-  collectionName: string,
+  collectionName: AnagraficaKey,
   operation: 'create' | 'update' | 'delete',
   data: any
 ) => {
   try {
-    // Validazione preliminare dei dati
     if (!anagraficheConfig[collectionName]) {
       throw new Error(`La collezione '${collectionName}' non è configurata.`);
     }
@@ -43,14 +41,23 @@ export const anagraficheService = async (
       data,
     };
 
-    console.log('Invio payload alla Cloud Function:', payload);
+    logger.log(`[AnagraficheService] Invio payload alla CF:`, payload);
     const result = await gestisciAnagrafica(payload);
-    console.log('Risultato dalla Cloud Function:', result.data);
+    logger.log(`[AnagraficheService] Risultato dalla CF:`, result.data);
+
+    if (result.data.success) {
+      logger.log(`[AnagraficheService] Operazione ${operation} su ${collectionName} riuscita. Avvio sync mirato.`);
+      await useGlobalStore.getState().syncCollectionByName(collectionName as any);
+    } else {
+        throw new Error(`Operazione ${operation} su ${collectionName} fallita sul server.`);
+    }
 
     return result.data;
+
   } catch (error) {
-    console.error(`Errore durante l'operazione '${operation}' su '${collectionName}':`, error);
-    // Rilanciamo l'errore per permettere al chiamante di gestirlo (es. mostrare una notifica all'utente)
+    const typedError = error as Error;
+    logger.error(`[AnagraficheService] Errore durante l'operazione '${operation}' su '${collectionName}':`, typedError.message);
+    useGlobalStore.getState().showNotification(`Errore in ${operation} ${collectionName}: ${typedError.message}`, 'error');
     throw error;
   }
 };

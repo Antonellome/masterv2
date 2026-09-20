@@ -147,10 +147,26 @@ const RapportinoEdit: React.FC = () => {
                 <Typography variant="h4" gutterBottom>{isNewMode ? 'Nuovo Rapportino' : 'Modifica Rapportino'}</Typography>
                 
                 <Section title="Dati Principali">
-                    <Grid item xs={12} md={4}><Autocomplete options={tecnici} getOptionLabel={(o) => o.nome} value={tecnici.find(t=>t.id === formState.tecnicoId) || null} onChange={handleTecnicoResponsabileChange} disabled={isSaving || !isNewMode} renderInput={(params) => <TextField {...params} label="Tecnico Resp." required />} /></Grid>
-                    <Grid item xs={12} md={4}><DatePicker label="Data" value={dayjs(formState.data)} onChange={d => updateField('data', d?.toDate())} disabled={isSaving} /></Grid>
-                    <Grid item xs={12} md={4}><TextField label="Ordine Lavoro" value={formState.ordineLavoro || ''} onChange={e => updateField('ordineLavoro', e.target.value)} fullWidth disabled={isSaving} /></Grid>
-                    <Grid item xs={12} md={8}><FormControl fullWidth required><InputLabel>Tipo Giornata</InputLabel><Select value={formState.tipoGiornataId || ''} label="Tipo Giornata" onChange={e => updateField('tipoGiornataId', e.target.value)} disabled={isSaving}>{tipiGiornata.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}</Select></FormControl></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 4
+                        }}><Autocomplete options={tecnici} getOptionLabel={(o) => o.nome} value={tecnici.find(t=>t.id === formState.tecnicoId) || null} onChange={handleTecnicoResponsabileChange} disabled={isSaving || !isNewMode} renderInput={(params) => <TextField {...params} label="Tecnico Resp." required />} /></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 4
+                        }}><DatePicker label="Data" value={dayjs(formState.data)} onChange={d => updateField('data', d?.toDate())} disabled={isSaving} /></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 4
+                        }}><TextField label="Ordine Lavoro" value={formState.ordineLavoro || ''} onChange={e => updateField('ordineLavoro', e.target.value)} fullWidth disabled={isSaving} /></Grid>
+                    <Grid
+                        size={{
+                            xs: 12,
+                            md: 8
+                        }}><FormControl fullWidth required><InputLabel>Tipo Giornata</InputLabel><Select value={formState.tipoGiornataId || ''} label="Tipo Giornata" onChange={e => updateField('tipoGiornataId', e.target.value)} disabled={isSaving}>{tipiGiornata.map(t => <MenuItem key={t.id} value={t.id}>{t.nome}</MenuItem>)}</Select></FormControl></Grid>
                 </Section>
 
                 {isLavorativo && (
@@ -165,8 +181,8 @@ const RapportinoEdit: React.FC = () => {
                 </Box>
             </Box>
             {/* Modali (logica adattata) */}
-             <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)}><DialogContent>{editingTecnico && <OreLavoroSingoloTecnico datiOre={editingTecnico} onUpdate={handleOreUpdate} isReadOnly={isSaving}/>}</DialogContent></Dialog>
-             <SignatureDialog open={isSignatureModalOpen} onClose={() => setIsSignatureModalOpen(false)} onSave={(sig) => updateField('firmaVettoriale', sig)} />
+            <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)}><DialogContent>{editingTecnico && <OreLavoroSingoloTecnico datiOre={editingTecnico} onUpdate={handleOreUpdate} isReadOnly={isSaving}/>}</DialogContent></Dialog>
+            <SignatureDialog open={isSignatureModalOpen} onClose={() => setIsSignatureModalOpen(false)} onSave={(sig) => updateField('firmaVettoriale', sig)} />
         </LocalizationProvider>
     );
 };

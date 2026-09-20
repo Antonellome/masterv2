@@ -1,7 +1,8 @@
+
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { useGlobalStore } from '@/stores/globalStore';
 import { Box, CircularProgress, Typography, Paper, Button } from '@mui/material';
 import { useAuthInitializer } from '@/auth/authHooks';
 import { authService } from '@/auth/authService';
@@ -26,6 +27,7 @@ const RapportinoEdit = lazy(() => import('@/pages/RapportinoEdit'));
 const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
 
+// --- Componente per Accesso Negato ---
 const AccessDenied = () => {
   const handleLogout = async () => {
     try {
@@ -52,30 +54,19 @@ const AccessDenied = () => {
   );
 };
 
-const AppContent = () => {
-  const { authLoading, user, isAdmin } = useAuthStore();
-  const isAppLoading = useRapportiniStore((state) => state.loading);
-  const isAuthenticated = !!user;
+// --- Componente per il Caricamento Globale ---
+const GlobalLoader = ({ message }: { message: string }) => (
+  <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+    <CircularProgress />
+    <Typography sx={{ mt: 2 }}>{message}</Typography>
+  </Box>
+);
 
-  if (authLoading || isAppLoading) {
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography sx={{ mt: 2 }}>Verifica autorizzazioni e caricamento dati...</Typography>
-      </Box>
-    );
-  }
-
-  if (isAuthenticated && !isAdmin) {
-    return <AccessDenied />;
-  }
-
-  return (
-    <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>}>
+// --- Contenuto Principale dell'Applicazione ---
+const AppContent = () => (
+  <AnagraficheProvider>
+    <Suspense fallback={<GlobalLoader message="Caricamento pagina..." />}>
       <Routes>
-        <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} />
-        <Route path="/signup" element={!isAuthenticated ? <SignupPage /> : <Navigate to="/" replace />} />
-
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
             <Route path="/" element={<DashboardPage />} />
@@ -94,22 +85,53 @@ const AppContent = () => {
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Route>
-
-        <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
-  );
+  </AnagraficheProvider>
+);
+
+// --- Wrapper di Autenticazione e Autorizzazione ---
+const AuthWrapper = () => {
+  const { authLoading, user, isAdmin } = useAuthStore();
+  const isAppLoading = useGlobalStore((state) => state.appLoading);
+  const isAuthenticated = !!user;
+
+  // 1. Caricamento iniziale (autenticazione o sync globale)
+  if (authLoading || isAppLoading) {
+    return <GlobalLoader message="Verifica autorizzazioni e caricamento dati..." />;
+  }
+
+  // 2. Utente non autenticato -> Pagine pubbliche
+  if (!isAuthenticated) {
+    return (
+      <Suspense fallback={<GlobalLoader message="Caricamento..." />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
+  // 3. Utente autenticato ma non admin -> Accesso Negato
+  if (!isAdmin) {
+    return <AccessDenied />;
+  }
+
+  // 4. Utente autenticato e admin -> App principale
+  return <AppContent />;
 };
 
+// --- Componente Root dell'App ---
 function App() {
-  useAuthInitializer();
+  useAuthInitializer(); // Hook che inizializza il listener di autenticazione
 
   return (
     <>
       <GlobalAlert />
-      <AnagraficheProvider>
-        <AppContent />
-      </AnagraficheProvider>
+      <AuthWrapper />
     </>
   );
 }

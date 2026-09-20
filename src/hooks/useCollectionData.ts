@@ -1,8 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/db';
-import type { AnagraficaTable } from '@/db/db';
+import { db } from '@/db/database';
+import type { AnagraficaTable } from '@/db/database';
 
 export function useCollectionData<T>(collectionName: AnagraficaTable) {
     const [error, setError] = useState<any>(null);

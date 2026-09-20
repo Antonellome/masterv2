@@ -107,7 +107,7 @@ const GestioneDocumenti: React.FC = () => {
                 await db.documenti.delete(documentoToDeleteId);
                 await handleCloudSync('delete', 'documenti', { id: documentoToDeleteId });
             } catch (err) {
-                const msg = 'Errore nell'eliminazione del documento.';
+                const msg = "Errore nell'eliminazione del documento.";
                 logger.error(msg, err);
                 setError(msg);
             } finally {

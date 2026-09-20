@@ -1,67 +1,73 @@
+
 import { useMemo } from 'react';
-import { useRapportiniStore } from '@/store/useRapportiniStore';
-import { Scadenza } from '@/models/definitions';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/database';
+import { useGlobalStore } from '@/stores/globalStore';
+import { Timestamp } from 'firebase/firestore';
 
-/**
- * Custom hook to process and categorize deadlines from the store.
- * It provides memoized lists of deadlines that are expired, expiring soon,
- * or upcoming.
- *
- * @returns An object containing categorized deadlines and a silence toggle.
- */
+// Definiamo un tipo per i nostri documenti/scadenze, se non già presente
+interface Documento {
+  id: string;
+  scadenza?: Timestamp | Date;
+  [key: string]: any;
+}
+
 export const useScadenze = () => {
-    // Correctly select states from the store
-    const { scadenze, isScadenzaSilenced, toggleScadenzaSilence } = useRapportiniStore(state => ({
-        scadenze: state.scadenze || [], // <--- FIX: Default to an empty array to prevent crash on initial render
-        isScadenzaSilenced: state.isScadenzaSilenced,
-        toggleScadenzaSilence: state.toggleScadenzaSilence
-    }));
+  // 1. Leggiamo i dati delle scadenze (documenti) direttamente da Dexie in tempo reale.
+  const scadenze = useLiveQuery<Documento[]>(() => db.documenti.toArray(), []);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  // 2. Leggiamo lo stato delle scadenze silenziate e l'azione per modificarlo dal globalStore.
+  const { silencedScadenze, toggleScadenzaSilence } = useGlobalStore(state => ({
+    silencedScadenze: state.silencedScadenze,
+    toggleScadenzaSilence: state.toggleScadenzaSilence,
+  }));
 
-    const processedScadenze = useMemo(() => {
-        const result: {
-            scadute: Scadenza[];
-            inScadenza: Scadenza[];
-            prossime: Scadenza[];
-        } = {
-            scadute: [],
-            inScadenza: [],
-            prossime: [],
-        };
+  // Funzione per verificare se una scadenza è stata silenziata.
+  const isScadenzaSilenced = (id: string) => silencedScadenze?.includes(id) ?? false;
 
-        // The scadenze array is now guaranteed to exist.
-        scadenze.forEach(s => {
-            if (!s.data) return; // Skip if data is invalid
+  // 3. Calcoliamo le scadenze rilevanti (scadute o in scadenza)
+  const scadenzeRilevanti = useMemo(() => {
+    if (!scadenze) {
+      return [];
+    }
 
-            const scadenzaDate = s.data.toDate();
-            scadenzaDate.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-            const diffTime = scadenzaDate.getTime() - today.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return scadenze
+      .map(doc => {
+        // Assicuriamoci che la data di scadenza sia un oggetto Date
+        if (doc.scadenza && doc.scadenza instanceof Timestamp) {
+          return { ...doc, scadenza: doc.scadenza.toDate() };
+        }
+        if (typeof doc.scadenza === 'string') {
+            return { ...doc, scadenza: new Date(doc.scadenza) };
+        }
+        return doc;
+      })
+      .filter(doc => {
+        // Filtra solo documenti con una data di scadenza valida
+        return doc.scadenza instanceof Date && !isNaN(doc.scadenza.getTime());
+      })
+      .filter(doc => {
+        const scadenzaDate = doc.scadenza as Date;
+        // Filtra le scadenze che sono già passate o che scadranno entro 30 giorni.
+        return scadenzaDate < thirtyDaysFromNow;
+      });
+  }, [scadenze]);
 
-            if (diffDays < 0) {
-                result.scadute.push(s);
-            } else if (diffDays <= (s.giorniPreavviso || 30)) {
-                result.inScadenza.push(s);
-            } else {
-                result.prossime.push(s);
-            }
-        });
+  // 4. Filtriamo ulteriormente le scadenze per escludere quelle silenziate.
+  const scadenzeAttive = useMemo(() => {
+    return scadenzeRilevanti.filter(scadenza => !isScadenzaSilenced(scadenza.id));
+  }, [scadenzeRilevanti, silencedScadenze]);
 
-        // Sort each category
-        const sortByDate = (a: Scadenza, b: Scadenza) => (a.data?.toDate().getTime() || 0) - (b.data?.toDate().getTime() || 0);
-        result.scadute.sort(sortByDate);
-        result.inScadenza.sort(sortByDate);
-        result.prossime.sort(sortByDate);
-
-        return result;
-    }, [scadenze, today]);
-
-    return {
-        ...processedScadenze,
-        isSilenced: isScadenzaSilenced,
-        toggleSilence: toggleScadenzaSilence,
-    };
+  // Restituiamo i dati e le funzioni necessarie alla UI.
+  return {
+    scadenzeOriginali: scadenze || [],
+    scadenzeRilevanti,
+    scadenzeAttive,
+    isScadenzaSilenced,
+    toggleScadenzaSilence,
+    isLoading: scadenze === undefined, // Lo stato di caricamento è quando i dati sono `undefined`
+  };
 };

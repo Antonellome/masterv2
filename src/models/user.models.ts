@@ -15,7 +15,6 @@ export interface TecnicoMaster {
   codiceFiscale: string;
   email: string;
   telefono: string;
-  qualifica: string;
   livello: string;
   note?: string;
   attivo: boolean;
@@ -43,5 +42,5 @@ export interface AdminMaster {
 export interface TecnicoLite {
   id: string; // Firebase Auth UID
   nome: string;
-  qualifica: string;
+  categoria: string;
 }

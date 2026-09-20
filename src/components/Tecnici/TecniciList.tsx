@@ -1,171 +1,130 @@
 
-import {
-    DataGrid, GridColDef, GridToolbarContainer, GridToolbarColumnsButton, 
-    GridToolbarFilterButton, GridToolbarDensitySelector, GridToolbarExport, 
-    GridColumnVisibilityModel, GridToolbarQuickFilter, GridRenderCellParams,
-    GridValueGetterParams
-} from '@mui/x-data-grid';
-import { itIT } from '@mui/x-data-grid/locales';
-import type { Tecnico } from '@/models/definitions';
-import { Switch, Tooltip, IconButton, Link, Box, Button, Divider, CircularProgress } from '@mui/material';
-import Edit from '@mui/icons-material/Edit';
-import Delete from '@mui/icons-material/Delete';
-import Add from '@mui/icons-material/Add';
-import Print from '@mui/icons-material/Print';
-import { TECNICI_SCADENZE_FIELDS } from '@/utils/scadenze';
-import dayjs from 'dayjs';
-import { useState } from 'react';
-import { Timestamp } from 'firebase/firestore';
-import { exportSingleTecnico } from '@/utils/exportUtils';
-
-function CustomToolbar({ onAdd }: { onAdd: () => void }) {
-    return (
-        <GridToolbarContainer sx={{ px: 2, pt: 1 }}>
-            <GridToolbarColumnsButton />
-            <GridToolbarFilterButton />
-            <GridToolbarDensitySelector />
-            <GridToolbarExport />
-            <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-            <Button color="primary" startIcon={<Add />} onClick={onAdd}>Aggiungi Tecnico</Button>
-            <Box sx={{ flex: 1 }} />
-            <GridToolbarQuickFilter sx={{ minWidth: 240, mr: 1 }} placeholder="Cerca..." variant="outlined" size="small" />
-        </GridToolbarContainer>
-    );
-}
+import { useMemo } from 'react';
+import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
+import { Box, Switch, Tooltip } from '@mui/material';
+import { Edit as EditIcon, Delete as DeleteIcon, Visibility as VisibilityIcon } from '@mui/icons-material';
+import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
+import CustomGridToolbar from '../CustomGridToolbar';
 
 interface TecniciListProps {
     tecnici: Tecnico[];
-    ditteMap: Map<string, string>;
-    categorieMap: Map<string, string>;
-    onViewDetails: (tecnico: Tecnico) => void;
-    onStatusChange: (id: string, newStatus: boolean) => void; 
+    ditte: Ditta[];
+    categorie: Categoria[];
+    onAdd: () => void;
     onEdit: (tecnico: Tecnico) => void;
-    onDelete: (event: React.MouseEvent, id: string) => void;
-    onAdd: () => void; 
-    isSaving?: boolean;
-    updatingId?: string | null;
+    onDelete: (e: React.MouseEvent, id: string) => void;
+    onStatusChange: (id: string, newStatus: boolean) => void;
+    onViewDetails: (id: string) => void;
+    isSaving: boolean;
+    updatingId: string | null;
 }
 
-const TecniciList: React.FC<TecniciListProps> = ({ 
-    tecnici, ditteMap, categorieMap, onViewDetails, onStatusChange, onEdit, onDelete, onAdd, isSaving, updatingId 
-}) => {
+const TecniciList = ({
+    tecnici,
+    ditte,
+    categorie,
+    onAdd,
+    onEdit,
+    onDelete,
+    onStatusChange,
+}: TecniciListProps) => {
 
-    const handleExport = (event: React.MouseEvent, tecnico: Tecnico) => {
-        event.stopPropagation();
-        exportSingleTecnico(tecnico, ditteMap, categorieMap);
-    };
+    const ditteMap = useMemo(() => new Map(ditte.map(d => [d.id, d.nome])), [ditte]);
+    const categorieMap = useMemo(() => new Map(categorie.map(c => [c.id, c.nome])), [categorie]);
 
-    const allColumns: GridColDef[] = [
-        { 
-            field: 'attivo', 
-            headerName: 'Stato', 
-            width: 75, 
-            align: 'center', 
-            headerAlign: 'center', 
+    const columns: GridColDef[] = [
+        {
+            field: 'attivo',
+            headerName: 'Stato',
+            width: 80,
             renderCell: (params) => (
-                <Tooltip title={params.value ? 'Attivo' : 'Non Attivo'}>
-                    <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                        <Switch 
-                            size="small" 
-                            checked={Boolean(params.value)} 
-                            onChange={(e) => onStatusChange(params.row.id, e.target.checked)} 
-                            onClick={(e) => e.stopPropagation()} 
-                            color="primary" 
-                            disabled={isSaving || updatingId === params.row.id}
-                        />
-                         {updatingId === params.row.id && <CircularProgress size={24} sx={{position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px'}}/>}
-                    </Box>
+                <Tooltip title={params.value ? 'Attivo' : 'Inattivo'}>
+                    <Switch
+                        checked={params.value}
+                        onChange={(e) => onStatusChange(params.row.id, e.target.checked)}
+                        color="primary"
+                    />
                 </Tooltip>
-            )
+            ),
         },
-        { field: 'cognome', headerName: 'Cognome', flex: 1, renderCell: (params) => (<Link component="button" variant="body2" onClick={() => onViewDetails(params.row as Tecnico)} sx={{ textAlign: 'left', fontWeight: 'bold' }}>{params.value}</Link>)}, 
-        { field: 'nome', headerName: 'Nome', flex: 1 },
+        { field: 'nome', headerName: 'Nome', flex: 1, minWidth: 150 },
+        { field: 'cognome', headerName: 'Cognome', flex: 1, minWidth: 150 },
+        { field: 'email', headerName: 'Email', flex: 1, minWidth: 200 },
+        { field: 'telefono', headerName: 'Telefono', flex: 1, minWidth: 150 },
+        { field: 'codiceFiscale', headerName: 'Codice Fiscale', flex: 1, minWidth: 180 },
         {
             field: 'dittaId',
             headerName: 'Ditta',
             flex: 1,
-            valueGetter: (params: GridValueGetterParams<Tecnico>) => {
-                if (!params.row) return 'N/A';
-                return ditteMap.get(params.row.dittaId || '') || 'N/A';
-            },
+            minWidth: 180,
+            valueGetter: (value, row) => ditteMap.get(row.dittaId) ?? 'N/A',
         },
         {
             field: 'categoriaId',
             headerName: 'Categoria',
             flex: 1,
-            valueGetter: (params: GridValueGetterParams<Tecnico>) => {
-                if (!params.row) return 'N/A';
-                return categorieMap.get(params.row.categoriaId || '') || 'N/A';
-            },
+            minWidth: 150,
+            valueGetter: (value, row) => categorieMap.get(row.categoriaId) ?? 'N/A',
         },
-        { field: 'email', headerName: 'Email', flex: 1.5 },
-        { field: 'telefono', headerName: 'Telefono', flex: 1 },
-        
-        ...TECNICI_SCADENZE_FIELDS.map(field => ({
-            field: field.key,
-            headerName: field.label,
-            flex: 1,
-            align: 'center' as const,
-            headerAlign: 'center' as const,
-            renderCell: (params: GridRenderCellParams<Timestamp | string | undefined>) => {
-                const { value } = params;
-                if (value == null) return 'N/D';
-                if (value instanceof Timestamp) {
-                    return dayjs(value.toDate()).format('DD/MM/YYYY');
-                }
-                if (typeof value === 'string' && dayjs(value).isValid()){
-                    return dayjs(value).format('DD/MM/YYYY');
-                }
-                if (typeof value === 'object' && 'seconds' in value) {
-                    return dayjs((value as Timestamp).toDate()).format('DD/MM/YYYY');
-                }
-                return 'N/D';
-            },
-        })),
-        { field: 'actions', headerName: 'Azioni', width: 110, align: 'center', headerAlign: 'center', sortable: false, filterable: false, disableColumnMenu: true, 
-            renderCell: (params) => (
-                <Box>
-                    <Tooltip title="Esporta/Stampa"><IconButton size="small" onClick={(e) => handleExport(e, params.row as Tecnico)} color="default"><Print /></IconButton></Tooltip>
-                    <Tooltip title="Modifica"><IconButton size="small" onClick={(e) => { e.stopPropagation(); onEdit(params.row as Tecnico); }} color="primary" disabled={isSaving}><Edit /></IconButton></Tooltip>
-                    <Tooltip title="Elimina"><IconButton size="small" onClick={(e) => onDelete(e, params.id as string)} color="default" disabled={isSaving}><Delete /></IconButton></Tooltip>
-                </Box>
-            ) 
-        }
+        {
+            field: 'actions',
+            type: 'actions',
+            headerName: 'Azioni',
+            width: 150,
+            getActions: (params) => [
+                <GridActionsCellItem
+                    icon={<EditIcon />}
+                    label="Modifica"
+                    onClick={() => onEdit(params.row as Tecnico)}
+                />,
+                <GridActionsCellItem
+                    icon={<DeleteIcon />}
+                    label="Disattiva"
+                    onClick={(e) => onDelete(e, params.id as string)}
+                />,
+                <GridActionsCellItem
+                    icon={<VisibilityIcon />}
+                    label="Dettagli"
+                    disabled 
+                />,
+            ],
+        },
     ];
 
-    const [columnVisibilityModel, setColumnVisibilityModel] = useState<GridColumnVisibilityModel>({ 
-        email: false,
-        telefono: false,
-        ...TECNICI_SCADENZE_FIELDS.reduce((acc, field) => ({
-            ...acc, 
-           [field.key]: ![
-               'scadenzaContratto', 
-               'scadenzaVisita',
-               'scadenzaPatente',
-           ].includes(field.key)
-       }), {}),
-    });
-
     return (
-        <DataGrid
-            // SOLUZIONE DEFINITIVA: autoHeight risolve il problema di layout.
-            autoHeight 
-            rows={tecnici || []}
-            columns={allColumns}
-            sx={{
-                border: 0,
-                '& .MuiDataGrid-cell': { py: 0.5 }, 
-                '& .MuiDataGride-columnHeaderTitle': { fontWeight: 'bold' },
-            }}
-            localeText={itIT.components.MuiDataGrid.defaultProps.localeText}
-            columnVisibilityModel={columnVisibilityModel}
-            onColumnVisibilityModelChange={(newModel) => setColumnVisibilityModel(newModel)}
-            density="compact"
-            initialState={{ pagination: { paginationModel: { page: 0, pageSize: 100 } } }}
-            pageSizeOptions={[25, 50, 100]}
-            slots={{ toolbar: () => <CustomToolbar onAdd={onAdd} /> }}
-            disableRowSelectionOnClick
-        />
+        <Box sx={{ width: '100%', height: 700 }}>
+            <DataGrid
+                rows={tecnici}
+                columns={columns}
+                slots={{
+                    toolbar: CustomGridToolbar,
+                }}
+                slotProps={{
+                    toolbar: {
+                      showQuickFilter: true,
+                      onAdd: onAdd,
+                      addLabel: "Aggiungi Tecnico"
+                    },
+                }}
+                getRowId={(row) => row.id}
+                disableRowSelectionOnClick
+                density='compact'
+                autoHeight={false}
+                localeText={{
+                    toolbarColumns: "Colonne",
+                    toolbarFilters: "Filtri",
+                    toolbarDensity: "Densità",
+                    toolbarExport: "Esporta",
+                    toolbarQuickFilterPlaceholder: "Cerca..."
+                }}
+                initialState={{
+                    pagination: {
+                      paginationModel: { pageSize: 100 },
+                    },
+                  }}
+                  pageSizeOptions={[25, 50, 100]}
+            />
+        </Box>
     );
 };
 

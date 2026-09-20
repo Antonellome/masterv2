@@ -1,4 +1,4 @@
-import { Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, CircularProgress } from '@mui/material';
 
 interface ConfirmationDialogProps {
     open: boolean;
@@ -6,13 +6,14 @@ interface ConfirmationDialogProps {
     onConfirm: () => void;
     title: string;
     message: string;
+    isSaving?: boolean;
 }
 
-const ConfirmationDialog = ({ open, onClose, onConfirm, title, message }: ConfirmationDialogProps) => {
+const ConfirmationDialog = ({ open, onClose, onConfirm, title, message, isSaving = false }: ConfirmationDialogProps) => {
     return (
         <Dialog
             open={open}
-            onClose={onClose}
+            onClose={!isSaving ? onClose : () => {}}
             aria-labelledby="confirm-dialog-title"
             aria-describedby="confirm-dialog-description"
         >
@@ -23,9 +24,9 @@ const ConfirmationDialog = ({ open, onClose, onConfirm, title, message }: Confir
                 </DialogContentText>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose}>Annulla</Button>
-                <Button onClick={onConfirm} variant="contained" color="error">
-                    Conferma
+                <Button onClick={onClose} disabled={isSaving}>Annulla</Button>
+                <Button onClick={onConfirm} variant="contained" color="error" disabled={isSaving} startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : null}>
+                    {isSaving ? 'Conferma...' : 'Conferma'}
                 </Button>
             </DialogActions>
         </Dialog>

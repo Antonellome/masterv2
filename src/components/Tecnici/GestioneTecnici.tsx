@@ -1,35 +1,28 @@
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
-import type { Tecnico, Ditta, Categoria } from '@/models/definitions';
+import type { Tecnico } from '@/models/definitions';
 import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
-import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
-import { v4 as uuidv4 } from 'uuid';
-import { useGlobalStore } from '@/stores/globalStore';
-import { db } from '@/db/db';
+import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog'; // Assumendo esista, altrimenti da creare/spostare
+import { useAnagrafiche } from '@/contexts/AnagraficheContext';
+import { logger } from '@/utils/logger';
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const GestioneTecnici = () => {
-    // --- FIX DEFINITIVO --- 
-    // Sottoscrizione corretta allo store globale. Invece di cercare un oggetto
-    // 'anagrafiche' inesistente, selezioniamo direttamente gli array necessari.
-    const { tecnici, ditte, categorie, areAnagraficheLoading } = useGlobalStore(state => ({
-        tecnici: state.tecnici,
-        ditte: state.ditte,
-        categorie: state.categorie,
-        areAnagraficheLoading: state.areAnagraficheLoading
-    }));
+    // UTILIZZIAMO IL MODELLO IBRIDO CORRETTO
+    const { tecnici, ditte, categorie, isLoading: areAnagraficheLoading, error: anagraficheError, updateTecnico } = useAnagrafiche();
 
-    const [error, setError] = useState<string | null>(null); // Mantenuto per errori specifici del componente
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [tecnicoToDelete, setTecnicoToDelete] = useState<string | null>(null);
-    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+    const [tecnicoToAction, setTecnicoToAction] = useState<string | null>(null);
+    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' });
     const [isSaving, setIsSaving] = useState(false);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-    const showSnackbar = (message: string, severity: 'success' | 'error') => {
+    const showSnackbar = (message: string, severity: 'success' | 'error' | 'info') => {
         setSnackbar({ open: true, message, severity });
     };
 
@@ -43,113 +36,109 @@ const GestioneTecnici = () => {
         setFormOpen(true);
     };
 
-    const handleSave = useCallback(async (formData: Partial<Tecnico>) => {
+    const handleSave = useCallback(async (formData: Partial<Tecnico> & { password?: string }) => {
         setIsSaving(true);
+        setUpdatingId(formData.id ?? 'new');
+        showSnackbar('Salvataggio in corso...', 'info');
+
+        const functions = getFunctions(getApp(), 'europe-west6');
+        const callable = httpsCallable(functions, 'master_gestisciTecnico');
+
         try {
-            const now = new Date();
-            if (formData.id) {
-                await db.tecnici.update(formData.id, {
-                    ...formData,
-                    isDirty: true,
-                    updatedAt: now,
-                });
-                showSnackbar('Tecnico aggiornato con successo. La modifica sarà sincronizzata.', 'success');
+            const isNew = !formData.id;
+            const operation = isNew ? 'create' : 'update';
+
+            const result = await callable({ operation, data: formData });
+            const resultData = result.data as { success: boolean, id: string };
+
+            if (resultData.success) {
+                showSnackbar(isNew ? 'Tecnico creato con successo.' : 'Tecnico aggiornato con successo.', 'success');
+                setFormOpen(false);
+                setSelectedTecnico(null);
             } else {
-                const newId = uuidv4();
-                const newTecnico: Tecnico = {
-                    ...formData,
-                    id: newId,
-                    uid: newId,
-                    attivo: true,
-                    appAccess: false,
-                    createdAt: now,
-                    updatedAt: now,
-                    isDirty: true,
-                } as Tecnico;
-                await db.tecnici.add(newTecnico);
-                showSnackbar('Tecnico creato con successo. Sarà sincronizzato con il server.', 'success');
+                throw new Error('Errore sconosciuto dal server.');
             }
-            setFormOpen(false);
-            setSelectedTecnico(null);
         } catch (e) {
-            console.error("Errore durante il salvataggio:", e);
+            logger.error("Errore durante il salvataggio:", e);
             showSnackbar(e instanceof Error ? e.message : 'Errore sconosciuto durante il salvataggio', 'error');
         } finally {
             setIsSaving(false);
+            setUpdatingId(null);
         }
     }, []);
 
     const handleDelete = (id: string) => {
-        setTecnicoToDelete(id);
+        setTecnicoToAction(id);
         setDeleteDialogOpen(true);
     };
-
-    const confirmDelete = useCallback(async () => {
-        if (!tecnicoToDelete) return;
-        setUpdatingId(tecnicoToDelete);
-        try {
-            await db.tecnici.update(tecnicoToDelete, {
-                attivo: false,
-                isDirty: true,
-                updatedAt: new Date(),
-            });
-            showSnackbar('Tecnico disattivato. La modifica sarà sincronizzata.', 'success');
-        } catch (e) {
-            console.error("Errore durante la disattivazione del tecnico:", e);
-            showSnackbar(e instanceof Error ? e.message : 'Errore sconosciuto', 'error');
-        } finally {
-            setTecnicoToDelete(null);
-            setDeleteDialogOpen(false);
-            setUpdatingId(null);
-        }
-    }, [tecnicoToDelete]);
-
+    
+    // *** ORDINE CORRETTO: DEFINITA PRIMA DI ESSERE USATA ***
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
         setUpdatingId(id);
+        showSnackbar('Aggiornamento stato in corso...', 'info');
+        
+        const functions = getFunctions(getApp(), 'europe-west6');
+        const callable = httpsCallable(functions, 'master_gestisciTecnico');
+
         try {
-            await db.tecnici.update(id, {
-                attivo: newStatus,
-                isDirty: true,
-                updatedAt: new Date(),
+            const result = await callable({ 
+                operation: 'toggle-attivo',
+                data: { id: id, attivo: newStatus }
             });
-            showSnackbar(`Stato del tecnico aggiornato. La modifica sarà sincronizzata.`, 'success');
-        } catch (e) {
-            console.error("Errore durante il cambio di stato:", e);
-            showSnackbar(e instanceof Error ? e.message : 'Errore sconosciuto', 'error');
+            const resultData = result.data as { success: boolean };
+
+            if (resultData.success) {
+                const updatePayload: Partial<Tecnico> = { attivo: newStatus };
+                if (newStatus === false) {
+                    updatePayload.appAccess = false;
+                    updatePayload.accessoApp = false; // Per coerenza
+                }
+                await updateTecnico(id, updatePayload);
+                showSnackbar(`Stato del tecnico aggiornato.`, 'success');
+            } else {
+                throw new Error('Operazione negata dal server.');
+            }
+            
+        } catch (e: any) {
+            logger.error("Errore durante il cambio di stato:", e);
+            showSnackbar(e.message || 'Errore sconosciuto', 'error');
         } finally {
             setUpdatingId(null);
         }
-    }, []);
+    }, [updateTecnico]);
+
+    // Ora questa funzione può accedere a `handleStatusChange` senza errori
+    const confirmDelete = useCallback(async () => {
+        if (!tecnicoToAction) return;
+        await handleStatusChange(tecnicoToAction, false);
+        setDeleteDialogOpen(false);
+        setTecnicoToAction(null);
+    }, [tecnicoToAction, handleStatusChange]);
 
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
-    const ditteMap = useMemo(() => new Map(ditte?.map(d => [d.id, d.nome])), [ditte]);
-    const categorieMap = useMemo(() => new Map(categorie?.map(c => [c.id, c.nome])), [categorie]);
-
-    if (areAnagraficheLoading) {
+    if (areAnagraficheLoading && !tecnici?.length) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
     }
 
-    if (error) {
-        return <Typography color="error">{`Si è verificato un errore: ${error}`}</Typography>;
+    if (anagraficheError) {
+        return <Typography color="error">{`Si è verificato un errore: ${anagraficheError}`}</Typography>;
     }
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <Box sx={{ flexGrow: 1, minHeight: 0 }}>
-                <TecniciList
-                    tecnici={tecnici || []}
-                    ditteMap={ditteMap}
-                    categorieMap={categorieMap}
-                    onAdd={handleAdd}
-                    onEdit={handleEdit}
-                    onDelete={(_e, id) => handleDelete(id)}
-                    onStatusChange={handleStatusChange}
-                    onViewDetails={() => { /* Funzionalità futura */ }}
-                    isSaving={isSaving}
-                    updatingId={updatingId}
-                />
-            </Box>
+        <>
+            <TecniciList
+                tecnici={tecnici || []}
+                ditte={ditte || []}
+                categorie={categorie || []}
+                onAdd={handleAdd}
+                onEdit={handleEdit}
+                onDelete={(_e, id) => handleDelete(id)}
+                onStatusChange={handleStatusChange}
+                onViewDetails={() => {}}
+                isSaving={isSaving}
+                updatingId={updatingId}
+            />
             <TecnicoForm
                 open={formOpen}
                 onClose={() => setFormOpen(false)}
@@ -164,14 +153,15 @@ const GestioneTecnici = () => {
                 onClose={() => setDeleteDialogOpen(false)}
                 onConfirm={confirmDelete}
                 title="Conferma Disattivazione"
-                message="Sei sicuro di voler disattivare questo tecnico? Il record non verrà eliminato ma solo contrassegnato come inattivo."
+                message="Sei sicuro di voler disattivare questo tecnico? Sarà marcato come inattivo e gli sarà revocato l'accesso all'app."
+                isSaving={isSaving || !!updatingId}
             />
             <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+                <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }} variant="filled">
                     {snackbar.message}
                 </Alert>
             </Snackbar>
-        </Box>
+        </>
     );
 };
 

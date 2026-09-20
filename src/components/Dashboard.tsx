@@ -1,1 +1,145 @@
-\nimport { useMemo, useState, useEffect } from \'react\';\nimport { useRapportiniStore } from \'@/store/useRapportiniStore\';\nimport { Card, CardContent, CardHeader, CardTitle } from \'@/components/ui/card\';\nimport { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar, PieChart, Pie, Cell } from \'recharts\';\nimport { logger } from \'@/utils/logger\';\nimport dayjs from \'dayjs\';\nimport { parseToDayjs } from \'@/utils/dateUtils\';\n\nconst COLORS = [\'#0088FE\', \'#00C49F\', \'#FFBB28\', \'#FF8042\', \'#AF19FF\', \'#FF4560\'];\n\n// Wrapper per forzare il rendering solo sul client\nconst ClientOnly = ({ children }) => {\n  const [hasMounted, setHasMounted] = useState(false);\n  useEffect(() => {\n    setHasMounted(true);\n  }, []);\n\n  if (!hasMounted) {\n    // Mostra un loader o null durante il rendering iniziale del server\n    return <div style={{ height: \'350px\'}}><p>Caricamento grafici...</p></div>;\n  }\n\n  return <>{children}</>;\n};\n\nconst MonthPicker = ({ selectedMonth, onChange }) => {\n    const handleMonthChange = (e) => {\n        onChange(e.target.value);\n    };\n    return (\n        <div className=\"flex items-center space-x-2\">\n            <label htmlFor=\"month-select\" className=\"text-sm font-medium\">Mese:</label>\n            <input \n                type=\"month\" \n                id=\"month-select\" \n                value={selectedMonth} \n                onChange={handleMonthChange} \n                className=\"p-2 border rounded-md\"\n            />\n        </div>\n    );\n};\n\nconst Dashboard = () => {\n    const rapportini = useRapportiniStore(state => state.rapportini);\n    const naviMap = useRapportiniStore(state => state.naviMap);\n    const [selectedMonth, setSelectedMonth] = useState(dayjs().format(\'YYYY-MM\'));\n\n    const filteredData = useMemo(() => {\n        if (!selectedMonth || rapportini.length === 0) return [];\n        const startOfMonth = dayjs(selectedMonth).startOf(\'month\');\n        const endOfMonth = dayjs(selectedMonth).endOf(\'month\');\n        return rapportini.filter(r => {\n            const rapportinoDate = parseToDayjs(r.data);\n            if (!rapportinoDate || !rapportinoDate.isValid()) return false;\n            return !rapportinoDate.isBefore(startOfMonth) && !rapportinoDate.isAfter(endOfMonth);\n        });\n    }, [rapportini, selectedMonth]);\n\n    const totalOreLavorate = useMemo(() => \n        filteredData.reduce((acc, curr) => acc + (curr.oreLavoro || 0), 0),\n    [filteredData]);\n\n    const totalRapportiniCreati = filteredData.length;\n\n    const orePerNave = useMemo(() => {\n        const data = filteredData.reduce((acc, curr) => {\n            const naveNome = naviMap.get(curr.naveId!)?.nome || \'Non specificata\';\n            if (!acc[naveNome]) acc[naveNome] = 0;\n            acc[naveNome] += curr.oreLavoro || 0;\n            return acc;\n        }, {} as { [key: string]: number });\n        return Object.entries(data).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);\n    }, [filteredData, naviMap]);\n\n    return (\n        <div className=\"flex-1 space-y-4 p-8 pt-6\">\n            <div className=\"flex items-center justify-between space-y-2\">\n                <h1 className=\"text-3xl font-bold tracking-tight\">Dashboard</h1>\n                <MonthPicker selectedMonth={selectedMonth} onChange={setSelectedMonth} />\n            </div>\n            \n            <div className=\"grid gap-4 md:grid-cols-2 lg:grid-cols-4\">\n                <Card>\n                    <CardHeader className=\"flex flex-row items-center justify-between space-y-0 pb-2\">\n                        <CardTitle className=\"text-sm font-medium\">Ore Lavorate nel periodo</CardTitle>\n                        <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeLinecap=\"round\" strokeLinejoin=\"round\" strokeWidth=\"2\" className=\"h-4 w-4 text-muted-foreground\"><path d=\"M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\" /></svg>\n                    </CardHeader>\n                    <CardContent>\n                        <div className=\"text-2xl font-bold\">{totalOreLavorate.toFixed(1)}</div>\n                        <p className=\"text-xs text-muted-foreground\">Totale ore dichiarate nel mese selezionato</p>\n                    </CardContent>\n                </Card>\n                <Card>\n                    <CardHeader className=\"flex flex-row items-center justify-between space-y-0 pb-2\">\n                        <CardTitle className=\"text-sm font-medium\">Rapportini Creati nel periodo</CardTitle>\n                        <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeLinecap=\"round\" strokeLinejoin=\"round\" strokeWidth=\"2\" className=\"h-4 w-4 text-muted-foreground\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\" /><circle cx=\"9\" cy=\"7\" r=\"4\" /><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\" /><path d=\"M16 3.13a4 4 0 0 1 0 7.75\" /></svg>\n                    </CardHeader>\n                    <CardContent>\n                        <div className=\"text-2xl font-bold\">{totalRapportiniCreati}</div>\n                        <p className=\"text-xs text-muted-foreground\">Numero di rapportini nel mese selezionato</p>\n                    </CardContent>\n                </Card>\n            </div>\n\n            <div className=\"grid gap-4 md:grid-cols-2 lg:grid-cols-7\">\n              <ClientOnly>\n                <Card className=\"col-span-4\">\n                    <CardHeader>\n                        <CardTitle>Ore Lavorate per Nave nel mese</CardTitle>\n                    </CardHeader>\n                    <CardContent className=\"pl-2\">\n                        <ResponsiveContainer width=\"100%\" height={350}>\n                            <BarChart data={orePerNave.slice(0, 15)} layout=\"vertical\">\n                                <XAxis type=\"number\" stroke=\"#888888\" fontSize={12} />\n                                <YAxis type=\"category\" dataKey=\"name\" width={150} stroke=\"#888888\" fontSize={12} tickLine={false} axisLine={false}/>\n                                <Tooltip cursor={{ fill: \'transparent\' }}/>\n                                <Bar dataKey=\"value\" fill=\"#adfa1d\" radius={[0, 4, 4, 0]} />\n                            </BarChart>\n                        </ResponsiveContainer>\n                    </CardContent>\n                </Card>\n                 <Card className=\"col-span-3\">\n                    <CardHeader>\n                        <CardTitle>Ore lavorate per Nave (Top 6)</CardTitle>\n                    </CardHeader>\n                    <CardContent>\n                        <ResponsiveContainer width=\"100%\" height={350}>\n                            <PieChart>\n                                <Pie data={orePerNave.slice(0, 6)} dataKey=\"value\" nameKey=\"name\" cx=\"50%\" cy=\"50%\" outerRadius={100} label>\n                                    {orePerNave.map((entry, index) => <Cell key={`cell-\${index}`} fill={COLORS[index % COLORS.length]} />)}\n                                </Pie>\n                                <Tooltip />\n                            </PieChart>\n                        </ResponsiveContainer>\n                    </CardContent>\n                </Card>\n              </ClientOnly>\n            </div>\n        </div>\n    );\n};\n\nexport default Dashboard;\n
+
+import { useMemo, useState, useEffect } from 'react';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar, PieChart, Pie, Cell } from 'recharts';
+import { logger } from '@/utils/logger';
+import dayjs from 'dayjs';
+import { parseToDayjs } from '@/utils/dateUtils';
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF4560'];
+
+// Wrapper per forzare il rendering solo sul client
+const ClientOnly = ({ children }) => {
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  if (!hasMounted) {
+    // Mostra un loader o null durante il rendering iniziale del server
+    return <div style={{ height: '350px'}}><p>Caricamento grafici...</p></div>;
+  }
+
+  return <>{children}</>;
+};
+
+const MonthPicker = ({ selectedMonth, onChange }) => {
+    const handleMonthChange = (e) => {
+        onChange(e.target.value);
+    };
+    return (
+        <div className="flex items-center space-x-2">
+            <label htmlFor="month-select" className="text-sm font-medium">Mese:</label>
+            <input 
+                type="month" 
+                id="month-select" 
+                value={selectedMonth} 
+                onChange={handleMonthChange} 
+                className="p-2 border rounded-md"
+            />
+        </div>
+    );
+};
+
+const Dashboard = () => {
+    const rapportini = useRapportiniStore(state => state.rapportini);
+    const naviMap = useRapportiniStore(state => state.naviMap);
+    const [selectedMonth, setSelectedMonth] = useState(dayjs().format('YYYY-MM'));
+
+    const filteredData = useMemo(() => {
+        if (!selectedMonth || rapportini.length === 0) return [];
+        const startOfMonth = dayjs(selectedMonth).startOf('month');
+        const endOfMonth = dayjs(selectedMonth).endOf('month');
+        return rapportini.filter(r => {
+            const rapportinoDate = parseToDayjs(r.data);
+            if (!rapportinoDate || !rapportinoDate.isValid()) return false;
+            return !rapportinoDate.isBefore(startOfMonth) && !rapportinoDate.isAfter(endOfMonth);
+        });
+    }, [rapportini, selectedMonth]);
+
+    const totalOreLavorate = useMemo(() => 
+        filteredData.reduce((acc, curr) => acc + (curr.oreLavoro || 0), 0),
+    [filteredData]);
+
+    const totalRapportiniCreati = filteredData.length;
+
+    const orePerNave = useMemo(() => {
+        const data = filteredData.reduce((acc, curr) => {
+            const naveNome = naviMap.get(curr.naveId!)?.nome || 'Non specificata';
+            if (!acc[naveNome]) acc[naveNome] = 0;
+            acc[naveNome] += curr.oreLavoro || 0;
+            return acc;
+        }, {} as { [key: string]: number });
+        return Object.entries(data).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+    }, [filteredData, naviMap]);
+
+    return (
+        <div className="flex-1 space-y-4 p-8 pt-6">
+            <div className="flex items-center justify-between space-y-2">
+                <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+                <MonthPicker selectedMonth={selectedMonth} onChange={setSelectedMonth} />
+            </div>
+            
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Ore Lavorate nel periodo</CardTitle>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalOreLavorate.toFixed(1)}</div>
+                        <p className="text-xs text-muted-foreground">Totale ore dichiarate nel mese selezionato</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Rapportini Creati nel periodo</CardTitle>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalRapportiniCreati}</div>
+                        <p className="text-xs text-muted-foreground">Numero di rapportini nel mese selezionato</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+              <ClientOnly>
+                <Card className="col-span-4">
+                    <CardHeader>
+                        <CardTitle>Ore Lavorate per Nave nel mese</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pl-2">
+                        <ResponsiveContainer width="100%" height={350}>
+                            <BarChart data={orePerNave.slice(0, 15)} layout="vertical">
+                                <XAxis type="number" stroke="#888888" fontSize={12} />
+                                <YAxis type="category" dataKey="name" width={150} stroke="#888888" fontSize={12} tickLine={false} axisLine={false}/>
+                                <Tooltip cursor={{ fill: 'transparent' }}/>
+                                <Bar dataKey="value" fill="#adfa1d" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                 <Card className="col-span-3">
+                    <CardHeader>
+                        <CardTitle>Ore lavorate per Nave (Top 6)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={350}>
+                            <PieChart>
+                                <Pie data={orePerNave.slice(0, 6)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                                    {orePerNave.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+              </ClientOnly>
+            </div>
+        </div>
+    );
+};
+
+export default Dashboard;

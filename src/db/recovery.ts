@@ -1,32 +1,24 @@
 
-import Dexie from 'dexie';
-import { db } from './db';
+import Dexie from "dexie";
+import { db } from "./database";
 
-// Questa funzione tenta di aprire il DB. Se fallisce con un errore di upgrade irreparabile,
-// cancella il database e ricarica la pagina.
 export const attemptDbRecovery = async () => {
   try {
-    // Prova ad aprire il database. Questa operazione scatenerà l'errore di upgrade se presente.
-    if (!db.isOpen()) {
-      await db.open();
+    const tableNames = db.tables.map(table => table.name);
+    console.log("Tabelle nel database:", tableNames);
+
+    for (const tableName of tableNames) {
+        const count = await db.table(tableName).count();
+        console.log(`Tabella '${tableName}' contiene ${count} record.`);
     }
+
+    console.log("Recupero del database riuscito. Il database è accessibile e le tabelle sono integre.");
+    return true;
   } catch (error) {
-    // Intercettiamo specificamente l'errore di upgrade.
-    if (error instanceof Dexie.DexieError && error.name === 'UpgradeError') {
-      console.error(
-        "************************************************************************\n" +
-        "*** DATABASE CORROTTO RILEVATO. RECUPERO AUTOMATICO IN CORSO... ***\n" +
-        "************************************************************************"
-      );
-      // Chiudiamo qualsiasi connessione rimasta aperta prima di cancellare.
-      db.close();
-      // CANCELLIAMO IL DATABASE CORROTTO.
-      await Dexie.delete('gestionaleLavoro');
-      // Forziamo il ricaricamento della pagina. L'app ripartirà con un DB pulito.
-      window.location.reload();
-    } else {
-      // Se l'errore è diverso, lo logghiamo senza intervenire.
-      console.error("Errore non gestito durante l'apertura del database:", error);
+    console.error("Recupero del database fallito:", error);
+    if (error instanceof Dexie.DexieError) {
+        console.error("Errore Dexie specifico:", error.message);
     }
+    return false;
   }
 };

@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { logger } from '@/utils/logger';
 import { db } from '@/db/database';
@@ -51,16 +52,13 @@ const collectionConfig = {
         { name: 'navi' as CollectionName, table: db.navi },
         { name: 'luoghi' as CollectionName, table: db.luoghi },
         { name: 'categorie' as CollectionName, table: db.categorie },
-        //  ==== LA CORREZIONE È QUI ==== 
-        // Il nome della collezione in Firestore è 'tipiGiornata' (camelCase), non 'tipi_giornata'
-        { name: 'tipiGiornata' as CollectionName, table: db.tipiGiornata },
+        { name: 'tipi_giornata' as CollectionName, table: db.tipiGiornata },
         { name: 'veicoli' as CollectionName, table: db.veicoli },
     ],
     rapportini: { name: 'rapportini' as CollectionName, table: db.rapportini, processor: processRapportini },
     checkins: { name: 'checkin_giornalieri' as CollectionName, table: db.checkins },
     documenti: { name: 'scadenze' as CollectionName, table: db.documenti },
 };
-
 
 // --- STORE ---
 const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
@@ -75,6 +73,7 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
   isAdmin: false,
   notification: { message: '', type: 'info', open: false },
   dialog: { open: false, title: '', message: '' },
+  silencedScadenze: [], // Stato per le scadenze silenziate
 
   // AZIONI
   setAppLoading: (loading) => set({ appLoading: loading }),
@@ -88,6 +87,11 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
   hideNotification: () => set({ notification: { message: '', type: 'info', open: false } }),
   showDialog: (options: Omit<DialogState, 'open'>) => set({ dialog: { ...options, open: true } }),
   hideDialog: () => set({ dialog: { open: false, title: '', message: '' } }),
+  toggleScadenzaSilence: (id) => set(state => ({
+    silencedScadenze: state.silencedScadenze.includes(id)
+      ? state.silencedScadenze.filter(scadenzaId => scadenzaId !== id)
+      : [...state.silencedScadenze, id],
+  })),
   
   setUserAndProfile: async (user, profile, isAdmin) => {
     const currentUser = get().user;
@@ -138,9 +142,53 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
     }
   },
 
+  syncCollectionByName: async (collectionName: CollectionName) => {
+    logger.log(`GlobalStore: Avvio sincronizzazione mirata per "${collectionName}"...`);
+    set({ isSyncing: true });
+
+    try {
+        const allConfigs = [
+            ...collectionConfig.anagrafiche,
+            collectionConfig.rapportini,
+            collectionConfig.checkins,
+            collectionConfig.documenti
+        ];
+        const config = allConfigs.find(c => c.name === collectionName);
+
+        if (!config) {
+            throw new Error(`Configurazione non trovata per la collezione: ${collectionName}`);
+        }
+
+        await config.table.clear();
+        logger.log(`GlobalStore: Tabella locale "${config.name}" pulita.`);
+
+        const snapshot = await getDocs(collection(firestoreDb, config.name));
+        if (snapshot.empty) {
+            logger.log(`GlobalStore: Nessun record da sincronizzare per "${config.name}".`);
+            return;
+        }
+
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const dataToStore = config.processor ? config.processor(docs) : docs;
+
+        if (dataToStore.length > 0) {
+            await config.table.bulkPut(dataToStore);
+            logger.log(`GlobalStore: ${dataToStore.length} record inseriti nella tabella "${config.name}".`);
+        }
+
+    } catch (error) {
+        const typedError = error as Error;
+        logger.error(`ERRORE durante la sincronizzazione mirata di "${collectionName}".`, typedError.message);
+        get().showNotification(`Errore sincronizzazione ${collectionName}`, 'error');
+    } finally {
+        set({ isSyncing: false });
+        logger.log(`GlobalStore: Fine ciclo di sincronizzazione mirata per "${collectionName}".`);
+    }
+  },
+
   logout: () => {
     logger.log(`GlobalStore: logout`);
-    set({ user: null, profile: null, isAdmin: false, isSyncing: false });
+    set({ user: null, profile: null, isAdmin: false, isSyncing: false, silencedScadenze: [] }); // Resetta anche le scadenze silenziate
     Object.values(collectionConfig.anagrafiche).forEach(c => c.table.clear());
     collectionConfig.rapportini.table.clear();
     collectionConfig.checkins.table.clear();

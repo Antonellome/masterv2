@@ -1,9 +1,8 @@
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/config/firebase';
-import { Tecnico, Cliente, Nave, Luogo, TipoGiornata, Anagrafica } from '@/models/definitions';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import React, { createContext, useContext, useMemo, useCallback } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/database';
+import { Tecnico, Cliente, Nave, Luogo, TipoGiornata, Ditta, Categoria, Veicolo } from '@/models/definitions';
 
 // Definiamo la struttura del nostro contesto
 interface AnagraficheContextType {
@@ -12,110 +11,81 @@ interface AnagraficheContextType {
     navi: Nave[];
     luoghi: Luogo[];
     tipiGiornata: TipoGiornata[];
-    ditte: Anagrafica[];
-    categorie: Anagrafica[];
-    veicoli: Anagrafica[];
+    ditte: Ditta[];
+    categorie: Categoria[];
+    veicoli: Veicolo[];
     tecniciMap: Map<string, Tecnico>;
     clientiMap: Map<string, Cliente>;
     naviMap: Map<string, Nave>;
     luoghiMap: Map<string, Luogo>;
     tipiGiornataMap: Map<string, TipoGiornata>;
-    ditteMap: Map<string, Anagrafica>;
-    categorieMap: Map<string, Anagrafica>;
-    veicoliMap: Map<string, Anagrafica>;
-    loading: boolean;
+    ditteMap: Map<string, Ditta>;
+    categorieMap: Map<string, Categoria>;
+    veicoliMap: Map<string, Veicolo>;
+    isLoading: boolean;
+    error?: any;
+    updateTecnico: (id: string, changes: Partial<Tecnico>) => Promise<void>; // NUOVA FUNZIONE
 }
 
 // Creiamo il contesto con un valore di default
 const AnagraficheContext = createContext<AnagraficheContextType | undefined>(undefined);
 
-// Helper function per caricare una collection
-async function fetchCollection<T>(collectionName: string): Promise<T[]> {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
-}
-
-// Il Provider che si occuperà del caricamento
+// Il Provider che si occuperà del caricamento da Dexie, rispettando il Modello Ibrido.
 export const AnagraficheProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [loading, setLoading] = useState(true);
-    const [anagrafiche, setAnagrafiche] = useState<{
-        tecnici: Tecnico[];
-        clienti: Cliente[];
-        navi: Nave[];
-        luoghi: Luogo[];
-        tipiGiornata: TipoGiornata[];
-        ditte: Anagrafica[];
-        categorie: Anagrafica[];
-        veicoli: Anagrafica[];
-    }>({
-        tecnici: [],
-        clienti: [],
-        navi: [],
-        luoghi: [],
-        tipiGiornata: [],
-        ditte: [],
-        categorie: [],
-        veicoli: [],
-    });
+    // Leggiamo i dati in tempo reale da Dexie utilizzando useLiveQuery.
+    const tecnici = useLiveQuery(() => db.tecnici.toArray(), []);
+    const clienti = useLiveQuery(() => db.clienti.toArray(), []);
+    const navi = useLiveQuery(() => db.navi.toArray(), []);
+    const luoghi = useLiveQuery(() => db.luoghi.toArray(), []);
+    const tipiGiornata = useLiveQuery(() => db.tipiGiornata.toArray(), []);
+    const ditte = useLiveQuery(() => db.ditte.toArray(), []);
+    const categorie = useLiveQuery(() => db.categorie.toArray(), []);
+    const veicoli = useLiveQuery(() => db.veicoli.toArray(), []);
 
-    useEffect(() => {
-        const loadAllAnagrafiche = async () => {
-            try {
-                // Carica tutte le anagrafiche in parallelo
-                const [tecnici, clienti, navi, luoghi, tipiGiornata, ditte, categorie, veicoli] = await Promise.all([
-                    fetchCollection<Tecnico>('tecnici'),
-                    fetchCollection<Cliente>('clienti'),
-                    fetchCollection<Nave>('navi'),
-                    fetchCollection<Luogo>('luoghi'),
-                    fetchCollection<TipoGiornata>('tipiGiornata'),
-                    fetchCollection<Anagrafica>('ditte'),
-                    fetchCollection<Anagrafica>('categorie'),
-                    fetchCollection<Anagrafica>('veicoli'),
-                ]);
-                setAnagrafiche({ tecnici, clienti, navi, luoghi, tipiGiornata, ditte, categorie, veicoli });
-            } catch (error) {
-                console.error("Errore critico durante il caricamento delle anagrafiche:", error);
-                // Qui potremmo mostrare un messaggio di errore fatale
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadAllAnagrafiche();
+    // NUOVA FUNZIONE PER AGGIORNARE UN TECNICO
+    const updateTecnico = useCallback(async (id: string, changes: Partial<Tecnico>) => {
+        try {
+            await db.tecnici.update(id, changes);
+        } catch (error) {
+            console.error("Errore durante l'aggiornamento del tecnico in Dexie:", error);
+            throw error;
+        }
     }, []);
 
-    // Creiamo le mappe una sola volta e le memoizziamo
-    const value = useMemo(() => ({
-        ...anagrafiche,
-        tecniciMap: new Map(anagrafiche.tecnici.map(item => [item.id, item])),
-        clientiMap: new Map(anagrafiche.clienti.map(item => [item.id, item])),
-        naviMap: new Map(anagrafiche.navi.map(item => [item.id, item])),
-        luoghiMap: new Map(anagrafiche.luoghi.map(item => [item.id, item])),
-        tipiGiornataMap: new Map(anagrafiche.tipiGiornata.map(item => [item.id, item])),
-        ditteMap: new Map(anagrafiche.ditte.map(item => [item.id, item])),
-        categorieMap: new Map(anagrafiche.categorie.map(item => [item.id, item])),
-        veicoliMap: new Map(anagrafiche.veicoli.map(item => [item.id, item])),
-        loading,
-    }), [anagrafiche, loading]);
+    const value = useMemo<AnagraficheContextType>(() => {
+        const isLoading = [
+            tecnici, clienti, navi, luoghi, tipiGiornata, ditte, categorie, veicoli
+        ].some(data => data === undefined);
 
-    // Mentre carica, mostriamo un loader a schermo intero
-    if (loading) {
-        return (
-            <Box
-                sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    height: '100vh',
-                    width: '100vw',
-                }}
-            >
-                <CircularProgress />
-                <Typography sx={{ mt: 2 }}>Caricamento dati essenziali...</Typography>
-            </Box>
-        );
-    }
+        if (isLoading) {
+            return {
+                tecnici: [], clienti: [], navi: [], luoghi: [], tipiGiornata: [], ditte: [], categorie: [], veicoli: [],
+                tecniciMap: new Map(), clientiMap: new Map(), naviMap: new Map(), luoghiMap: new Map(),
+                tipiGiornataMap: new Map(), ditteMap: new Map(), categorieMap: new Map(), veicoliMap: new Map(),
+                isLoading: true,
+                updateTecnico, // Includiamo anche nel loading state per evitare errori
+            };
+        }
+
+        const data = {
+            tecnici: tecnici!, clienti: clienti!, navi: navi!, luoghi: luoghi!,
+            tipiGiornata: tipiGiornata!, ditte: ditte!, categorie: categorie!, veicoli: veicoli!,
+        };
+
+        return {
+            ...data,
+            tecniciMap: new Map(data.tecnici.map(item => [item.id, item])),
+            clientiMap: new Map(data.clienti.map(item => [item.id, item])),
+            naviMap: new Map(data.navi.map(item => [item.id, item])),
+            luoghiMap: new Map(data.luoghi.map(item => [item.id, item])),
+            tipiGiornataMap: new Map(data.tipiGiornata.map(item => [item.id, item])),
+            ditteMap: new Map(data.ditte.map(item => [item.id, item])),
+            categorieMap: new Map(data.categorie.map(item => [item.id, item])),
+            veicoliMap: new Map(data.veicoli.map(item => [item.id, item])),
+            isLoading: false,
+            updateTecnico, // Aggiungiamo la funzione al context
+        };
+    }, [tecnici, clienti, navi, luoghi, tipiGiornata, ditte, categorie, veicoli, updateTecnico]);
 
     return (
         <AnagraficheContext.Provider value={value}>
@@ -124,7 +94,7 @@ export const AnagraficheProvider: React.FC<{ children: React.ReactNode }> = ({ c
     );
 };
 
-// Hook custom per usare facilmente il contesto
+// Hook custom per usare facilmente il contesto.
 export const useAnagrafiche = () => {
     const context = useContext(AnagraficheContext);
     if (context === undefined) {
