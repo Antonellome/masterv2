@@ -9,14 +9,15 @@ import isBetween from 'dayjs/plugin/isBetween';
 import 'dayjs/locale/it';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { useRapportiniStore } from '@/store/useRapportiniStore';
-import { Tecnico, TipoGiornata, Rapportino } from '@/models/definitions';
-import PdfPreviewDialog from './PdfPreviewDialog';
-import { parseToDayjs } from '@/utils/dateUtils';
+import { db } from '@/db/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Tecnico, Nave, TipoGiornata, Rapportino } from '@/models/definitions';
+import PdfPreviewDialog from './PdfPreviewDialog'; // Importa il dialog
 
 dayjs.extend(isBetween);
 dayjs.locale('it');
 
+// --- INTERFACCE --- 
 interface DisplayRow {
     id: string;
     data: string;
@@ -26,7 +27,6 @@ interface DisplayRow {
     notte: number;
     [key: string]: any;
 }
-
 interface RiepilogoMese {
     oreTotali: number;
     oreOrdinarie: number;
@@ -34,12 +34,35 @@ interface RiepilogoMese {
     notte: number;
     altreCausali: { [key: string]: { nome: string, totale: number } };
 }
-
 interface ReportData {
     rows: DisplayRow[];
     summary: RiepilogoMese;
     cols: GridColDef[];
 }
+
+// --- HELPERS --- 
+const getCleanId = (id: any): string | undefined => {
+    if (typeof id === 'string' && id) return id;
+    if (id && typeof id === 'object' && id.id && typeof id.id === 'string') return id.id;
+    return undefined;
+};
+
+const normalizeDate = (date: any): Date => {
+    if (!date) return new Date('invalid');
+    if (date && typeof date.seconds === 'number') { return new Date(date.seconds * 1000); }
+    if (typeof date.toDate === 'function') { return date.toDate(); }
+    const parsedDate = dayjs(date);
+    return parsedDate.isValid() ? parsedDate.toDate() : new Date('invalid');
+};
+
+const parseFloatWithComma = (value: any): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+        const parsed = parseFloat(value.replace(',', '.'));
+        return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+};
 
 const abbreviate = (name: string): string => {
     if (!name) return '';
@@ -52,51 +75,88 @@ const abbreviate = (name: string): string => {
     return name.substring(0, 4);
 };
 
+// --- LOGICA DI CALCOLO --- 
 const calculateReportData = (
     selectedTecnico: Tecnico,
     selectedMonth: Dayjs,
-    rapportini: Rapportino[],
-    tipiGiornataMap: Map<string, TipoGiornata>,
-    naviMap: Map<string, any>
+    allRapportini: Rapportino[],
+    allNavi: Nave[],
+    allTipiGiornata: TipoGiornata[]
 ): ReportData => {
+    const naviMap = new Map(allNavi.map(n => [n.id, n]));
+    const tipiGiornataMap = new Map(allTipiGiornata.map(t => [t.id, t]));
     const startOfMonth = selectedMonth.startOf('month');
     const endOfMonth = selectedMonth.endOf('month');
+    const selectedTecnicoId = getCleanId(selectedTecnico.id)!;
 
-    const rapportiniDelMese = rapportini.filter(r => {
-        const dataRapportino = parseToDayjs(r.data);
-        return dataRapportino && dataRapportino.isBetween(startOfMonth, endOfMonth, 'day', '[]');
+    const rapportiniDelMese = allRapportini.filter(r => {
+        const dataDaNormalizzare = (r as any).dataInizio || r.data;
+        const dataNormalizzata = normalizeDate(dataDaNormalizzare);
+        const dataRapportino = dayjs(dataNormalizzata);
+        return dataRapportino.isValid() && dataRapportino.isBetween(startOfMonth, endOfMonth, 'day', '[]');
     });
 
-    const rapportiniTecnico = rapportiniDelMese.filter(r => 
-        r.presenze.includes(selectedTecnico.id)
-    );
+    const rapportiniTecnico = rapportiniDelMese.filter(r => {
+        const allLegacyTecnici = new Set<string>();
+        const addId = (id: any) => { const cleanId = getCleanId(id); if (cleanId) allLegacyTecnici.add(cleanId); };
+        addId(r.tecnicoId); (r.altriTecniciIds || []).forEach(addId); (r.presenze || []).forEach(addId);
+        const dettaglioTecniciIds = new Set((r.dettaglioOreTecnici || []).map(d => getCleanId(d.tecnicoId)));
+        return allLegacyTecnici.has(selectedTecnicoId) || dettaglioTecniciIds.has(selectedTecnicoId);
+    });
 
     const aggregationMap = new Map<string, any>();
     const dynamicHourTypesInMonth = new Map<string, TipoGiornata>();
 
     for (const r of rapportiniTecnico) {
-        const dettaglioTecnico = r.dettaglioOreTecnici.find(d => d.tecnicoId === selectedTecnico.id);
-        const oreDelTecnico = dettaglioTecnico?.ore || 0;
+        let oreDelTecnico = 0;
+        const isNewHybridModel = r.dettaglioOreTecnici && Array.isArray(r.dettaglioOreTecnici) && r.dettaglioOreTecnici.length > 0;
+        const principaleId = getCleanId(r.tecnicoId);
+
+        if (isNewHybridModel) {
+            const dettaglioTecnico = r.dettaglioOreTecnici!.find(d => getCleanId(d.tecnicoId) === selectedTecnicoId);
+            if (dettaglioTecnico) {
+                oreDelTecnico = parseFloatWithComma(dettaglioTecnico.ore);
+            } else if (principaleId === selectedTecnicoId) {
+                 const orePrincipale = parseFloatWithComma(r.oreLavoro);
+                 const oreDistribuite = r.dettaglioOreTecnici!.reduce((sum, d) => sum + parseFloatWithComma(d.ore), 0);
+                 if (orePrincipale > oreDistribuite) {
+                     const techsInDettaglio = new Set(r.dettaglioOreTecnici!.map(d => getCleanId(d.tecnicoId)));
+                     if (!techsInDettaglio.has(principaleId)) {
+                         oreDelTecnico = orePrincipale;
+                     }
+                 }
+            }
+        } else { 
+            const allLegacyTecnici = new Set<string>();
+            const addId = (id: any) => { const cleanId = getCleanId(id); if (cleanId) allLegacyTecnici.add(cleanId); };
+            addId(r.tecnicoId); (r.altriTecniciIds || []).forEach(addId); (r.presenze || []).forEach(addId);
+
+            if (allLegacyTecnici.has(selectedTecnicoId)) {
+                const monteOre = parseFloatWithComma(r.oreLavoro);
+                oreDelTecnico = monteOre / (allLegacyTecnici.size || 1);
+            }
+        }
 
         if (oreDelTecnico <= 0) continue;
 
-        const dataRapportino = parseToDayjs(r.data)!;
-        const dayKey = dataRapportino.format('YYYY-MM-DD');
+        const dataRapportino = normalizeDate((r as any).dataInizio || r.data)!;
+        const dayKey = dayjs(dataRapportino).format('YYYY-MM-DD');
 
         if (!aggregationMap.has(dayKey)) {
-            aggregationMap.set(dayKey, { id: dayKey, data: dataRapportino.toDate(), workableHours: 0, explicitStraordinario: 0, nightHours: 0 });
+            aggregationMap.set(dayKey, { id: dayKey, data: dataRapportino, workableHours: 0, explicitStraordinario: 0, nightHours: 0 });
         }
         const aggregatedRow = aggregationMap.get(dayKey)!;
 
-        const nave = naviMap.get(r.naveId || '');
+        const nave = r.naveId ? naviMap.get(getCleanId(r.naveId)) : undefined;
         const isCartourNightRule = !!(nave?.nome.toLowerCase().includes('cartour'));
-        const tipoGiornata = tipiGiornataMap.get(r.tipoGiornataId);
+        const tipoGiornataId = getCleanId(r.tipoGiornataId);
+        const tipoGiornata = tipoGiornataId ? tipiGiornataMap.get(tipoGiornataId) : undefined;
 
         if (isCartourNightRule) {
             aggregatedRow.nightHours += oreDelTecnico;
-        } else if (tipoGiornata?.categoria === 'straordinario') {
+        } else if (tipoGiornata?.nome.toLowerCase().includes('straordinar')) {
             aggregatedRow.explicitStraordinario += oreDelTecnico;
-        } else if (!tipoGiornata || tipoGiornata?.categoria === 'ordinaria') {
+        } else if (!tipoGiornata || tipoGiornata?.nome.toLowerCase().includes('ordinar')) {
             aggregatedRow.workableHours += oreDelTecnico;
         } else if (tipoGiornata) {
             dynamicHourTypesInMonth.set(tipoGiornata.id, tipoGiornata);
@@ -150,37 +210,38 @@ const calculateReportData = (
     return { rows: displayRows, summary, cols: dynamicCols };
 };
 
+// --- COMPONENTE REACT --- 
 const ReportMensili: React.FC = () => {
-    const { rapportini, tecnici, naviMap, tipiGiornataMap, areAnagraficheLoading } = useRapportiniStore(state => ({
-        rapportini: state.rapportini,
-        tecnici: state.tecnici,
-        naviMap: state.naviMap,
-        tipiGiornataMap: state.tipiGiornataMap,
-        areAnagraficheLoading: state.loading,
-    }));
+    const allRapportini = useLiveQuery(() => db.rapportini.toArray());
+    const allTecnici = useLiveQuery(() => db.tecnici.toArray());
+    const allNavi = useLiveQuery(() => db.navi.toArray());
+    const allTipiGiornata = useLiveQuery(() => db.tipiGiornata.toArray());
+    const masterDataLoading = !allRapportini || !allTecnici || !allNavi || !allTipiGiornata;
 
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
-    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs());
+    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs().year(2026).month(6));
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportData, setReportData] = useState<ReportData | null>(null);
     
+    // State per il PDF e il Dialog
     const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-    const sortedTecnici = useMemo(() => {
-        return [...tecnici].sort((a, b) => (a.cognome + ' ' + a.nome).localeCompare(b.cognome + ' ' + b.nome));
-    }, [tecnici]);
+    const uniqueTecnici = useMemo(() => {
+        if (!allTecnici) return [];
+        return [...new Map(allTecnici.map(item => [item.id, item])).values()].sort((a, b) => (a.cognome + ' ' + a.nome).localeCompare(b.cognome + ' ' + b.nome));
+    }, [allTecnici]);
 
     useEffect(() => { setReportData(null); }, [selectedTecnico, selectedMonth]);
 
     const handleGenerateReport = () => {
-        if (!selectedTecnico) return;
+        if (!selectedTecnico || !allRapportini || !allNavi || !allTipiGiornata) return;
         setIsGenerating(true);
         setReportData(null);
         setTimeout(() => {
             try {
-                const data = calculateReportData(selectedTecnico, selectedMonth, rapportini, tipiGiornataMap, naviMap);
+                const data = calculateReportData(selectedTecnico, selectedMonth, allRapportini, allNavi, allTipiGiornata);
                 setReportData(data);
             } catch (error) {
                 console.error("Errore durante la generazione del report:", error);
@@ -197,6 +258,7 @@ const ReportMensili: React.FC = () => {
         setPdfUrl(null);
         setPdfDialogOpen(true);
 
+        // La generazione effettiva avviene in un timeout per permettere al dialog di aprirsi con il loader
         setTimeout(() => {
             const doc = new jsPDF();
             const title = `Report Mensile per ${selectedTecnico.cognome} ${selectedTecnico.nome} - ${selectedMonth.format('MMMM YYYY')}`;
@@ -231,7 +293,7 @@ const ReportMensili: React.FC = () => {
             const url = URL.createObjectURL(pdfOutput);
             setPdfUrl(url);
             setIsGeneratingPdf(false);
-        }, 100);
+        }, 100); 
     };
 
     const baseColumns: GridColDef[] = [
@@ -251,7 +313,7 @@ const ReportMensili: React.FC = () => {
             <Box sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Typography variant="h5">Report Mensile Tecnico</Typography>
                 <Paper sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                    <Autocomplete options={sortedTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={selectedTecnico} onChange={(_, v) => setSelectedTecnico(v)} isOptionEqualToValue={(o, v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Seleziona Tecnico" />} sx={{ minWidth: 250, flexGrow: 1 }} loading={areAnagraficheLoading} />
+                    <Autocomplete options={uniqueTecnici} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} value={selectedTecnico} onChange={(_, v) => setSelectedTecnico(v)} isOptionEqualToValue={(o, v) => o.id === v.id} renderInput={(p) => <TextField {...p} label="Seleziona Tecnico" />} sx={{ minWidth: 250, flexGrow: 1 }} loading={masterDataLoading} />
                     <DatePicker views={['month', 'year']} label="Mese Report" value={selectedMonth} onChange={(v) => { if (v) setSelectedMonth(v); }} />
                     <Button variant="contained" onClick={handleGenerateReport} disabled={!selectedTecnico || isGenerating} startIcon={isGenerating ? <CircularProgress size={20} color="inherit" /> : null}>{isGenerating ? 'Generando...' : 'Genera Report'}</Button>
                     {reportData && (
