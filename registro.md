@@ -4,6 +4,41 @@ Questo documento traccia in ordine cronologico tutti gli interventi significativ
 
 ---
 
+### **DATA: 25/09/2026**
+
+**INTERVENTO:** Analisi e Risoluzione di un Errore "Fantasma" - Debriefing del Bug `toggle-attivo`.
+
+**Ticket/Richiesta:** Debugging approfondito dell'operazione `toggle-attivo` nella Cloud Function `master_gestisciTecnico`, che falliva costantemente con un errore `Operazione non supportata` nonostante il codice sorgente (`index.ts`) fosse palesemente corretto.
+
+**CRONISTORIA DEL FALLIMENTO E APPRENDIMENTO:**
+
+L'incidente `toggle-attivo` è un caso di studio sulla necessità di guardare oltre il codice sorgente e considerare l'intero processo di build e deploy. Per ore, il debug si è concentrato su ipotesi errate:
+
+1.  **Errore di Logica Complessa:** Inizialmente si pensava che la logica interna del `case 'toggle-attivo'` fosse difettosa. Il codice è stato radicalmente semplificato, ma l'errore persisteva.
+2.  **Problemi di Sintassi/Spazi:** Sono state fatte ipotesi su caratteri invisibili o problemi di formattazione della stringa `'toggle-attivo'`. Anche questo si è rivelato un vicolo cieco.
+3.  **Cache di Deploy:** Si è ipotizzato che Cloud Functions stesse servendo una versione vecchia del codice a causa di una cache di deploy. Diversi deploy forzati non hanno risolto il problema.
+4.  **Conflitto di Struttura di Controllo:** In un atto di disperazione, lo statement `switch` è stato sostituito con una catena di `if/else if`, sospettando un bug esoterico nel motore JavaScript V8. L'errore è rimasto identico.
+5.  **File "Ombra":** L'ultima ipotesi prima della soluzione era l'esistenza di un file `index.js` compilato manualmente e dimenticato nella directory `src`, che avrebbe avuto la precedenza sul file TypeScript. Un controllo dei file ha smentito anche questo.
+
+**LA VERA CAUSA:**
+
+L'errore non era nel codice TypeScript, ma nel **processo di build**. La directory di output `functions/master/lib`, che contiene il codice JavaScript compilato, non veniva pulita correttamente prima di un nuovo deploy. Di conseguenza, il comando `firebase deploy` stava impacchettando e deployando un file `lib/index.js` vecchio e corrotto, che non conteneva le modifiche più recenti (né il `case 'toggle-attivo'`, né i `logger.info` di debug).
+
+**RISOLUZIONE DEFINITIVA:**
+
+La soluzione è stata forzare una **build pulita e manuale** prima del deploy:
+1.  **Pulizia:** Cancellazione forzata della directory `functions/master/lib` con `rm -rf functions/master/lib`.
+2.  **Ricostruzione:** Esecuzione manuale di `npm run build` all'interno della directory della funzione per rigenerare `lib` da `src` in modo pulito.
+3.  **Deploy:** Esecuzione di `firebase deploy --only functions:master`.
+
+**IMPATTO E LEZIONE CRUCIALE:**
+
+*   **Bug Risolto:** La funzione `toggle-attivo` ha iniziato a funzionare immediatamente dopo il deploy del codice compilato corretto.
+*   **LEZIONE APPRESA FONDAMENTALE:** **"Dubita prima del processo, poi del codice"**. Quando un comportamento è apparentemente illogico e le modifiche al codice sorgente non hanno alcun effetto, il problema risiede quasi certamente in un punto intermedio della catena di build, transpilazione o deploy. Una build corrotta o "sporca" può portare a ore di debugging frustrante e infruttuoso su codice perfettamente valido.
+*   **AZIONE CORRETTIVA FUTURA:** Integrare sempre un comando di pulizia (`rm -rf lib` o `rimraf lib`) nello script `build` all'interno di ogni `package.json` delle Cloud Functions per garantire che ogni build sia atomica e pulita.
+
+---
+
 ### **DATA: 24/09/2026**
 
 **INTERVENTO:** Risoluzione Bug Critico di Sincronizzazione UI nella Zona "Gestione Accessi Tecnici".
@@ -173,5 +208,4 @@ Questa sezione documenta la struttura di un documento nella collezione `rapporti
 *   `tecnicoId` (string): ID del tecnico principale o responsabile.
 *   `tipoGiornataId` (string): ID del tipo di giornata (es. "Lavorativo", "Festivo").
 *   `updatedAt` (timestamp): Data e ora dell'ultimo aggiornamento del documento.
-*   `veicoloId` (string): ID del veicolo utilizzato.
 *   `deleted` (boolean, opzionale): Flag per il soft-delete. Se `true`, il documento è considerato cancellato.

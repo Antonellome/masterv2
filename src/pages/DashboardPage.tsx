@@ -168,7 +168,7 @@ const DashboardContent = () => {
     const memoizedStats = useMemo(() => {
         if (!rapportini || !tecnici || !tipiGiornata || !navi || !luoghi) return null;
     
-        const rapportiniWithDate = rapportini.map(r => ({ ...r, date: parseToDayjs(r.data) })).filter(r => r.date.isValid());
+        const rapportiniWithDate = rapportini.map(r => ({ ...r, date: parseToDayjs(r.data) })).filter(r => r.date && r.date.isValid());
         const rapportiniNelRange = rapportiniWithDate.filter(r => 
             r.date.year() === selectedDate.year() && r.date.month() === selectedDate.month()
         );

@@ -30,7 +30,7 @@ Queste regole sono prioritarie su qualsiasi altra direttiva. Servono a garantire
 
 # BLUEPRINT OPERATIVO - ARCHITETTURA CONSOLIDATA
 
-**Data ultimo aggiornamento:** 24/09/2026
+**Data ultimo aggiornamento:** 26/09/2026
 
 ---
 
@@ -58,9 +58,23 @@ Il flusso di dati per **tutte** le operazioni di scrittura deve seguire questo s
 
 ---
 
-## 3. ZONA DI INTERVENTO CORRENTE: TECNICI / GESTIONE ACCESSI
+## 3. ZONA DI INTERVENTO CORRENTE: DEBUG CREAZIONE TECNICO
 
-*   **PROBLEMA RISOLTO:** Lo switch per abilitare/disabilitare l'accesso dei tecnici, pur eseguendo l'operazione con successo (mostrando il messaggio di conferma), non aggiornava il suo stato visivo, rimanendo nella posizione originale.
+*   **OBIETTIVO:** Risolvere il bug critico che impedisce la creazione di un nuovo tecnico.
+
+*   **PROBLEMA:** L'invocazione della Cloud Function `master_gestisciTecnico` con l'operazione `add` fallisce restituendo al client un errore generico `internal`. Questo errore maschera la vera causa del fallimento sul server.
+
+*   **STATO ATTUALE:**
+    1.  **Deploy di Debug:** È stata deployata una versione della funzione `master_gestisciTecnico` contenente blocchi di `try/catch` e `logger.error` potenziati. Lo scopo è di catturare e registrare l'oggetto completo dell'errore che si verifica sul backend, invece del solo messaggio.
+    2.  **In Attesa di Input:** Si è in attesa che l'utente esegua l'operazione fallimentare per generare i log di errore dettagliati necessari alla diagnosi.
+
+---
+
+## 4. STORICO INTERVENTI (ARCHIVIATO)
+
+*   **ZONA DI INTERVENTO COMPLETATA:** TECNICI / GESTIONE ACCESSI
+
+*   **PROBLEMA RISOLTO:** Lo switch per abilitare/disabilitare l'accesso dei tecnici, pur eseguendo l'operazione con successo, non aggiornava il suo stato visivo, rimanendo nella posizione originale.
 
 *   **CAUSA RADICE (Identificata):** Un problema a due livelli:
     1.  **Incoerenza Dati:** Nel database Firestore coesistevano due campi ridondanti (`appAccess` e `accessoApp`) per indicare lo stesso stato, causando letture e scritture non allineate.

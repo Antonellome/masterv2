@@ -1,9 +1,11 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
+
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/config/firebase'; // MODIFICA: Importo l'istanza corretta
 import { Tecnico } from '@/models/definitions';
 import { useGlobalStore } from '@/stores/globalStore';
 import { logger } from '@/utils/logger';
 
-const functions = getFunctions();
+// RIMOSSO: const functions = getFunctions(); - Questa era la causa del bug.
 
 // --- TIPIZZAZIONE DELLE RICHIESTE ---
 

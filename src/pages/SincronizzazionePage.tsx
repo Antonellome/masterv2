@@ -1,9 +1,8 @@
 import GestioneUtenti from '@/components/GestioneUtenti/GestioneUtenti';
 import { useGlobalStore } from '@/stores/globalStore';
-import { SyncService } from '@/services/SyncService';
+import { tecniciService, resetPasswordTecnico } from '@/services/tecniciService'; // << 1. IMPORT CORRETTO
 import type { Tecnico } from '@/models/definitions';
 import { GridColDef } from '@mui/x-data-grid';
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 
 // Colonne di base per i tecnici
@@ -14,32 +13,29 @@ const baseColumns: GridColDef<Tecnico>[] = [
 ];
 
 const SincronizzazionePage = () => {
-  // Corretto il selettore per puntare direttamente a state.tecnici
   const tecnici = useGlobalStore((state) => state.tecnici);
-  // Sostituito useAlert con showNotification dal global store
   const showNotification = useGlobalStore((state) => state.showNotification);
-  const auth = getAuth();
   const navigate = useNavigate();
 
   const handleStatusChange = async (id: string, newStatus: boolean) => {
     try {
-      await SyncService.updateRecord('tecnici', id, { sincronizzazioneAttiva: newStatus });
+      // << 2. UTILIZZO DEL SERVIZIO CORRETTO COME DA ARCHITETTURA
+      await tecniciService('update', { id, sincronizzazioneAttiva: newStatus });
       showNotification(`Stato sincronizzazione aggiornato per il tecnico.`, 'success');
+      // La UI si aggiornerà automaticamente grazie al sync richiamato dal service
     } catch (error) {
       console.error("Errore durante l'aggiornamento: ", error);
-      showNotification("Errore durante l'aggiornamento dello stato.", 'error');
+      // La notifica di errore è già gestita centralmente dal service, non serve duplicarla
     }
   };
 
-  const handleSendPassword = (email: string) => {
-    sendPasswordResetEmail(auth, email)
-      .then(() => {
-        showNotification(`Email di reset password inviata con successo a ${email}.`, 'success');
-      })
-      .catch((error) => {
-        console.error("Errore durante l'invio dell'email: ", error);
-        showNotification(`Errore durante l'invio dell'email a ${email}.`, 'error');
-      });
+  const handleSendPassword = async (email: string) => {
+    try {
+      await resetPasswordTecnico(email);
+      // La notifica di successo/errore è gestita internamente dal service
+    } catch (error) {
+      console.error("Errore durante l'invio dell'email: ", error);
+    }
   };
 
   const handleAddNew = () => {
@@ -49,7 +45,7 @@ const SincronizzazionePage = () => {
   return (
     <GestioneUtenti<Tecnico>
       title="Gestione Sincronizzazione Tecnici"
-      data={tecnici} // I dati ora arrivano correttamente dal globalStore
+      data={tecnici}
       baseColumns={baseColumns}
       statusField="sincronizzazioneAttiva"
       onStatusChange={handleStatusChange}

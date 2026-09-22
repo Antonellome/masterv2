@@ -4,15 +4,13 @@ import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/materia
 import type { Tecnico } from '@/models/definitions';
 import TecniciList from './TecniciList';
 import TecnicoForm from './TecnicoForm';
-import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog'; // Assumendo esista, altrimenti da creare/spostare
+import ConfirmationDialog from '../Anagrafiche/ConfirmationDialog';
 import { useAnagrafiche } from '@/contexts/AnagraficheContext';
 import { logger } from '@/utils/logger';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { tecniciService } from '@/services/tecniciService';
 
 const GestioneTecnici = () => {
-    // UTILIZZIAMO IL MODELLO IBRIDO CORRETTO
-    const { tecnici, ditte, categorie, isLoading: areAnagraficheLoading, error: anagraficheError, updateTecnico } = useAnagrafiche();
+    const { tecnici, ditte, categorie, isLoading: areAnagraficheLoading, error: anagraficheError } = useAnagrafiche();
 
     const [formOpen, setFormOpen] = useState(false);
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
@@ -41,26 +39,18 @@ const GestioneTecnici = () => {
         setUpdatingId(formData.id ?? 'new');
         showSnackbar('Salvataggio in corso...', 'info');
 
-        const functions = getFunctions(getApp(), 'europe-west6');
-        const callable = httpsCallable(functions, 'master_gestisciTecnico');
-
         try {
             const isNew = !formData.id;
-            const operation = isNew ? 'create' : 'update';
+            const operation = isNew ? 'add' : 'update'; // Corrected 'create' to 'add'
 
-            const result = await callable({ operation, data: formData });
-            const resultData = result.data as { success: boolean, id: string };
+            await tecniciService(operation, formData);
 
-            if (resultData.success) {
-                showSnackbar(isNew ? 'Tecnico creato con successo.' : 'Tecnico aggiornato con successo.', 'success');
-                setFormOpen(false);
-                setSelectedTecnico(null);
-            } else {
-                throw new Error('Errore sconosciuto dal server.');
-            }
+            showSnackbar(isNew ? 'Tecnico creato con successo.' : 'Tecnico aggiornato con successo.', 'success');
+            setFormOpen(false);
+            setSelectedTecnico(null);
+
         } catch (e) {
-            logger.error("Errore durante il salvataggio:", e);
-            showSnackbar(e instanceof Error ? e.message : 'Errore sconosciuto durante il salvataggio', 'error');
+            logger.error("Errore durante il salvataggio (GestioneTecnici):", e);
         } finally {
             setIsSaving(false);
             setUpdatingId(null);
@@ -72,42 +62,20 @@ const GestioneTecnici = () => {
         setDeleteDialogOpen(true);
     };
     
-    // *** ORDINE CORRETTO: DEFINITA PRIMA DI ESSERE USATA ***
     const handleStatusChange = useCallback(async (id: string, newStatus: boolean) => {
         setUpdatingId(id);
         showSnackbar('Aggiornamento stato in corso...', 'info');
         
-        const functions = getFunctions(getApp(), 'europe-west6');
-        const callable = httpsCallable(functions, 'master_gestisciTecnico');
-
         try {
-            const result = await callable({ 
-                operation: 'toggle-attivo',
-                data: { id: id, attivo: newStatus }
-            });
-            const resultData = result.data as { success: boolean };
-
-            if (resultData.success) {
-                const updatePayload: Partial<Tecnico> = { attivo: newStatus };
-                if (newStatus === false) {
-                    updatePayload.appAccess = false;
-                    updatePayload.accessoApp = false; // Per coerenza
-                }
-                await updateTecnico(id, updatePayload);
-                showSnackbar(`Stato del tecnico aggiornato.`, 'success');
-            } else {
-                throw new Error('Operazione negata dal server.');
-            }
-            
+            await tecniciService('toggle-active', { id: id, attivo: newStatus });
+            showSnackbar(`Stato del tecnico aggiornato.`, 'success');
         } catch (e: any) {
-            logger.error("Errore durante il cambio di stato:", e);
-            showSnackbar(e.message || 'Errore sconosciuto', 'error');
+            logger.error("Errore durante il cambio di stato (GestioneTecnici):", e);
         } finally {
             setUpdatingId(null);
         }
-    }, [updateTecnico]);
+    }, []);
 
-    // Ora questa funzione può accedere a `handleStatusChange` senza errori
     const confirmDelete = useCallback(async () => {
         if (!tecnicoToAction) return;
         await handleStatusChange(tecnicoToAction, false);

@@ -10,7 +10,7 @@ const checkAdmin = async (uid: string) => {
     }
 };
 
-export const master_gestisciTecnico = onCall({ region: "europe-west6" }, async (request) => {
+export const master_gestisciTecnico = onCall({ region: "europe-west6", cors: true }, async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "Authentication is required.");
     }
@@ -23,30 +23,91 @@ export const master_gestisciTecnico = onCall({ region: "europe-west6" }, async (
         throw new HttpsError("invalid-argument", "Incomplete payload.");
     }
 
-    logger.info(`+++ USING IF/ELSE IF +++ Executing: '${operation}'`);
+    logger.info(`[master_gestisciTecnico] Executing: '${operation}' with payload:`, data);
 
-    if (operation === 'toggle-attivo') {
-        logger.info("*** FINALLY INSIDE 'toggle-attivo' BLOCK ***");
+    // --- LOGICA DI CREAZIONE --- 
+    if (operation === 'add') {
+        if (!data.email || !data.password || !data.nome || !data.cognome) {
+            throw new HttpsError("invalid-argument", "Email, password, nome, and cognome are required for creation.");
+        }
+        try {
+            const newUserRecord = await auth.createUser({
+                email: data.email,
+                password: data.password,
+                displayName: `${data.nome} ${data.cognome}`,
+                disabled: false,
+            });
+
+            const { password, ...firestoreData } = data; 
+            const dataToSave = {
+                ...firestoreData,
+                id: newUserRecord.uid, 
+                attivo: true, 
+                appAccess: true, 
+                accessoApp: true, 
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            // +++ LOG DI DEBUG AGGIUNTO +++
+            logger.info("[master_gestisciTecnico] Attempting to save data to Firestore:", dataToSave);
+
+            await db.collection('tecnici').doc(newUserRecord.uid).set(dataToSave);
+
+            logger.info(`Successfully created user ${newUserRecord.uid}`);
+            return { success: true, id: newUserRecord.uid };
+
+        } catch (e: any) {
+            // +++ LOG DI DEBUG AGGIUNTO +++
+            logger.error(`Error during 'add' execution. Full error object:`, e);
+            throw new HttpsError("internal", e.message);
+        }
+    
+    // --- LOGICA DI AGGIORNAMENTO ---
+    } else if (operation === 'update') {
+        if (!data.id) {
+            throw new HttpsError("invalid-argument", "'id' is required for update.");
+        }
+        try {
+            const { id, password, ...updateData } = data; 
+            await db.collection('tecnici').doc(id).update({
+                ...updateData,
+                updatedAt: new Date(),
+            });
+
+            if (updateData.email) {
+                await auth.updateUser(id, { email: updateData.email });
+            }
+            
+            logger.info(`Successfully updated technician ${id}`);
+            return { success: true, id: id };
+
+        } catch (e: any) {
+            logger.error(`Error during 'update' execution:`, e);
+            throw new HttpsError("internal", e.message);
+        }
+
+    // --- LOGICA DI STATO --- 
+    } else if (operation === 'toggle-attivo') {
         if (!data.id || typeof data.attivo !== 'boolean') {
             throw new HttpsError("invalid-argument", "'id' and 'attivo' (boolean) are required.");
         }
         try {
-            await db.collection('tecnici').doc(data.id).update({ attivo: data.attivo });
-            // Restore original complex logic
+            await db.collection('tecnici').doc(data.id).update({ attivo: data.attivo, updatedAt: new Date() });
             if (data.attivo === false) {
                  await db.collection('tecnici').doc(data.id).update({ appAccess: false, accessoApp: false });
                  await auth.updateUser(data.id, { disabled: true });
             } else {
                  await auth.updateUser(data.id, { disabled: false });
             }
-            return { success: true, message: `Logic with IF/ELSE succeeded for ${data.id}.` };
+            return { success: true };
         } catch(e: any) {
             logger.error(`Error during 'toggle-attivo' execution:`, e);
             throw new HttpsError("internal", e.message);
         }
 
+    // --- LOGICA DI ACCESSO ---
     } else if (operation === 'toggle-access') {
-        logger.info("*** INSIDE 'toggle-access' BLOCK ***");
         if (!data.id || typeof data.appAccess !== 'boolean') {
             throw new HttpsError("invalid-argument", "'id' and 'appAccess' (boolean) are required.");
         }
@@ -54,9 +115,9 @@ export const master_gestisciTecnico = onCall({ region: "europe-west6" }, async (
         if (!tecnicoDoc.exists || tecnicoDoc.data()?.attivo === false) {
             throw new HttpsError("failed-precondition", "Cannot change access for an inactive technician.");
         }
-        await db.collection('tecnici').doc(data.id).update({ appAccess: data.appAccess, accessoApp: data.appAccess });
+        await db.collection('tecnici').doc(data.id).update({ appAccess: data.appAccess, accessoApp: data.appAccess, updatedAt: new Date() });
         await auth.updateUser(data.id, { disabled: !data.appAccess });
-        return { success: true, message: `Access for ${data.id} changed.` };
+        return { success: true };
 
     } else {
         logger.error(`FATAL: Operation '${operation}' did not match any IF/ELSE branch.`);
@@ -66,8 +127,8 @@ export const master_gestisciTecnico = onCall({ region: "europe-west6" }, async (
 
 // Ignored functions
 export const master_gestisciAnagrafica = onCall({ region: "europe-west6" }, async (request) => { 
-    throw new HttpsError("unimplemented", "Function not implemented"); 
+    throw new HttpsError("unimplemented", "Function not implemented."); 
 });
 export const master_resetPasswordTecnico = onCall({ region: "europe-west6" }, async (request) => { 
-    throw new HttpsError("unimplemented", "Function not implemented"); 
+    throw new HttpsError("unimplemented", "Function not implemented."); 
 });
