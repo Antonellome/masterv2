@@ -119,7 +119,7 @@ const CumulativiTecnici: React.FC = () => {
     const [selectedLuoghi, setSelectedLuoghi] = useState<Luogo[]>([]);
     const [selectedTipiGiornata, setSelectedTipiGiornata] = useState<TipoGiornata[]>([]);
 
-    const gtechId = useMemo(() => anagraficaDitte?.find(d => d.nome?.toLowerCase() === 'g-tech')?.id ?? null, [anagraficaDitte]);
+    const gtechId = useMemo(() => (anagraficaDitte || []).find(d => d.nome?.toLowerCase() === 'g-tech')?.id ?? null, [anagraficaDitte]);
 
     const fullLegendaString = useMemo(() => {
         const oreParts = Object.entries(formatoOreLegenda).map(([key, value]) => `${key.replace(/'/g, "")} = ${value}`);
@@ -128,7 +128,7 @@ const CumulativiTecnici: React.FC = () => {
     }, []);
 
     const options = useMemo(() => {
-        const safeSort = (arr: any[], labelFn: (item: any) => string) => arr.filter(Boolean).sort((a, b) => labelFn(a).localeCompare(labelFn(b)));
+        const safeSort = (arr: any[] | undefined, labelFn: (item: any) => string) => (arr || []).filter(Boolean).sort((a, b) => labelFn(a).localeCompare(labelFn(b)));
         return {
             ditte: safeSort(anagraficaDitte, (i: Ditta) => i.nome || ''),
             categorie: safeSort(anagraficaCategorie, (i: Categoria) => i.nome || ''),
@@ -166,6 +166,11 @@ const CumulativiTecnici: React.FC = () => {
     useEffect(() => { setIsGenerated(false); }, [selectedDate, selectedDitte, selectedCategorie, selectedTecnici, selectedNavi, selectedCliente, selectedLuoghi, selectedTipiGiornata]);
 
     const handleGeneraMatrice = async () => {
+        if (!allRapportini || !anagraficaTecnici || !anagraficaNavi || !tipiGiornataMap || !tecniciMap || !naviMap) {
+            console.error("Dati anagrafici non ancora disponibili per la generazione della matrice.");
+            return;
+        }
+
         setIsLoading(true);
 
         const startOfMonth = selectedDate.startOf('month');
@@ -177,7 +182,7 @@ const CumulativiTecnici: React.FC = () => {
         const categorieIds = selectedCategorie.length > 0 ? new Set(selectedCategorie.map(c => c.id)) : null;
 
         const tecniciVisibiliIds = new Set(
-            anagraficaTecnici.filter(t => 
+            (anagraficaTecnici || []).filter(t => 
                 (!ditteIds || ditteIds.has(t.dittaId)) && 
                 (!selectedTecniciIds || selectedTecniciIds.has(t.id)) &&
                 (!categorieIds || categorieIds.has(t.categoriaId))
@@ -189,10 +194,10 @@ const CumulativiTecnici: React.FC = () => {
 
         const naviSelezionateIds = new Set(selectedNavi.map(n => n.id));
         if (selectedCliente) {
-            anagraficaNavi.filter(n => n.clienteId === selectedCliente.id).forEach(n => naviSelezionateIds.add(n.id));
+            (anagraficaNavi || []).filter(n => n.clienteId === selectedCliente.id).forEach(n => naviSelezionateIds.add(n.id));
         }
 
-        const filteredRapportini = allRapportini.filter(r => {
+        const filteredRapportini = (allRapportini || []).filter(r => {
             const dataRapportino = parseToDayjs(r.data);
             if (!dataRapportino || !dataRapportino.isBetween(startOfMonth, endOfMonth, null, '[]')) return false;
 
@@ -213,8 +218,8 @@ const CumulativiTecnici: React.FC = () => {
 
         const aggregateDataForRapportini = (rapportiniDaAggregare: Rapportino[]): { rows: GridRowsProp; summary: ReportSummary; } => {
             const allInvolvedTecnicoIds = new Set<string>();
-            rapportiniDaAggregare.forEach(r => {
-                r.presenze.forEach(id => allInvolvedTecnicoIds.add(id));
+            (rapportiniDaAggregare || []).forEach(r => {
+                (r.presenze || []).forEach(id => allInvolvedTecnicoIds.add(id));
             });
 
             const finalTecnicoIds = Array.from(allInvolvedTecnicoIds).filter(id => id && tecniciVisibiliIds.has(id));
@@ -229,14 +234,14 @@ const CumulativiTecnici: React.FC = () => {
                 }
             });
 
-            for (const r of rapportiniDaAggregare) {
+            for (const r of (rapportiniDaAggregare || [])) {
                 const dataRapportino = parseToDayjs(r.data);
                 if (!dataRapportino) continue;
                 const giorno = dataRapportino.date().toString();
                 const tipoGiornata = tipiGiornataMap.get(r.tipoGiornataId);
                 const codice = getTipoGiornataCodice(tipoGiornata);
                 
-                for (const dettaglio of r.dettaglioOreTecnici) {
+                for (const dettaglio of (r.dettaglioOreTecnici || [])) {
                     const tecnicoId = dettaglio.tecnicoId;
                     if (tecnicoId && righeDaGenerare.has(tecnicoId)) {
                         const ore = dettaglio.ore || 0;
@@ -375,44 +380,44 @@ const CumulativiTecnici: React.FC = () => {
                                 xs: 12,
                                 sm: 4,
                                 md: 2
-                            }}><Autocomplete options={options.clienti} value={selectedCliente} onChange={(_,v) => setSelectedCliente(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Cliente" />} /></Grid>
+                            }}><Autocomplete options={options.clienti || []} value={selectedCliente} onChange={(_,v) => setSelectedCliente(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Cliente" />} /></Grid>
                         <Grid
                             size={{
                                 xs: 12,
                                 sm: 4,
                                 md: 2
-                            }}><Autocomplete multiple options={options.ditte} value={selectedDitte} onChange={(_,v) => setSelectedDitte(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Ditta" />} /></Grid>
+                            }}><Autocomplete multiple options={options.ditte || []} value={selectedDitte} onChange={(_,v) => setSelectedDitte(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Ditta" />} /></Grid>
                         <Grid
                             size={{
                                 xs: 12,
                                 sm: 4,
                                 md: 2
-                            }}><Autocomplete multiple options={options.luoghi} value={selectedLuoghi} onChange={(_,v) => setSelectedLuoghi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Luoghi" />} /></Grid>
+                            }}><Autocomplete multiple options={options.luoghi || []} value={selectedLuoghi} onChange={(_,v) => setSelectedLuoghi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Luoghi" />} /></Grid>
                         <Grid
                             size={{
                                 xs: 12,
                                 sm: 4,
                                 md: 2
-                            }}><Autocomplete multiple options={options.navi} value={selectedNavi} onChange={(_,v) => setSelectedNavi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Nave"/>} /></Grid>
+                            }}><Autocomplete multiple options={options.navi || []} value={selectedNavi} onChange={(_,v) => setSelectedNavi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Nave"/>} /></Grid>
                         <Grid
                             size={{
                                 xs: 12,
                                 sm: 4,
                                 md: 2
-                            }}><Autocomplete multiple options={options.categorie} value={selectedCategorie} onChange={(_,v) => setSelectedCategorie(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Categoria" />} /></Grid>
+                            }}><Autocomplete multiple options={options.categorie || []} value={selectedCategorie} onChange={(_,v) => setSelectedCategorie(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Categoria" />} /></Grid>
 
                         <Grid
                             size={{
                                 xs: 12,
                                 sm: 12,
                                 md: 4
-                            }}><Autocomplete multiple options={options.tipiGiornata} value={selectedTipiGiornata} onChange={(_,v) => setSelectedTipiGiornata(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Tipo Giornata" />} /></Grid>
+                            }}><Autocomplete multiple options={options.tipiGiornata || []} value={selectedTipiGiornata} onChange={(_,v) => setSelectedTipiGiornata(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Tipo Giornata" />} /></Grid>
                         <Grid
                             size={{
                                 xs: 12,
                                 sm: 9,
                                 md: 6
-                            }}><Autocomplete multiple disableCloseOnSelect options={options.tecnici} value={selectedTecnici} onChange={(_, v) => setSelectedTecnici(v)} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} isOptionEqualToValue={isOptionEqualToValue}
+                            }}><Autocomplete multiple disableCloseOnSelect options={options.tecnici || []} value={selectedTecnici} onChange={(_, v) => setSelectedTecnici(v)} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} isOptionEqualToValue={isOptionEqualToValue}
                                 renderOption={(props, option, { selected }) => (<li {...props} key={option.id}><Checkbox icon={<CheckBoxOutlineBlankIcon fontSize="small" />} checkedIcon={<CheckBoxIcon fontSize="small" />} checked={selected} />{`${option.cognome} ${option.nome}`}</li>)}
                                 renderInput={(params) => <TextField {...params} label="Tecnici" />}/></Grid>
                         <Grid
