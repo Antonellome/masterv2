@@ -4,6 +4,34 @@ Questo documento traccia in ordine cronologico tutti gli interventi significativ
 
 ---
 
+### **DATA: 26/09/2026**
+
+**INTERVENTO:** Risoluzione Finale Bug Creazione Tecnico - Allineamento Payload Frontend/Backend.
+
+**Ticket/Richiesta:** La creazione di un nuovo tecnico falliva con un errore `Operation not supported`, anche dopo aver risolto i problemi di CORS e di deploy.
+
+**CRONISTORIA DEL DEBUG:**
+
+L'analisi dei log delle Cloud Functions ha rivelato in modo inequivocabile il problema: il backend si aspettava un'operazione denominata `'add'`, mentre il frontend, nel componente `GestioneTecnici.tsx`, inviava `'create'`. Si trattava di un semplice ma critico refuso nel payload della chiamata.
+
+**LA CAUSA:**
+
+Incongruenza tra il contratto definito nella Cloud Function `master_gestisciTecnico` (che per la creazione richiede `operation: 'add'`) e la chiamata generata dal componente React (`operation: 'create'`).
+
+**RISOLUZIONE:**
+
+1.  **Identificazione:** Tramite i log di Firebase, è stato individuato il payload esatto inviato dal frontend e l'errore generato dal backend.
+2.  **Localizzazione:** È stato ispezionato il file `src/components/Tecnici/GestioneTecnici.tsx`.
+3.  **Correzione:** La riga di codice `const operation = isNew ? 'create' : 'update';` è stata modificata in `const operation = isNew ? 'add' : 'update';`.
+4.  **Salvataggio e Push:** Le modifiche sono state salvate, verificate con una build e inviate al repository Git.
+
+**IMPATTO E BENEFICI:**
+
+*   **Bug Risolto:** La funzionalità di creazione di un nuovo tecnico è ora **pienamente operativa**.
+*   **Allineamento Contrattuale:** Frontend e Backend sono ora allineati per quanto riguarda l'API di gestione dei tecnici.
+
+---
+
 ### **DATA: 25/09/2026**
 
 **INTERVENTO:** Analisi e Risoluzione di un Errore "Fantasma" - Debriefing del Bug `toggle-attivo`.

@@ -58,19 +58,29 @@ Il flusso di dati per **tutte** le operazioni di scrittura deve seguire questo s
 
 ---
 
-## 3. ZONA DI INTERVENTO CORRENTE: DEBUG CREAZIONE TECNICO
+## 3. ZONA DI INTERVENTO CORRENTE: RIPRISTINO ZONA REPORTISTICA
 
-*   **OBIETTIVO:** Risolvere il bug critico che impedisce la creazione di un nuovo tecnico.
-
-*   **PROBLEMA:** L'invocazione della Cloud Function `master_gestisciTecnico` con l'operazione `add` fallisce restituendo al client un errore generico `internal`. Questo errore maschera la vera causa del fallimento sul server.
-
-*   **STATO ATTUALE:**
-    1.  **Deploy di Debug:** È stata deployata una versione della funzione `master_gestisciTecnico` contenente blocchi di `try/catch` e `logger.error` potenziati. Lo scopo è di catturare e registrare l'oggetto completo dell'errore che si verifica sul backend, invece del solo messaggio.
-    2.  **In Attesa di Input:** Si è in attesa che l'utente esegua l'operazione fallimentare per generare i log di errore dettagliati necessari alla diagnosi.
+*   **OBIETTIVO:** Ripristinare la funzionalità della pagina di Reportistica, che attualmente è corrotta.
+*   **PROBLEMA:** A seguito di modifiche precedenti, la pagina di Reportistica ha smesso di funzionare correttamente.
+*   **PIANO D'AZIONE:**
+    1.  **Analisi Cronologia:** Verrà eseguito un `git log` per recuperare gli ultimi 10 commit, fornendo una visione chiara delle modifiche recenti.
+    2.  **Identificazione Commit Stabile:** L'utente identificherà il commit specifico che contiene una versione funzionante della pagina.
+    3.  **Ripristino Selettivo:** Il file o i file corrotti verranno ripristinati allo stato del commit stabile identificato.
+    4.  **Verifica e Test:** Verrà eseguita una verifica funzionale per assicurarsi che la pagina sia tornata operativa.
 
 ---
 
 ## 4. STORICO INTERVENTI (ARCHIVIATO)
+
+*   **ZONA DI INTERVENTO COMPLETATA:** TECNICI / GESTIONE TECNICI
+
+*   **PROBLEMA RISOLTO:** La creazione di un nuovo tecnico falliva a causa di un'incongruenza nel payload tra frontend e backend (il frontend inviava `create`, mentre il backend si aspettava `add`).
+
+*   **SOLUZIONE IMPLEMENTATA:**
+    1.  **Correzione Frontend:** Il file `src/components/Tecnici/GestioneTecnici.tsx` è stato modificato per inviare il parametro `operation: 'add'` durante la creazione di un nuovo tecnico, allineando la chiamata al contratto atteso dalla Cloud Function `master_gestisciTecnico`.
+    2.  **Documentazione:** L'intervento è stato registrato nel `registro.md` e il `blueprint.md` è stato aggiornato.
+
+---
 
 *   **ZONA DI INTERVENTO COMPLETATA:** TECNICI / GESTIONE ACCESSI
 

@@ -119,7 +119,7 @@ const CumulativiTecnici: React.FC = () => {
     const [selectedLuoghi, setSelectedLuoghi] = useState<Luogo[]>([]);
     const [selectedTipiGiornata, setSelectedTipiGiornata] = useState<TipoGiornata[]>([]);
 
-    const gtechId = useMemo(() => anagraficaDitte.find(d => d.nome?.toLowerCase() === 'g-tech')?.id, [anagraficaDitte]);
+    const gtechId = useMemo(() => anagraficaDitte?.find(d => d.nome?.toLowerCase() === 'g-tech')?.id ?? null, [anagraficaDitte]);
 
     const fullLegendaString = useMemo(() => {
         const oreParts = Object.entries(formatoOreLegenda).map(([key, value]) => `${key.replace(/'/g, "")} = ${value}`);
