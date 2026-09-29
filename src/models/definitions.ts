@@ -6,30 +6,94 @@ import type { Table } from 'dexie';
 // ==========================================================================
 
 export interface Anagrafica {
-    id?: number;
+    id?: string;
     nome: string;
     [key: string]: any;
 }
 
 export interface Rapportino {
     id: string;
-    data: Date;
+    clienteId: string;
+    completed: boolean;
+    createdAt: any; 
+    createdBy: string;
+    data: any; 
+    descrizioneBreve: string;
+    dettaglioOreTecnici: {
+        isManual: boolean;
+        nome: string;
+        oraFine: string;
+        oraInizio: string;
+        ore: number;
+        pausa: number;
+        tecnicoId: string;
+    }[];
+    dittaId: string;
+    firmaFirmatarioNome: string;
+    firmaFirmatarioSocieta: string;
+    firmaVettoriale: string;
+    includeTrasferta: boolean;
+    isDeleted: boolean;
+    isLocked: boolean;
+    lavoroEseguito: string;
+    luogoId: string;
+    materialiImpiegati: string;
+    naveId: string;
+    nome: string;
+    ordineLavoro: string;
+    oreLavoro: number;
+    presenze: string[];
     tecnicoId: string;
-    nomeLavoro: string;
-    oreLavorate?: number;
-    dettaglioOreTecnici: { tecnicoId: string; ore: number }[];
-    veicoloId?: string;
-    km?: number;
-    note?: string;
-    clienteId?: string;
-    naveId?: string;
-    dittaId?: string;
-    luogoId?: string;
-    tipoGiornataId?: string;
-    isNoteChanged?: boolean;
-    isTask?: boolean;
-    createdAt: Date;
-    updatedAt: Date;
+    tecnicoScriventeId: string;
+    tipoGiornataId: string;
+    trasfertaId: string;
+    updatedAt: any;
+    userId: string;
+    veicoloId: string;
+    version: number;
+}
+
+export interface Cliente {
+    id?: string;
+    nome: string;
+    [key: string]: any;
+}
+
+export interface Ditta {
+    id?: string;
+    nome: string;
+    [key: string]: any;
+}
+
+export interface Luogo {
+    id?: string;
+    nome: string;
+    [key: string]: any;
+}
+
+export interface Nave {
+    id?: string;
+    nome: string;
+    clienteId: string;
+    [key: string]: any;
+}
+
+export interface Categoria {
+    id?: string;
+    nome: string;
+    [key: string]: any;
+}
+
+export interface TipoGiornata {
+    id?: string;
+    nome: string;
+    [key: string]: any;
+}
+
+export interface Veicolo {
+    id?: string;
+    nome: string;
+    [key: string]: any;
 }
 
 export interface Checkin {
@@ -39,13 +103,14 @@ export interface Checkin {
     location: { latitude: number; longitude: number };
 }
 
-export interface Documento {
+export interface Scadenza {
     id: string;
     nome: string;
     dataScadenza: Date;
     tipo: 'personale' | 'veicolo' | 'attrezzatura';
     ownerId: string;
 }
+
 
 // ==========================================================================
 // TIPI DELLO STORE GLOBALE (ZUSTAND)
@@ -63,7 +128,7 @@ export interface DialogState {
     open: boolean;
     title: string;
     message: string;
-    onConfirm?: () => void; 
+    onConfirm?: () => void;
     cancelText?: string;
     confirmText?: string;
 }
@@ -97,7 +162,7 @@ export interface GlobalActions {
 // ALTRI TIPI
 // ==========================================================================
 
-export type CollectionName = 
+export type CollectionName =
     | 'rapportini'
     | 'tecnici'
     | 'clienti'
@@ -105,9 +170,10 @@ export type CollectionName =
     | 'navi'
     | 'luoghi'
     | 'categorie'
-    | 'tipi_giornata'
+    | 'tipiGiornata' // Corretto da 'tipi_giornata'
     | 'veicoli'
     | 'checkin_giornalieri'
-    | 'scadenze';
+    | 'documenti'; // Corretto da 'scadenze'
+
 
 export type AnagraficaTable = Table<Anagrafica>;

@@ -4,61 +4,69 @@ import { DataGrid, GridColDef, GridValueGetterParams, GridRenderCellParams } fro
 import { Box, Paper, IconButton, Tooltip, Typography } from '@mui/material';
 import Edit from '@mui/icons-material/Edit';
 import Delete from '@mui/icons-material/Delete';
-import type { Rapportino, Tecnico } from '@/models/definitions';
+import type { Rapportino, Tecnico, Cliente, Nave, Luogo, TipoGiornata } from '@/models/definitions';
 import CustomToolbar from '@/components/CustomToolbar';
 import { calculateTotalHours } from '@/utils/hoursCalculator';
-import { formatDateForDisplay } from '@/utils/dateUtils'; // <-- IMPORT DELL'UNICA VERA LEGGE
+import { formatDateForDisplay } from '@/utils/dateUtils';
 
 interface RapportiniListProps {
     rapportini: Rapportino[];
     tecniciMap: Map<string, Tecnico>;
-    naviMap: Map<string, string>;
-    luoghiMap: Map<string, string>;
+    clientiMap: Map<string, Cliente>;
+    naviMap: Map<string, Nave>;
+    luoghiMap: Map<string, Luogo>;
+    tipiGiornataMap: Map<string, TipoGiornata>; // Aggiunto per completezza
     loading: boolean;
     onAdd: () => void;
     onEdit: (rapportino: Rapportino) => void;
     onDelete: (id: string) => void;
 }
 
-const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap, naviMap, luoghiMap, loading, onAdd, onEdit, onDelete }) => {
+const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap, clientiMap, naviMap, luoghiMap, tipiGiornataMap, loading, onAdd, onEdit, onDelete }) => {
 
     const columns: GridColDef[] = [
         {
             field: 'dataInizio',
             headerName: 'Data',
-            width: 110,
-            valueGetter: (params: GridValueGetterParams) => {
-                const row = params.row as Partial<Rapportino>;
-                return row.dataInizio || row.data;
-            },
-            // --- APPLICAZIONE DELLA NUOVA LEGGE ---
+            width: 100,
+            valueGetter: (params: GridValueGetterParams) => params.row.dataInizio || params.row.data, // Fallback per legacy
             renderCell: (params: GridRenderCellParams) => {
                 const formattedDate = formatDateForDisplay(params.value);
                 const isInvalid = formattedDate === 'Data Invalida';
-                return (
-                    <Typography color={isInvalid ? 'error' : 'inherit'}>
-                        {formattedDate}
-                    </Typography>
-                );
-            },
-            type: 'date', // Mantenuto per l'ordinamento
-        },
-        {
-            field: 'cognome',
-            headerName: 'Cognome',
-            flex: 1,
-            valueGetter: (params: GridValueGetterParams) => {
-                 const tecnico = tecniciMap.get(params.row.tecnicoId);
-                 return tecnico ? tecnico.cognome : 'N/D';
+                return <Typography color={isInvalid ? 'error' : 'inherit'} variant="body2">{formattedDate}</Typography>;
             },
         },
         {
-            field: 'nome',
-            headerName: 'Nome',
-            flex: 1,
+            field: 'tecnico',
+            headerName: 'Tecnico',
+            flex: 1.2,
             valueGetter: (params: GridValueGetterParams) => {
                  const tecnico = tecniciMap.get(params.row.tecnicoId);
-                 return tecnico ? tecnico.nome : '';
+                 return tecnico ? `${tecnico.cognome} ${tecnico.nome}` : 'N/D';
+            },
+        },
+        {
+            field: 'descrizione',
+            headerName: 'Breve Descrizione',
+            flex: 2,
+            valueGetter: (params: GridValueGetterParams) => params.row.descrizione || '-',
+        },
+        {
+            field: 'tipoGiornata',
+            headerName: 'Tipo',
+            flex: 1,
+            valueGetter: (params: GridValueGetterParams) => {
+                const tipo = tipiGiornataMap.get(params.row.tipoGiornataId);
+                return tipo ? tipo.nome : '-';
+            }
+        },
+        {
+            field: 'cliente',
+            headerName: 'Cliente',
+            flex: 1.5,
+            valueGetter: (params: GridValueGetterParams) => {
+                const cliente = clientiMap.get(params.row.clienteId);
+                return cliente ? cliente.nome : '-';
             },
         },
         {
@@ -66,7 +74,8 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
             headerName: 'Nave',
             flex: 1.5,
             valueGetter: (params: GridValueGetterParams) => {
-                return naviMap.get(params.row.naveId) || '-';
+                const nave = naviMap.get(params.row.naveId);
+                return nave ? nave.nome : '-';
             },
         },
         {
@@ -74,23 +83,19 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
             headerName: 'Luogo',
             flex: 1.5,
             valueGetter: (params: GridValueGetterParams) => {
-                return luoghiMap.get(params.row.luogoId) || '-';
+                const luogo = luoghiMap.get(params.row.luogoId);
+                return luogo ? luogo.nome : '-';
             },
         },
         {
             field: 'oreTotali',
-            headerName: 'Ore',
+            headerName: 'Ore Totali',
             type: 'number',
-            width: 80,
+            width: 100,
             align: 'right',
             headerAlign: 'right',
-            valueGetter: (params: GridValueGetterParams) => {
-                return calculateTotalHours(params.row as Rapportino);
-            },
-            valueFormatter: (params) => {
-                const hours = params.value as number;
-                return hours.toFixed(2);
-            }
+            valueGetter: (params: GridValueGetterParams) => calculateTotalHours(params.row as Rapportino),
+            valueFormatter: (params) => `${(params.value as number).toFixed(2)}h`,
         },
         {
             field: 'actions',
@@ -103,17 +108,19 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
                         <IconButton size="small" onClick={() => onEdit(params.row as Rapportino)} color="primary"><Edit /></IconButton>
                     </Tooltip>
                     <Tooltip title="Elimina">
-                        <IconButton size="small" onClick={() => onDelete(params.id as string)} color="default"><Delete /></IconButton>
+                        <IconButton size="small" onClick={() => onDelete(params.id as string)} color="error"><Delete /></IconButton>
                     </Tooltip>
                 </Box>
             ),
         },
     ];
 
+    const safeRapportini = rapportini ? rapportini.filter(Boolean) : [];
+
     return (
-        <Paper sx={{ height: '75vh', width: '100%' }}>
+        <Paper sx={{ height: '78vh', width: '100%' }}>
             <DataGrid
-                rows={rapportini || []}
+                rows={safeRapportini}
                 columns={columns}
                 loading={loading}
                 slots={{ toolbar: CustomToolbar }}
@@ -123,15 +130,17 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
                       showQuickFilter: true,
                       quickFilterProps: { debounceMs: 500 },
                     },
-                  }}
+                }}
                 initialState={{
-                    pagination: { paginationModel: { pageSize: 50 } },
+                    pagination: { paginationModel: { pageSize: 100 } },
                     sorting: {
                         sortModel: [{ field: 'dataInizio', sort: 'desc' }],
                     },
                 }}
-                pageSizeOptions={[25, 50, 100]}
+                pageSizeOptions={[25, 50, 100, 200]}
                 disableRowSelectionOnClick
+                getRowHeight={() => 'auto'}
+                sx={{ '&.MuiDataGrid-root--densityCompact .MuiDataGrid-cell': { py: 1 } }}
             />
         </Paper>
     );

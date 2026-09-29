@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useGlobalStore } from '@/stores/globalStore';
-import { functions } from '@/config/firebase'; // RIPRISTINO: Torniamo all'importazione originale
+import { functions } from '@/config/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { getAuth, sendPasswordResetEmail } from "firebase/auth";
 import {
@@ -20,14 +20,13 @@ import EditIcon from '@mui/icons-material/Edit';
 
 import { NuovoUtenteDialog, ModificaUtenteDialog, ConfermaEliminazioneDialog } from './AmministratoriDialogs';
 
-// RIPRISTINO: Logica originale che usa l'istanza importata
 const gestisciUtenti = httpsCallable(functions, 'amministrazione_gestisciUtenti');
 const getAllUsers = httpsCallable(functions, 'admin_getAllUsers');
 
 interface User {
   id: string; // Firebase UID
-  nome: string | null;
-  email: string | null;
+  nome: string;
+  email: string;
   ruolo: 'admin' | 'user';
 }
 
@@ -46,10 +45,18 @@ const GestioneAmministratori = () => {
     setLoading(true);
     try {
       const result = await getAllUsers();
-      const usersData = Array.isArray(result.data)
-        ? (result.data as any[]).filter(user => user && user.id)
-        : [];
-      setUtenti(usersData as User[]);
+      let usersData: User[] = [];
+      if (Array.isArray(result.data)) {
+        usersData = (result.data as any[])
+          .filter(user => user && user.id) // Prima, filtra per assicurarti che gli oggetti base e l'ID esistano
+          .map(user => ({ // Poi, mappa per garantire che ogni oggetto sia completo
+            id: user.id,
+            nome: user.nome || 'Nome non disponibile',
+            email: user.email || 'Email non disponibile',
+            ruolo: user.ruolo === 'admin' ? 'admin' : 'user' // Imposta un default sicuro
+          }));
+      }
+      setUtenti(usersData);
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || "Impossibile caricare gli utenti." });
     } finally {

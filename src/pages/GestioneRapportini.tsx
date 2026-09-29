@@ -18,12 +18,14 @@ const GestioneRapportini = () => {
     const {
         rapportini,
         tecniciMap,
+        clientiMap,
         naviMap,
         luoghiMap,
         loading: isLoading, // Directly use the loading state from the store
     } = useRapportiniStore(state => ({
         rapportini: state.rapportini,
         tecniciMap: state.tecniciMap,
+        clientiMap: state.clientiMap,
         naviMap: state.naviMap,
         luoghiMap: state.luoghiMap,
         loading: state.loading,
@@ -65,6 +67,9 @@ const GestioneRapportini = () => {
         }
     };
     
+    // Filtra i rapportini undefined prima di passarli alla lista
+    const safeRapportini = rapportini.filter(r => r);
+
     return (
         <Box sx={{ p: 2 }}>
             <Typography variant="h4" gutterBottom sx={{ mb: 2 }}>
@@ -72,8 +77,9 @@ const GestioneRapportini = () => {
             </Typography>
             <Paper elevation={3} sx={{ p: 2 }}>
                 <RapportiniList 
-                    rapportini={rapportini}
+                    rapportini={safeRapportini}
                     tecniciMap={tecniciMap}
+                    clientiMap={clientiMap}
                     naviMap={naviMap}
                     luoghiMap={luoghiMap}
                     loading={isLoading}

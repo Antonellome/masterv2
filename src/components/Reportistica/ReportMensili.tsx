@@ -9,10 +9,10 @@ import isBetween from 'dayjs/plugin/isBetween';
 import 'dayjs/locale/it';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { db } from '@/db/db';
+import { db } from '@/db/database';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Tecnico, Nave, TipoGiornata, Rapportino } from '@/models/definitions';
-import PdfPreviewDialog from './PdfPreviewDialog'; // Importa il dialog
+import PdfPreviewDialog from './PdfPreviewDialog';
 
 dayjs.extend(isBetween);
 dayjs.locale('it');
@@ -212,18 +212,22 @@ const calculateReportData = (
 
 // --- COMPONENTE REACT --- 
 const ReportMensili: React.FC = () => {
-    const allRapportini = useLiveQuery(() => db.rapportini.toArray());
+    // BUG FIX: Carica tutti i rapportini, ma poi filtra quelli non eliminati (`isDeleted: false`)
+    const allRapportiniRaw = useLiveQuery(() => db.rapportini.toArray());
+    const allRapportini = useMemo(() => {
+        return (allRapportiniRaw || []).filter(r => r.isDeleted === false);
+    }, [allRapportiniRaw]);
+
     const allTecnici = useLiveQuery(() => db.tecnici.toArray());
     const allNavi = useLiveQuery(() => db.navi.toArray());
     const allTipiGiornata = useLiveQuery(() => db.tipiGiornata.toArray());
-    const masterDataLoading = !allRapportini || !allTecnici || !allNavi || !allTipiGiornata;
+    const masterDataLoading = !allRapportiniRaw || !allTecnici || !allNavi || !allTipiGiornata;
 
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
     const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs().year(2026).month(6));
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportData, setReportData] = useState<ReportData | null>(null);
     
-    // State per il PDF e il Dialog
     const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -241,6 +245,7 @@ const ReportMensili: React.FC = () => {
         setReportData(null);
         setTimeout(() => {
             try {
+                // Ora passiamo solo i rapportini validi alla funzione di calcolo
                 const data = calculateReportData(selectedTecnico, selectedMonth, allRapportini, allNavi, allTipiGiornata);
                 setReportData(data);
             } catch (error) {
@@ -258,7 +263,6 @@ const ReportMensili: React.FC = () => {
         setPdfUrl(null);
         setPdfDialogOpen(true);
 
-        // La generazione effettiva avviene in un timeout per permettere al dialog di aprirsi con il loader
         setTimeout(() => {
             const doc = new jsPDF();
             const title = `Report Mensile per ${selectedTecnico.cognome} ${selectedTecnico.nome} - ${selectedMonth.format('MMMM YYYY')}`;

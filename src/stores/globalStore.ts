@@ -10,36 +10,94 @@ import { Timestamp } from 'firebase/firestore';
 
 // --- UTILITIES ---
 const toDateSafe = (timestamp: any): Date | null => {
-    if (!timestamp) return null;
-    if (timestamp instanceof Timestamp) return timestamp.toDate();
-    if (timestamp && typeof timestamp.seconds === 'number') {
-        try {
-            return new Timestamp(timestamp.seconds, timestamp.nanoseconds || 0).toDate();
-        } catch (e) { return null; }
+    if (!timestamp) { // Gestisce null, undefined, 0, false, ''
+        return null;
     }
-    const d = new Date(timestamp);
-    return !isNaN(d.getTime()) ? d : null;
+
+    // Priorità 1: Istanza di Date di Javascript (caso più sicuro)
+    if (timestamp instanceof Date) {
+        return timestamp;
+    }
+
+    // Priorità 2: Istanza di Timestamp di Firestore
+    if (timestamp instanceof Timestamp) {
+        return timestamp.toDate();
+    }
+
+    // Priorità 3: Oggetti che assomigliano a un Timestamp ({ seconds: ... } o { _seconds: ... })
+    if (typeof timestamp === 'object' && timestamp !== null) {
+        const seconds = timestamp.seconds || timestamp._seconds;
+        // Verifica FONDAMENTALE: il campo dei secondi DEVE esistere ed essere un numero.
+        if (typeof seconds === 'number') {
+            const nanoseconds = timestamp.nanoseconds || timestamp._nanoseconds || 0;
+            try {
+                return new Timestamp(seconds, nanoseconds).toDate();
+            } catch (e) {
+                logger.error('Fallita conversione di un oggetto-Timestamp non valido', { data: timestamp, error: e });
+                return null; // Se la costruzione fallisce, è invalido
+            }
+        }
+    }
+
+    // Priorità 4: Stringhe o Numeri, come ultima risorsa
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+        const d = new Date(timestamp);
+        // Controlla se la data creata è valida. new Date('') o new Date('stringa-invalida') creano Invalid Date.
+        if (!isNaN(d.getTime())) {
+            return d;
+        }
+    }
+    
+    // Se nessuna delle condizioni precedenti ha funzionato, il formato è sconosciuto.
+    // logger.warn(`Formato data non riconosciuto e scartato:`, { value: timestamp, type: typeof timestamp });
+    return null;
 };
+
 
 const processRapportini = (docs: any[]): Rapportino[] => {
     return docs.map(docData => {
-        const finalDate = toDateSafe(docData.data) || toDateSafe(docData.dataInizio) || toDateSafe(docData.createdAt);
-        if (!finalDate) {
-            logger.warn(`Rapportino scartato (ID: ${docData.id}) per mancanza di data valida.`);
+        const data = toDateSafe(docData.data);
+        const createdAt = toDateSafe(docData.createdAt);
+        const updatedAt = toDateSafe(docData.updatedAt);
+
+        if (!data) {
+            // MODIFICA DIAGNOSTICA: Ora logghiamo il dato problematico.
+            logger.warn(`Rapportino scartato (ID: ${docData.id}) per campo 'data' invalido o non riconosciuto.`, { dataField: docData.data });
             return null;
         }
-        const createdAtDate = toDateSafe(docData.createdAt) || finalDate;
-        const updatedAtDate = toDateSafe(docData.updatedAt) || createdAtDate;
-        const cleanData: any = { ...docData };
-        delete cleanData.dataInizio;
 
         return {
-            ...cleanData,
             id: docData.id,
-            data: finalDate,
-            createdAt: createdAtDate,
-            updatedAt: updatedAtDate,
-            dettaglioOreTecnici: Array.isArray(cleanData.dettaglioOreTecnici) ? cleanData.dettaglioOreTecnici : [],
+            clienteId: docData.clienteId || '',
+            completed: docData.completed === true,
+            createdAt: createdAt || new Date(),
+            createdBy: docData.createdBy || '',
+            data: data,
+            descrizioneBreve: docData.descrizioneBreve || '',
+            dettaglioOreTecnici: Array.isArray(docData.dettaglioOreTecnici) ? docData.dettaglioOreTecnici : [],
+            dittaId: docData.dittaId || '',
+            firmaFirmatarioNome: docData.firmaFirmatarioNome || '',
+            firmaFirmatarioSocieta: docData.firmaFirmatarioSocieta || '',
+            firmaVettoriale: docData.firmaVettoriale || '',
+            includeTrasferta: docData.includeTrasferta === true,
+            isDeleted: docData.isDeleted === true,
+            isLocked: docData.isLocked === true,
+            lavoroEseguito: docData.lavoroEseguito || '',
+            luogoId: docData.luogoId || '',
+            materialiImpiegati: docData.materialiImpiegati || '',
+            naveId: docData.naveId || '',
+            nome: docData.nome || '',
+            ordineLavoro: docData.ordineLavoro || '',
+            oreLavoro: typeof docData.oreLavoro === 'number' ? docData.oreLavoro : 0,
+            presenze: Array.isArray(docData.presenze) ? docData.presenze : [],
+            tecnicoId: docData.tecnicoId || '',
+            tecnicoScriventeId: docData.tecnicoScriventeId || '',
+            tipoGiornataId: docData.tipoGiornataId || '',
+            trasfertaId: docData.trasfertaId || '',
+            updatedAt: updatedAt || createdAt || new Date(),
+            userId: docData.userId || '',
+            veicoloId: docData.veicoloId || '',
+            version: typeof docData.version === 'number' ? docData.version : 1,
         } as Rapportino;
     }).filter((r): r is Rapportino => r !== null);
 };
@@ -52,7 +110,7 @@ const collectionConfig = {
         { name: 'navi' as CollectionName, table: db.navi },
         { name: 'luoghi' as CollectionName, table: db.luoghi },
         { name: 'categorie' as CollectionName, table: db.categorie },
-        { name: 'tipi_giornata' as CollectionName, table: db.tipiGiornata },
+        { name: 'tipiGiornata' as CollectionName, table: db.tipiGiornata }, // ERRORE CORRETTO QUI
         { name: 'veicoli' as CollectionName, table: db.veicoli },
     ],
     rapportini: { name: 'rapportini' as CollectionName, table: db.rapportini, processor: processRapportini },
@@ -73,7 +131,7 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
   isAdmin: false,
   notification: { message: '', type: 'info', open: false },
   dialog: { open: false, title: '', message: '' },
-  silencedScadenze: [], // Stato per le scadenze silenziate
+  silencedScadenze: [],
 
   // AZIONI
   setAppLoading: (loading) => set({ appLoading: loading }),
@@ -188,7 +246,7 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
 
   logout: () => {
     logger.log(`GlobalStore: logout`);
-    set({ user: null, profile: null, isAdmin: false, isSyncing: false, silencedScadenze: [] }); // Resetta anche le scadenze silenziate
+    set({ user: null, profile: null, isAdmin: false, isSyncing: false, silencedScadenze: [] });
     Object.values(collectionConfig.anagrafiche).forEach(c => c.table.clear());
     collectionConfig.rapportini.table.clear();
     collectionConfig.checkins.table.clear();
