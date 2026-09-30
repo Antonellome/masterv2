@@ -224,7 +224,7 @@ const ReportMensili: React.FC = () => {
     const masterDataLoading = !allRapportiniRaw || !allTecnici || !allNavi || !allTipiGiornata;
 
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
-    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs().year(2026).month(6));
+    const [selectedMonth, setSelectedMonth] = useState<Dayjs>(dayjs());
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportData, setReportData] = useState<ReportData | null>(null);
     
