@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
     Paper, Typography, Button, Box, TextField, Autocomplete, Grid,
-    Snackbar, Alert, Tooltip, SvgIcon, CircularProgress
+    Snackbar, Alert, Tooltip, CircularProgress
 } from '@mui/material';
 import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
@@ -24,6 +24,7 @@ import ConfirmationDialog from '@/components/ConfirmationDialog';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DrawIcon from '@mui/icons-material/Draw';
 
 dayjs.locale('it');
 
@@ -34,12 +35,6 @@ const robustParseToDayjs = (date: any): Dayjs | null => {
     const d = dayjs(date);
     return d.isValid() ? d : null;
 };
-
-const SignatureIcon = (props: any) => (
-    <SvgIcon {...props} viewBox="0 0 24 24">
-        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 10.72 9.94 9 12 9c2.65 0 4.8 2.15 4.8 4.8v.1l.33.94h1.54c1.48 0 2.73 1.13 2.87 2.6H19v-1.5h-1.14l-1-1H14v-3.26c0-.63-.51-1.14-1.14-1.14S11.72 13.11 11.72 13.74V17h-1.43v-3.26c0-.63-.51-1.14-1.14-1.14S8 13.11 8 13.74V17H6.28v-2.21L5.5 14H4v2h1v1h1v-1h1v-1h.28v-3.26c0-.63-.51-1.14 1.14-1.14S11.72 13.11 11.72 13.74V17h1.14v-3.26c0-.63-.51-1.14 1.14-1.14S15.14 13.11 15.14 13.74V17h1.14v-1.14L17 15h1v2h1v1h-1v-1h-1v-1h-1v1h-1v1h-1v1h1v1h1v1h.86c1.73 0 3.14-1.41 3.14-3.14 0-1.62-1.25-2.95-2.86-3.04z" />
-    </SvgIcon>
-);
 
 interface FilterState {
     dataDa: Dayjs | null;
@@ -225,37 +220,109 @@ const RicercaAvanzata: React.FC = () => {
         { 
             field: 'tipoGiornataId', 
             headerName: 'Tipo Giornata', 
-            flex: 1, 
-            valueGetter: (p) => tipiGiornataMap.get(p?.row?.tipoGiornataId)?.nome || '-' 
+            flex: 1,
+            valueGetter: (p) => tipiGiornataMap.get(p?.row?.tipoGiornataId)?.nome,
+            renderCell: (params) => {
+                const tipoGiornata = params.row.tipoGiornataId ? tipiGiornataMap.get(params.row.tipoGiornataId) : null;
+                const nome = tipoGiornata?.nome;
+                if (!nome) {
+                    return <span style={{ color: '#9e9e9e' }}>—</span>;
+                }
+                return (
+                    <Tooltip title={nome} arrow>
+                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            {nome}
+                        </Box>
+                    </Tooltip>
+                );
+            }
         },
         {
              field: 'ordineLavoro', 
              headerName: 'Ordine Lavoro', 
              flex: 1, 
-             valueGetter: (p) => p?.row?.ordineLavoro || '-' 
+             renderCell: (params) => {
+                const value = params.row.ordineLavoro as string;
+                if (!value) {
+                    return <span style={{ color: '#9e9e9e' }}>—</span>;
+                }
+                return (
+                    <Tooltip title={value} arrow>
+                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            {value}
+                        </Box>
+                    </Tooltip>
+                );
+            }
         },
         { 
             field: 'naveId', 
             headerName: 'Nave', 
             flex: 1, 
-            valueGetter: (p) => naviMap.get(p?.row?.naveId)?.nome || '-' 
+            valueGetter: (p) => naviMap.get(p?.row?.naveId)?.nome,
+            renderCell: (params) => {
+                const nave = params.row.naveId ? naviMap.get(params.row.naveId) : null;
+                const nome = nave?.nome;
+                if (!nome) {
+                    return <span style={{ color: '#9e9e9e' }}>—</span>;
+                }
+                return (
+                    <Tooltip title={nome} arrow>
+                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            {nome}
+                        </Box>
+                    </Tooltip>
+                );
+            }
         },
         { 
             field: 'luogoId', 
             headerName: 'Luogo', 
             flex: 1, 
-            valueGetter: (p) => luoghiMap.get(p?.row?.luogoId)?.nome || '-' 
+            valueGetter: (p) => luoghiMap.get(p?.row?.luogoId)?.nome,
+            renderCell: (params) => {
+                const luogo = params.row.luogoId ? luoghiMap.get(params.row.luogoId) : null;
+                const nome = luogo?.nome;
+                if (!nome) {
+                    return <span style={{ color: '#9e9e9e' }}>—</span>;
+                }
+                return (
+                    <Tooltip title={nome} arrow>
+                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            {nome}
+                        </Box>
+                    </Tooltip>
+                );
+            }
         },
         { 
             field: 'clienteId', 
             headerName: 'Cliente', 
             flex: 1,
             valueGetter: (p) => {
-                if (!p?.row) return '-';
-                const nave = naviMap.get(p.row.naveId);
-                const luogo = luoghiMap.get(p.row.luogoId);
+                if (!p?.row) return '';
+                const nave = p.row.naveId ? naviMap.get(p.row.naveId) : null;
+                const luogo = p.row.luogoId ? luoghiMap.get(p.row.luogoId) : null;
                 const clienteId = nave?.clienteId || luogo?.clienteId;
-                return clienteId ? (clientiMap.get(clienteId)?.nome || 'N/D') : '-';
+                return clienteId ? (clientiMap.get(clienteId)?.nome || '') : '';
+            },
+            renderCell: (params) => {
+                const { row } = params;
+                const nave = row.naveId ? naviMap.get(row.naveId) : null;
+                const luogo = row.luogoId ? luoghiMap.get(row.luogoId) : null;
+                const clienteId = nave?.clienteId || luogo?.clienteId;
+                const nomeCliente = clienteId ? clientiMap.get(clienteId)?.nome : null;
+
+                if (!nomeCliente) {
+                    return <span style={{ color: '#9e9e9e' }}>—</span>;
+                }
+                return (
+                    <Tooltip title={nomeCliente} arrow>
+                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            {nomeCliente}
+                        </Box>
+                    </Tooltip>
+                );
             }
         },
         { 
@@ -267,16 +334,25 @@ const RicercaAvanzata: React.FC = () => {
             valueGetter: (p) => p?.row ? calculateTotalHours(p.row as Rapportino) : 0, 
             renderCell: p => formatOreLavoro(p.value)
         },
-        { 
-            field: 'hasFirma', 
-            headerName: 'Firma', 
-            width: 70, 
-            align: 'center', 
-            headerAlign: 'center', 
-            sortable: false, 
-            disableColumnMenu: true, 
-            valueGetter: (p) => !!p?.row?.firmaVettoriale, 
-            renderCell: (p) => <Tooltip title={p.value ? "Firmato" : "Non Firmato"}><span><SignatureIcon color={p.value ? 'success' : 'disabled'}/></span></Tooltip> 
+        {
+            field: 'hasFirma',
+            headerName: 'Firma',
+            width: 70,
+            align: 'center',
+            headerAlign: 'center',
+            sortable: false,
+            disableColumnMenu: true,
+            valueGetter: (params) => !!params?.row?.firmaVettoriale,
+            renderCell: (params) => {
+                const hasSignature = !!params?.row?.firmaVettoriale;
+                return (
+                    <Tooltip title={hasSignature ? "Firmato" : "Non Firmato"}>
+                        <span>
+                            <DrawIcon sx={{ color: hasSignature ? '#1976d2' : 'action.disabled' }} />
+                        </span>
+                    </Tooltip>
+                );
+            },
         },
         { 
             field: 'actions', 

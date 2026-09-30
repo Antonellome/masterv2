@@ -9,7 +9,6 @@ const DebugData = () => {
     const navi = useGlobalStore(state => state.navi);
     const ditte = useGlobalStore(state => state.ditte);
     const luoghi = useGlobalStore(state => state.luoghi);
-    const qualifiche = useGlobalStore(state => state.qualifiche);
     const webAppUsers = useGlobalStore(state => state.webAppUsers);
     
     // In questa versione, assumiamo che i dati siano già caricati 
@@ -29,7 +28,6 @@ const DebugData = () => {
             <ul>
                 <li>Tecnici: <strong>{tecnici.length}</strong></li>
                 <li>Utenti App: <strong>{webAppUsers.length}</strong></li>
-                <li>Qualifiche: <strong>{qualifiche.length}</strong></li>
                 <hr />
                 <li>Veicoli: <strong>{veicoli.length}</strong></li>
                 <li>Documenti: <strong>{documenti.length}</strong></li>

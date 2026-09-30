@@ -1,6 +1,7 @@
+
 import { createContext } from 'react';
 import type {
-    Tecnico, Veicolo, Nave, Luogo, Ditta, Categoria, TipoGiornata, Rapportino, Cliente, Documento, WebAppUser, Qualifica, CollectionName
+    Tecnico, Veicolo, Nave, Luogo, Ditta, Categoria, TipoGiornata, Rapportino, Cliente, Documento, WebAppUser, CollectionName
 } from '@/models/definitions';
 import type { DocumentData } from 'firebase/firestore';
 
@@ -17,7 +18,6 @@ export interface IDataContext {
     rapportini: Rapportino[];
     clienti: Cliente[];
     documenti: Documento[];
-    qualifiche: Qualifica[];
     webAppUsers?: WebAppUser[]; // Optional for now
 
     // --- Mapped Data for quick access ---
@@ -28,7 +28,6 @@ export interface IDataContext {
     ditteMap: Map<string, Ditta>;
     categorieMap: Map<string, Categoria>;
     tipiGiornataMap: Map<string, TipoGiornata>;
-    qualificheMap: Map<string, Qualifica>;
     webAppUsersMap?: Map<string, WebAppUser>; // Optional for now
 
     // --- Status ---

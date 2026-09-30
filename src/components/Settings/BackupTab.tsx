@@ -24,7 +24,7 @@ const BackupTab = () => {
             const collectionsToExport = [
                 "admins", "amministratori", "categorie", "checkin_giornalieri", "clienti",
                 "config", "configurazione", "datiAzienda", "ditte", "documenti", "globals",
-                "luoghi", "mail", "meta", "navi", "notifications", "notifiche", "qualifiche",
+                "luoghi", "mail", "meta", "navi", "notifications", "notifiche",
                 "rapportini", "sync", "sync_manifest", "sync_queue_errors", "system", "tecnici",
                 "tecniciQualifiche", "tecnici_data", "tipiGiornata", "tipologiaGiornate",
                 "utenti", "utenti_master", "veicoli", "versioning"
@@ -86,7 +86,7 @@ const BackupTab = () => {
                     const collectionsToImport = [
                         "admins", "amministratori", "categorie", "checkin_giornalieri", "clienti",
                         "config", "configurazione", "datiAzienda", "ditte", "documenti", "globals",
-                        "luoghi", "mail", "meta", "navi", "notifications", "notifiche", "qualifiche",
+                        "luoghi", "mail", "meta", "navi", "notifications", "notifiche",
                         "rapportini", "sync", "sync_manifest", "sync_queue_errors", "system", "tecnici",
                         "tecniciQualifiche", "tecnici_data", "tipiGiornata", "tipologiaGiornate",
                         "utenti", "utenti_master", "veicoli", "versioning"

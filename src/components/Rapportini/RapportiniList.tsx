@@ -15,7 +15,7 @@ interface RapportiniListProps {
     clientiMap: Map<string, Cliente>;
     naviMap: Map<string, Nave>;
     luoghiMap: Map<string, Luogo>;
-    tipiGiornataMap: Map<string, TipoGiornata>; // Aggiunto per completezza
+    tipiGiornataMap: Map<string, TipoGiornata>;
     loading: boolean;
     onAdd: () => void;
     onEdit: (rapportino: Rapportino) => void;
@@ -49,43 +49,25 @@ const RapportiniList: React.FC<RapportiniListProps> = ({ rapportini, tecniciMap,
             field: 'descrizione',
             headerName: 'Breve Descrizione',
             flex: 2,
-            valueGetter: (params: GridValueGetterParams) => params.row.descrizione || '-',
+            valueGetter: (params: GridValueGetterParams) => params.row.lavoroEseguito || '-',
         },
         {
             field: 'tipoGiornata',
             headerName: 'Tipo',
             flex: 1,
-            valueGetter: (params: GridValueGetterParams) => {
-                const tipo = tipiGiornataMap.get(params.row.tipoGiornataId);
-                return tipo ? tipo.nome : '-';
-            }
-        },
-        {
-            field: 'cliente',
-            headerName: 'Cliente',
-            flex: 1.5,
-            valueGetter: (params: GridValueGetterParams) => {
-                const cliente = clientiMap.get(params.row.clienteId);
-                return cliente ? cliente.nome : '-';
-            },
+            valueGetter: (params: GridValueGetterParams) => params.row.tipoGiornataNome || '-',
         },
         {
             field: 'nave',
             headerName: 'Nave',
             flex: 1.5,
-            valueGetter: (params: GridValueGetterParams) => {
-                const nave = naviMap.get(params.row.naveId);
-                return nave ? nave.nome : '-';
-            },
+            valueGetter: (params: GridValueGetterParams) => params.row.naveNome || '-',
         },
         {
             field: 'luogo',
             headerName: 'Luogo',
             flex: 1.5,
-            valueGetter: (params: GridValueGetterParams) => {
-                const luogo = luoghiMap.get(params.row.luogoId);
-                return luogo ? luogo.nome : '-';
-            },
+            valueGetter: (params: GridValueGetterParams) => params.row.luogoNome || '-',
         },
         {
             field: 'oreTotali',

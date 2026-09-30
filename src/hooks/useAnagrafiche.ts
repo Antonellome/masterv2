@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { db } from '../db/db'; // Importiamo il nostro database Dexie
 import { useCollectionData } from './useCollectionData';
-import type { Tecnico, Nave, Luogo, Categoria, Cliente, Ditta, TipoGiornata, Qualifica, Veicolo } from '../models/definitions';
+import type { Tecnico, Nave, Luogo, Categoria, Cliente, Ditta, TipoGiornata, Veicolo } from '../models/definitions';
 
 /**
  * Hook per recuperare TUTTE le anagrafiche di base dal database locale (Dexie).
@@ -17,11 +17,10 @@ export const useAnagrafiche = () => {
   const { data: clienti, loading: lClienti, error: eClienti } = useCollectionData<Cliente>('clienti');
   const { data: ditte, loading: lDitte, error: eDitte } = useCollectionData<Ditta>('ditte');
   const { data: tipiGiornata, loading: lTipiGiornata, error: eTipiGiornata } = useCollectionData<TipoGiornata>('tipiGiornata');
-  const { data: qualifiche, loading: lQualifiche, error: eQualifiche } = useCollectionData<Qualifica>('qualifiche');
   const { data: veicoli, loading: lVeicoli, error: eVeicoli } = useCollectionData<Veicolo>('veicoli');
 
-  const loading = lTecnici || lNavi || lLuoghi || lCategorie || lClienti || lDitte || lTipiGiornata || lQualifiche || lVeicoli;
-  const error = eTecnici || eNavi || eLuoghi || eCategorie || eClienti || eDitte || eTipiGiornata || eQualifiche || eVeicoli;
+  const loading = lTecnici || lNavi || lLuoghi || lCategorie || lClienti || lDitte || lTipiGiornata || lVeicoli;
+  const error = eTecnici || eNavi || eLuoghi || eCategorie || eClienti || eDitte || eTipiGiornata || eVeicoli;
 
   const anagrafiche = useMemo(() => ({
     tecnici: tecnici || [],
@@ -31,9 +30,8 @@ export const useAnagrafiche = () => {
     clienti: clienti || [],
     ditte: ditte || [],
     tipiGiornata: tipiGiornata || [],
-    qualifiche: qualifiche || [],
     veicoli: veicoli || [],
-  }), [tecnici, navi, luoghi, categorie, clienti, ditte, tipiGiornata, qualifiche, veicoli]);
+  }), [tecnici, navi, luoghi, categorie, clienti, ditte, tipiGiornata, veicoli]);
 
   return { ...anagrafiche, loading, error };
 };

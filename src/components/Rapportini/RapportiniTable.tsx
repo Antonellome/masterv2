@@ -20,6 +20,8 @@ interface RapportiniTableProps {
     onPrint: (rapportino: Rapportino) => void;
     tecniciMap: AnagraficaMap;
     naviMap: AnagraficaMap;
+    luoghiMap: AnagraficaMap;
+    tipiGiornataMap: AnagraficaMap;
     loading: boolean;
 }
 
@@ -44,6 +46,8 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
     onPrint,
     tecniciMap,
     naviMap,
+    luoghiMap,
+    tipiGiornataMap,
     loading
 }) => {
 
@@ -88,6 +92,15 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
                 );
             }
         },
+        {
+            field: 'tipoGiornata',
+            headerName: 'Tipo Giornata',
+            width: 150,
+            renderCell: (params) => {
+                const nomeTipoGiornata = getNomeAnagrafica(tipiGiornataMap, params.row?.tipoGiornataId);
+                return <Typography variant="body2" noWrap>{nomeTipoGiornata}</Typography>;
+            }
+        },
         { 
             field: 'lavoroEseguito', 
             headerName: 'Descrizione', 
@@ -105,6 +118,18 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
                     return <MissingDataChip label="Nave non trovata" />;
                 }
                 return <Typography variant="body2" noWrap>{nomeNave}</Typography>;
+            }
+        },
+        {
+            field: 'luogoNome',
+            headerName: 'Luogo',
+            width: 180,
+            renderCell: (params) => {
+                const nomeLuogo = getNomeAnagrafica(luoghiMap, params.row?.luogoId);
+                if (nomeLuogo === 'Sconosciuto' || nomeLuogo === 'ID Mancante') {
+                    return <MissingDataChip label="Luogo non trovato" />;
+                }
+                return <Typography variant="body2" noWrap>{nomeLuogo}</Typography>;
             }
         },
         {
@@ -162,4 +187,4 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
     );
 };
 
-export default RapportiniTable;
+export default RapportiniTable; 
