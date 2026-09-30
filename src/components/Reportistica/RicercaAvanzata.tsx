@@ -18,7 +18,6 @@ import { formatOreLavoro } from '@/utils/formatters';
 import { Anagrafica, Nave, Cliente, Luogo, TipoGiornata, Rapportino } from '@/models/definitions';
 import { rapportinoCloudService } from '@/services/rapportinoCloudService';
 import { useGlobalStore } from '@/stores/globalStore';
-import { calculateTotalHours } from '@/utils/hoursCalculator';
 
 import ConfirmationDialog from '@/components/ConfirmationDialog';
 import EditIcon from '@mui/icons-material/Edit';
@@ -146,6 +145,37 @@ const RicercaAvanzata: React.FC = () => {
     }, []);
 
     const resetFilters = useCallback(() => setFilters({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' }), []);
+
+    const calculateTotalHoursForRow = (row: Rapportino | undefined) => {
+        if (!row) return 0;
+
+        if (row.dettaglioOreTecnici && Array.isArray(row.dettaglioOreTecnici) && row.dettaglioOreTecnici.length > 0) {
+            return row.dettaglioOreTecnici.reduce((total, tecnico) => {
+                const ore = parseFloat(tecnico?.ore as any);
+                return total + (isNaN(ore) ? 0 : ore);
+            }, 0);
+        }
+
+        const oreLavoro = parseFloat(row.oreLavoro as any);
+        return isNaN(oreLavoro) ? 0 : oreLavoro;
+    };
+
+    const getAuthorHours = (row: Rapportino | undefined) => {
+        if (!row || !row.dettaglioOreTecnici || row.dettaglioOreTecnici.length === 0) {
+            // Fallback for older data or single-technician reports
+            const authorId = row?.tecnicoScriventeId || row?.tecnicoId;
+            if (row?.tecnicoId === authorId) {
+                const oreLavoro = parseFloat(row.oreLavoro as any);
+                return isNaN(oreLavoro) ? 0 : oreLavoro;
+            }
+            return 0;
+        }
+
+        const authorId = row.tecnicoScriventeId || row.tecnicoId;
+        const authorDetail = row.dettaglioOreTecnici.find(d => d.tecnicoId === authorId);
+        const ore = parseFloat(authorDetail?.ore as any);
+        return isNaN(ore) ? 0 : ore;
+    };
 
     const columns: GridColDef<(typeof rapportini)[0]>[] = useMemo(() => [
         { 
@@ -325,14 +355,37 @@ const RicercaAvanzata: React.FC = () => {
                 );
             }
         },
+        {
+            field: 'oreTecnico',
+            headerName: 'Ore Tecnico',
+            width: 110,
+            align: 'right',
+            headerAlign: 'right',
+            renderCell: (params) => {
+                const authorHours = getAuthorHours(params.row as Rapportino);
+                return formatOreLavoro(authorHours);
+            },
+            sortComparator: (v1, v2, cellParams1, cellParams2) => {
+                const authorHours1 = getAuthorHours(cellParams1.row as Rapportino);
+                const authorHours2 = getAuthorHours(cellParams2.row as Rapportino);
+                return authorHours1 - authorHours2;
+            }
+        },
         { 
             field: 'oreTotali', 
             headerName: 'Ore Totali', 
             width: 100, 
             align: 'right', 
             headerAlign: 'right', 
-            valueGetter: (p) => p?.row ? calculateTotalHours(p.row as Rapportino) : 0, 
-            renderCell: p => formatOreLavoro(p.value)
+            renderCell: (params) => {
+                const totalHours = calculateTotalHoursForRow(params.row as Rapportino);
+                return formatOreLavoro(totalHours);
+            },
+            sortComparator: (v1, v2, cellParams1, cellParams2) => {
+                const totalHours1 = calculateTotalHoursForRow(cellParams1.row as Rapportino);
+                const totalHours2 = calculateTotalHoursForRow(cellParams2.row as Rapportino);
+                return totalHours1 - totalHours2;
+            }
         },
         {
             field: 'hasFirma',
