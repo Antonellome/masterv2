@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
     Paper, Typography, Button, Box, TextField, Autocomplete, Grid,
-    Snackbar, Alert, Tooltip, CircularProgress
+    Snackbar, Alert, Tooltip, CircularProgress, Switch, FormControlLabel
 } from '@mui/material';
 import { DataGrid, GridToolbar, GridColDef, GridRowParams, GridActionsCellItem } from '@mui/x-data-grid';
 import { itIT } from '@mui/x-data-grid/locales';
@@ -23,9 +23,12 @@ import ConfirmationDialog from '@/components/ConfirmationDialog';
 import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import DeleteIcon from '@mui/icons-material/Delete';
+import RestoreFromTrashIcon from '@mui/icons-material/RestoreFromTrash';
 import DrawIcon from '@mui/icons-material/Draw';
 
 dayjs.locale('it');
+
+const DELETED_FIELD_APP_TECNICI = 'cancellato';
 
 const robustParseToDayjs = (date: any): Dayjs | null => {
     if (!date) return null;
@@ -33,6 +36,11 @@ const robustParseToDayjs = (date: any): Dayjs | null => {
     if (typeof date.toDate === 'function') return dayjs(date.toDate());
     const d = dayjs(date);
     return d.isValid() ? d : null;
+};
+
+const isRowDeleted = (row: any) => {
+    if (!row) return false;
+    return row.isDeleted === true || row[DELETED_FIELD_APP_TECNICI] === true;
 };
 
 interface FilterState {
@@ -52,6 +60,7 @@ const safeSortCognomeNome = (a: any, b: any) => `${a?.cognome || ''} ${a?.nome |
 const RicercaAvanzata: React.FC = () => {
     const navigate = useNavigate();
     const isSyncing = useGlobalStore(state => state.isSyncing);
+    const [showDeleted, setShowDeleted] = useState(false);
 
     const tecnici = useLiveQuery(() => db.tecnici.toArray(), []);
     const navi = useLiveQuery(() => db.navi.toArray(), []);
@@ -65,12 +74,16 @@ const RicercaAvanzata: React.FC = () => {
     const rapportini = useMemo(() => {
         if (isLoading || !allRapportiniRaw) return [];
         return allRapportiniRaw
-            .filter(r => r && r.id && !r.isDeleted)
+            .filter(r => {
+                if (!r || !r.id) return false;
+                if (showDeleted) return true;
+                return !isRowDeleted(r);
+            })
             .map(r => ({
                 ...r,
                 data: robustParseToDayjs(r.data)?.toDate() ?? null,
             }));
-    }, [allRapportiniRaw, isLoading]);
+    }, [allRapportiniRaw, isLoading, showDeleted]);
 
     const { tecniciMap, naviMap, luoghiMap, clientiMap, tipiGiornataMap } = useMemo(() => ({
         tecniciMap: new Map((tecnici || []).map(t => [t.id, t])),
@@ -88,6 +101,7 @@ const RicercaAvanzata: React.FC = () => {
 
     const [filters, setFilters] = useState<FilterState>({ dataDa: null, dataA: null, tecnico: null, nave: null, cliente: null, tipoGiornata: null, luogo: null, ordineLavoro: '' });
     const [rowToDelete, setRowToDelete] = useState<string | null>(null);
+    const [rowToRestore, setRowToRestore] = useState<string | null>(null);
     const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' } | null>(null);
 
     const filteredRapportini = useMemo(() => {
@@ -121,22 +135,44 @@ const RicercaAvanzata: React.FC = () => {
 
     const handleEdit = (id: string) => navigate(`/rapportino/edit/${id}`);
     const handleDeleteRequest = useCallback((id: string) => setRowToDelete(id), []);
+    const handleRestoreRequest = useCallback((id: string) => setRowToRestore(id), []);
 
     const handleConfirmDelete = async () => {
         if (!rowToDelete) return;
         const id = rowToDelete;
         setRowToDelete(null);
         try {
-            await rapportinoCloudService.delete(id);
-            useGlobalStore.getState().syncCollectionByName('rapportini');
+            await db.rapportini.update(id, { isDeleted: true, [DELETED_FIELD_APP_TECNICI]: true });
             setSnackbar({ open: true, message: 'Rapportino archiviato.', severity: 'success' });
+            rapportinoCloudService.delete(id).catch(err => {
+                console.error("Cloud delete failed:", err);
+                db.rapportini.update(id, { isDeleted: false, [DELETED_FIELD_APP_TECNICI]: false });
+                setSnackbar({ open: true, message: 'Archiviazione fallita sul server.', severity: 'error' });
+            });
+        } catch (error: any) {
+            setSnackbar({ open: true, message: error.message || "Errore.", severity: 'error' });
+        }
+    };
+    
+    const handleConfirmRestore = async () => {
+        if (!rowToRestore) return;
+        const id = rowToRestore;
+        setRowToRestore(null);
+        try {
+            await db.rapportini.update(id, { isDeleted: false, [DELETED_FIELD_APP_TECNICI]: false });
+            setSnackbar({ open: true, message: 'Rapportino ripristinato.', severity: 'success' });
+            rapportinoCloudService.restore(id).catch(err => {
+                 console.error("Cloud restore failed:", err);
+                 db.rapportini.update(id, { isDeleted: true, [DELETED_FIELD_APP_TECNICI]: true });
+                 setSnackbar({ open: true, message: 'Ripristino fallito sul server.', severity: 'error' });
+            });
         } catch (error: any) {
             setSnackbar({ open: true, message: error.message || "Errore.", severity: 'error' });
         }
     };
 
     const handleRowClick = (params: GridRowParams) => {
-        if (params.field === 'actions' || params.field === '__check__') return;
+        if (params.field === 'actions' || params.field === '__check__' || isRowDeleted(params.row)) return;
         navigate(`/rapportino/edit/${params.id}`);
     };
 
@@ -162,7 +198,6 @@ const RicercaAvanzata: React.FC = () => {
 
     const getAuthorHours = (row: Rapportino | undefined) => {
         if (!row || !row.dettaglioOreTecnici || row.dettaglioOreTecnici.length === 0) {
-            // Fallback for older data or single-technician reports
             const authorId = row?.tecnicoScriventeId || row?.tecnicoId;
             if (row?.tecnicoId === authorId) {
                 const oreLavoro = parseFloat(row.oreLavoro as any);
@@ -183,7 +218,8 @@ const RicercaAvanzata: React.FC = () => {
             headerName: 'Data', 
             width: 110, 
             type: 'date',
-            renderCell: (p) => p.value ? dayjs(p.value).format("DD/MM/YYYY") : '' 
+            renderCell: (p) => p.value ? dayjs(p.value).format("DD/MM/YYYY") : '', 
+            cellClassName: (params) => isRowDeleted(params.row) ? 'deleted-date' : ''
         },
         {
             field: 'tecnici',
@@ -407,18 +443,23 @@ const RicercaAvanzata: React.FC = () => {
                 );
             },
         },
-        { 
+        {
             field: 'actions', 
             type: 'actions', 
             headerName: 'Azioni', 
             width: 120, 
-            getActions: ({ id }) => [
-                <GridActionsCellItem icon={<EditIcon/>} label="Modifica" onClick={() => handleEdit(id as string)} showInMenu/>, 
-                <GridActionsCellItem icon={<PrintIcon/>} label="Stampa/PDF" onClick={()=>{}} showInMenu/>, 
-                <GridActionsCellItem icon={<DeleteIcon color="error"/>} label="Archivia" onClick={() => handleDeleteRequest(id as string)} showInMenu/>
-            ] 
+            getActions: (params) => {
+                if (isRowDeleted(params.row)) {
+                    return [<GridActionsCellItem icon={<RestoreFromTrashIcon />} label="Ripristina" onClick={() => handleRestoreRequest(params.id as string)} showInMenu/>];
+                }
+                return [
+                    <GridActionsCellItem icon={<EditIcon/>} label="Modifica" onClick={() => handleEdit(params.id as string)} showInMenu/>, 
+                    <GridActionsCellItem icon={<PrintIcon/>} label="Stampa/PDF" onClick={()=>{}} showInMenu/>, 
+                    <GridActionsCellItem icon={<DeleteIcon color="error"/>} label="Archivia" onClick={() => handleDeleteRequest(params.id as string)} showInMenu/>
+                ];
+            }
         },
-    ], [handleEdit, handleDeleteRequest, tecniciMap, tipiGiornataMap, naviMap, luoghiMap, clientiMap]);
+    ], [handleEdit, handleDeleteRequest, handleRestoreRequest, tecniciMap, tipiGiornataMap, naviMap, luoghiMap, clientiMap]);
     
     const getOptionLabel = (option: any, field = 'nome') => {
         if (typeof option === 'string') return option;
@@ -431,7 +472,13 @@ const RicercaAvanzata: React.FC = () => {
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1, sm: 2 }, gap: 2 }}>
                 <Paper elevation={2} sx={{ p: 2, flexShrink: 0 }}>
-                    <Typography variant="h6" sx={{ mb: 2 }}>Filtri Ricerca</Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant="h6">Filtri Ricerca</Typography>
+                        <FormControlLabel
+                            control={<Switch checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />}
+                            label="Mostra archiviati"
+                        />
+                    </Box>
                      <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="Da" value={filters.dataDa} onChange={d => handleFilterChange('dataDa', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
                         <Grid item xs={12} sm={6} md={3}><DatePicker label="A" value={filters.dataA} onChange={d => handleFilterChange('dataA', d)} slotProps={{ textField: { fullWidth: true, size: 'small' } }} /></Grid>
@@ -464,12 +511,17 @@ const RicercaAvanzata: React.FC = () => {
                             pageSizeOptions={[25, 50, 100, 200]} 
                             density="compact" 
                             onRowClick={handleRowClick} 
-                            sx={{ border: 0, '& .MuiDataGrid-row': { cursor: 'pointer' } }} 
+                            sx={{ 
+                                border: 0, 
+                                '& .MuiDataGrid-row': { cursor: 'pointer' },
+                                '& .deleted-date': { color: 'red' }
+                            }} 
                         />
                     )}
                 </Paper>
                 
                 <ConfirmationDialog open={!!rowToDelete} onClose={() => setRowToDelete(null)} onConfirm={handleConfirmDelete} title="Conferma Archiviazione" description={"Sei sicuro di voler archiviare questo rapportino?"} />
+                <ConfirmationDialog open={!!rowToRestore} onClose={() => setRowToRestore(null)} onConfirm={handleConfirmRestore} title="Conferma Ripristino" description={"Sei sicuro di voler ripristinare questo rapportino?"} />
                 {snackbar && <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(null)}><Alert onClose={() => setSnackbar(null)} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>}
             </Box>
         </LocalizationProvider>
