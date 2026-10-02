@@ -50,6 +50,7 @@ const menuItems = [
 ];
 
 const pageTitles: { [key: string]: string } = {
+    '/': 'Dashboard',
     '/dashboard': 'Dashboard', 
     '/reportistica': 'Reportistica',
     '/tecnici': 'Tecnici',
@@ -78,6 +79,7 @@ const MainLayout = () => {
     const { activeScadenzeCount, overallStatus } = useScadenze();
 
     const getPageTitle = (path: string) => {
+        if (path === '/') return pageTitles['/'];
         const basePath = path.split('/').slice(0, 2).join('/');
         return pageTitles[basePath] || '';
     };

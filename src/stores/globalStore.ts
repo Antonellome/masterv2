@@ -3,53 +3,41 @@ import { create } from 'zustand';
 import { logger } from '@/utils/logger';
 import { db } from '@/db/database';
 import { getDocs, collection } from 'firebase/firestore';
-import { db as firestoreDb } from '@/config/firebase';
+import { db as firestoreDb, auth } from '@/config/firebase';
+import { signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import type { GlobalState, GlobalActions, NotificationType, DialogState, CollectionName, Rapportino } from '@/models/definitions';
 import { Timestamp } from 'firebase/firestore';
 
 // --- UTILITIES ---
 const toDateSafe = (timestamp: any): Date | null => {
-    if (!timestamp) { // Gestisce null, undefined, 0, false, ''
+    if (!timestamp) { 
         return null;
     }
-
-    // Priorità 1: Istanza di Date di Javascript (caso più sicuro)
     if (timestamp instanceof Date) {
         return timestamp;
     }
-
-    // Priorità 2: Istanza di Timestamp di Firestore
     if (timestamp instanceof Timestamp) {
         return timestamp.toDate();
     }
-
-    // Priorità 3: Oggetti che assomigliano a un Timestamp ({ seconds: ... } o { _seconds: ... })
     if (typeof timestamp === 'object' && timestamp !== null) {
         const seconds = timestamp.seconds || timestamp._seconds;
-        // Verifica FONDAMENTALE: il campo dei secondi DEVE esistere ed essere un numero.
         if (typeof seconds === 'number') {
             const nanoseconds = timestamp.nanoseconds || timestamp._nanoseconds || 0;
             try {
                 return new Timestamp(seconds, nanoseconds).toDate();
             } catch (e) {
                 logger.error('Fallita conversione di un oggetto-Timestamp non valido', { data: timestamp, error: e });
-                return null; // Se la costruzione fallisce, è invalido
+                return null; 
             }
         }
     }
-
-    // Priorità 4: Stringhe o Numeri, come ultima risorsa
     if (typeof timestamp === 'string' || typeof timestamp === 'number') {
         const d = new Date(timestamp);
-        // Controlla se la data creata è valida. new Date('') o new Date('stringa-invalida') creano Invalid Date.
         if (!isNaN(d.getTime())) {
             return d;
         }
     }
-    
-    // Se nessuna delle condizioni precedenti ha funzionato, il formato è sconosciuto.
-    // logger.warn(`Formato data non riconosciuto e scartato:`, { value: timestamp, type: typeof timestamp });
     return null;
 };
 
@@ -61,8 +49,7 @@ const processRapportini = (docs: any[]): Rapportino[] => {
         const updatedAt = toDateSafe(docData.updatedAt);
 
         if (!data) {
-            // MODIFICA DIAGNOSTICA: Ora logghiamo il dato problematico.
-            logger.warn(`Rapportino scartato (ID: ${docData.id}) per campo 'data' invalido o non riconosciuto.`, { dataField: docData.data });
+            logger.warn(`Rapportino scartato (ID: ${docData.id}) per campo \'data\' invalido o non riconosciuto.`, { dataField: docData.data });
             return null;
         }
 
@@ -110,7 +97,7 @@ const collectionConfig = {
         { name: 'navi' as CollectionName, table: db.navi },
         { name: 'luoghi' as CollectionName, table: db.luoghi },
         { name: 'categorie' as CollectionName, table: db.categorie },
-        { name: 'tipiGiornata' as CollectionName, table: db.tipiGiornata }, // ERRORE CORRETTO QUI
+        { name: 'tipiGiornata' as CollectionName, table: db.tipiGiornata },
         { name: 'veicoli' as CollectionName, table: db.veicoli },
     ],
     rapportini: { name: 'rapportini' as CollectionName, table: db.rapportini, processor: processRapportini },
@@ -244,13 +231,21 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
     }
   },
 
-  logout: () => {
-    logger.log(`GlobalStore: logout`);
+  logout: async () => {
+    logger.log(`GlobalStore: Chiamata a signOut di Firebase...`);
+    await signOut(auth);
+    logger.log(`GlobalStore: Logout da Firebase completato. Pulizia stato e DB locale.`);
     set({ user: null, profile: null, isAdmin: false, isSyncing: false, silencedScadenze: [] });
-    Object.values(collectionConfig.anagrafiche).forEach(c => c.table.clear());
-    collectionConfig.rapportini.table.clear();
-    collectionConfig.checkins.table.clear();
-    collectionConfig.documenti.table.clear();
+    const tablesToClear = [
+        ...Object.values(collectionConfig.anagrafiche).map(c => c.table),
+        collectionConfig.rapportini.table,
+        collectionConfig.checkins.table,
+        collectionConfig.documenti.table
+    ];
+    for (const table of tablesToClear) {
+        await table.clear();
+    }
+    logger.log('GlobalStore: Tutte le tabelle locali sono state pulite.');
   },
 }));
 

@@ -44,17 +44,131 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.master_resetPasswordTecnico = exports.master_gestisciAnagrafica = exports.master_gestisciTecnico = void 0;
+exports.master_resetPasswordTecnico = exports.master_gestisciAnagrafica = exports.master_gestisciTecnico = exports.amministrazione_gestisciUtenti = exports.admin_getAllUsers = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const logger = __importStar(require("firebase-functions/logger"));
 const firebase_admin_1 = require("./firebase-admin");
+// Helper function to check for admin privileges
 const checkAdmin = async (uid) => {
-    var _a;
     const user = await firebase_admin_1.auth.getUser(uid);
-    if (((_a = user.customClaims) === null || _a === void 0 ? void 0 : _a['admin']) !== true) {
+    const customClaims = (user.customClaims || {});
+    if (customClaims.admin !== true) {
+        logger.warn(`User ${uid} attempted an admin action without privileges.`);
         throw new https_1.HttpsError("permission-denied", "This operation is restricted to administrators.");
     }
 };
+// ===============================================================================================
+// FUNZIONI PER GESTIONE AMMINISTRATORI (CORRETTE)
+// ===============================================================================================
+/**
+ * Recupera l'elenco dei soli utenti del pannello (non i tecnici).
+ * Filtra gli utenti in base all'esistenza del custom claim 'admin'.
+ * Richiede privilegi di amministratore.
+ */
+exports.admin_getAllUsers = (0, https_1.onCall)({ region: "europe-west6", cors: true }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication is required to perform this action.");
+    }
+    await checkAdmin(request.auth.uid);
+    try {
+        const listUsersResult = await firebase_admin_1.auth.listUsers();
+        // FILTRA E MAPPA:
+        // 1. Filtra per tenere SOLO gli utenti che hanno il claim 'admin' definito.
+        //    Questo esclude i tecnici, che non hanno questo claim.
+        // 2. Mappa i dati per il frontend.
+        const users = listUsersResult.users
+            .filter(user => {
+            const customClaims = (user.customClaims || {});
+            return customClaims.admin !== undefined;
+        })
+            .map(user => {
+            const customClaims = (user.customClaims || {});
+            return {
+                id: user.uid,
+                nome: user.displayName || 'Nome non disponibile',
+                email: user.email || 'Email non disponibile',
+                ruolo: customClaims.admin === true ? 'admin' : 'user',
+            };
+        });
+        logger.info(`[admin_getAllUsers] Found ${users.length} panel users for admin ${request.auth.uid}.`);
+        return users;
+    }
+    catch (e) {
+        logger.error(`[admin_getAllUsers] Critical error while fetching users:`, e);
+        throw new https_1.HttpsError("internal", e.message || "An internal server error occurred while fetching the user list.");
+    }
+});
+/**
+ * Gestisce le operazioni CRUD sugli utenti (Creazione, Aggiornamento, Eliminazione, Cambio Ruolo).
+ * Richiede privilegi di amministratore.
+ */
+exports.amministrazione_gestisciUtenti = (0, https_1.onCall)({ region: "europe-west6", cors: true }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication is required to perform this action.");
+    }
+    await checkAdmin(request.auth.uid);
+    const _a = request.data, { action } = _a, data = __rest(_a, ["action"]);
+    logger.info(`[amministrazione_gestisciUtenti] Received action: \'${action}\'`, { data });
+    try {
+        switch (action) {
+            case 'createUser': {
+                const { email, nome, password } = data;
+                if (!email || !nome || !password) {
+                    throw new https_1.HttpsError("invalid-argument", "Email, nome, and password are required for user creation.");
+                }
+                const newUserRecord = await firebase_admin_1.auth.createUser({ email, password, displayName: nome });
+                // I nuovi utenti nascono come utenti standard (NON admin) del pannello.
+                // Questo claim 'admin' li distingue dai tecnici.
+                await firebase_admin_1.auth.setCustomUserClaims(newUserRecord.uid, { admin: false });
+                logger.info(`User ${newUserRecord.uid} created successfully by ${request.auth.uid}.`);
+                return { success: true, id: newUserRecord.uid };
+            }
+            case 'updateUser': {
+                const { uid, nome: newName } = data;
+                if (!uid || !newName) {
+                    throw new https_1.HttpsError("invalid-argument", "User UID and a new name (nome) are required for update.");
+                }
+                await firebase_admin_1.auth.updateUser(uid, { displayName: newName });
+                logger.info(`User ${uid} was updated by ${request.auth.uid}.`);
+                return { success: true };
+            }
+            case 'deleteUser': {
+                const { uid: deleteUid } = data;
+                if (!deleteUid) {
+                    throw new https_1.HttpsError("invalid-argument", "User UID is required for deletion.");
+                }
+                if (deleteUid === request.auth.uid) {
+                    throw new https_1.HttpsError("permission-denied", "Administrators cannot delete their own account.");
+                }
+                await firebase_admin_1.auth.deleteUser(deleteUid);
+                logger.info(`User ${deleteUid} was deleted by ${request.auth.uid}.`);
+                return { success: true };
+            }
+            case 'toggleRole': {
+                const { uid: roleUid, role } = data;
+                if (!roleUid || (role !== 'admin' && role !== 'user')) {
+                    throw new https_1.HttpsError("invalid-argument", "User UID and a valid role ('admin' or 'user') are required.");
+                }
+                if (roleUid === request.auth.uid) {
+                    throw new https_1.HttpsError("permission-denied", "Administrators cannot change their own role.");
+                }
+                await firebase_admin_1.auth.setCustomUserClaims(roleUid, { admin: role === 'admin' });
+                logger.info(`Role for user ${roleUid} was changed to \'${role}\' by ${request.auth.uid}.`);
+                return { success: true };
+            }
+            default:
+                logger.warn(`[amministrazione_gestisciUtenti] Unsupported action called: \'${action}\'`);
+                throw new https_1.HttpsError("invalid-argument", `The action \'${action}\' is not supported.`);
+        }
+    }
+    catch (e) {
+        logger.error(`[amministrazione_gestisciUtenti] Critical error on action \'${action}\'':`, e);
+        throw new https_1.HttpsError("internal", e.message || `An internal error occurred while performing the action: ${action}.`);
+    }
+});
+// ===============================================================================================
+// FUNZIONI ESISTENTI (Lasciate intatte)
+// ===============================================================================================
 exports.master_gestisciTecnico = (0, https_1.onCall)({ region: "europe-west6", cors: true }, async (request) => {
     var _a;
     if (!request.auth) {
@@ -66,8 +180,7 @@ exports.master_gestisciTecnico = (0, https_1.onCall)({ region: "europe-west6", c
     if (!operation || !data) {
         throw new https_1.HttpsError("invalid-argument", "Incomplete payload.");
     }
-    logger.info(`[master_gestisciTecnico] Executing: '${operation}' with payload:`, data);
-    // --- LOGICA DI CREAZIONE --- 
+    logger.info(`[master_gestisciTecnico] Executing: \'${operation}\' with payload:`, data);
     if (operation === 'add') {
         if (!data.email || !data.password || !data.nome || !data.cognome) {
             throw new https_1.HttpsError("invalid-argument", "Email, password, nome, and cognome are required for creation.");
@@ -79,20 +192,17 @@ exports.master_gestisciTecnico = (0, https_1.onCall)({ region: "europe-west6", c
                 displayName: `${data.nome} ${data.cognome}`,
                 disabled: false,
             });
+            // I tecnici NON hanno il claim 'admin'
             const { password } = data, firestoreData = __rest(data, ["password"]);
             const dataToSave = Object.assign(Object.assign({}, firestoreData), { id: newUserRecord.uid, attivo: true, appAccess: true, accessoApp: true, createdAt: new Date(), updatedAt: new Date() });
-            // +++ LOG DI DEBUG AGGIUNTO +++
-            logger.info("[master_gestisciTecnico] Attempting to save data to Firestore:", dataToSave);
             await firebase_admin_1.db.collection('tecnici').doc(newUserRecord.uid).set(dataToSave);
-            logger.info(`Successfully created user ${newUserRecord.uid}`);
+            logger.info(`Successfully created technician ${newUserRecord.uid}`);
             return { success: true, id: newUserRecord.uid };
         }
         catch (e) {
-            // +++ LOG DI DEBUG AGGIUNTO +++
-            logger.error(`Error during 'add' execution. Full error object:`, e);
+            logger.error(`Error during \'add\' execution:`, e);
             throw new https_1.HttpsError("internal", e.message);
         }
-        // --- LOGICA DI AGGIORNAMENTO ---
     }
     else if (operation === 'update') {
         if (!data.id) {
@@ -108,10 +218,9 @@ exports.master_gestisciTecnico = (0, https_1.onCall)({ region: "europe-west6", c
             return { success: true, id: id };
         }
         catch (e) {
-            logger.error(`Error during 'update' execution:`, e);
+            logger.error(`Error during \'update\' execution:`, e);
             throw new https_1.HttpsError("internal", e.message);
         }
-        // --- LOGICA DI STATO --- 
     }
     else if (operation === 'toggle-attivo') {
         if (!data.id || typeof data.attivo !== 'boolean') {
@@ -129,10 +238,9 @@ exports.master_gestisciTecnico = (0, https_1.onCall)({ region: "europe-west6", c
             return { success: true };
         }
         catch (e) {
-            logger.error(`Error during 'toggle-attivo' execution:`, e);
+            logger.error(`Error during \'toggle-attivo\' execution:`, e);
             throw new https_1.HttpsError("internal", e.message);
         }
-        // --- LOGICA DI ACCESSO ---
     }
     else if (operation === 'toggle-access') {
         if (!data.id || typeof data.appAccess !== 'boolean') {
@@ -147,8 +255,8 @@ exports.master_gestisciTecnico = (0, https_1.onCall)({ region: "europe-west6", c
         return { success: true };
     }
     else {
-        logger.error(`FATAL: Operation '${operation}' did not match any IF/ELSE branch.`);
-        throw new https_1.HttpsError("invalid-argument", `Operation '${operation}' is not supported.`);
+        logger.error(`FATAL: Operation \'${operation}\' did not match any IF/ELSE branch.`);
+        throw new https_1.HttpsError("invalid-argument", `Operation \'${operation}\' is not supported.`);
     }
 });
 // Ignored functions

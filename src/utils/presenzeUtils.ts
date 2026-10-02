@@ -2,7 +2,6 @@
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 import { Checkin, Tecnico, Nave, Luogo } from '@/models/definitions';
-import { Timestamp } from 'firebase/firestore';
 
 dayjs.extend(isBetween);
 
@@ -51,19 +50,29 @@ export function processaPresenze(checkins: Checkin[], navi: Nave[], luoghi: Luog
     
     if (!checkins) return { orariLavoro: [], interventi: [] };
 
+    // Creazione di mappe per un accesso rapido ai nomi di navi e luoghi
     const luoghiMap = new Map(luoghi.map(l => [l.id, l.nome]));
     const naviMap = new Map(navi.map(n => [n.id, n.nome]));
 
-    // 1. FILTRAGGIO INIZIALE
-    const eventiFiltrati = checkins.filter(c => {
-        // Converte il timestamp in oggetto Dayjs solo una volta
-        const checkinDate = dayjs(c.timestampReale.toDate());
+    // Funzione helper per convertire stringhe di timestamp in oggetti Date
+    // Restituisce null se il timestamp non è valido per evitare crash
+    const toDate = (ts: string | null | undefined): Date | null => {
+        if (!ts || !dayjs(ts).isValid()) {
+            return null;
+        }
+        return dayjs(ts).toDate();
+    };
 
-        // Controllo intervallo date
+    // Filtra gli eventi in base ai filtri applicati nell'interfaccia utente
+    const eventiFiltrati = checkins.filter(c => {
+        const checkinDate = dayjs(c.data);
+
+        // Controlla se l'evento rientra nell'intervallo di date selezionato
         const isInDateRange = filtri.dataInizio && filtri.dataFine ? 
-            checkinDate.isBetween(filtri.dataInizio.startOf('day'), filtri.dataFine.endOf('day'), null, '[]') :
-            true;
+            checkinDate.isBetween(filtri.dataInizio.startOf('day'), filtri.dataFine.endOf('day'), 'day', '[]') :
+            true; // Se non c'è un filtro di data, non filtrare
         
+        // Controlla la corrispondenza con il tecnico, la nave o il luogo selezionati
         const tecnicoMatch = !filtri.tecnico || c.tecnicoId === filtri.tecnico.id;
         const naveMatch = !filtri.nave || c.naveId === filtri.nave.id;
         const luogoMatch = !filtri.luogo || c.luogoId === filtri.luogo.id;
@@ -71,22 +80,21 @@ export function processaPresenze(checkins: Checkin[], navi: Nave[], luoghi: Luog
         return isInDateRange && tecnicoMatch && naveMatch && luogoMatch;
     });
 
-    // 2. RAGGRUPPAMENTO EVENTI
-
+    // Map per raggruppare gli eventi di inizio/fine giornata
     const orariLavoroMap = new Map<string, Partial<OrarioLavoroRow>>();
+    // Map per raggruppare gli interventi su luoghi/navi
     const interventiMap = new Map<string, Partial<InterventoRow>>();
 
     for (const evento of eventiFiltrati) {
-        const dataKey = dayjs(evento.timestampReale.toDate()).format('YYYY-MM-DD');
-        const toDate = (ts: Timestamp) => ts.toDate();
-
-        // --- Logica per Orario di Lavoro ---
+        const dataKey = evento.data; // Usa il campo 'data' come chiave
+        
+        // Gestisce gli eventi di inizio e fine giornata lavorativa
         if (evento.tipo === 'inizio_giornata' || evento.tipo === 'fine_giornata') {
             const key = `${dataKey}_${evento.tecnicoId}`;
             if (!orariLavoroMap.has(key)) {
                 orariLavoroMap.set(key, {
                     id: key,
-                    data: dayjs(evento.timestampReale.toDate()).format('DD/MM/YYYY'),
+                    data: dayjs(evento.data).format('DD/MM/YYYY'),
                     tecnicoName: evento.tecnicoName,
                     ingresso: { impostato: null, reale: null },
                     uscita: { impostato: null, reale: null },
@@ -103,16 +111,16 @@ export function processaPresenze(checkins: Checkin[], navi: Nave[], luoghi: Luog
             }
         }
 
-        // --- Logica per Interventi ---
+        // Gestisce gli eventi di check-in e check-out da luoghi o navi
         if (evento.tipo === 'check_in_luogo' || evento.tipo === 'check_out_luogo') {
             const luogoId = evento.naveId || evento.luogoId;
-            if (!luogoId) continue;
+            if (!luogoId) continue; // Salta se non c'è un luogo/nave associato
 
             const key = `${dataKey}_${evento.tecnicoId}_${luogoId}`;
              if (!interventiMap.has(key)) {
                 interventiMap.set(key, {
-                    id: evento.id, // Usiamo l'id dell'evento per l'univocita' della riga
-                    data: dayjs(evento.timestampReale.toDate()).format('DD/MM/YYYY'),
+                    id: evento.id, 
+                    data: dayjs(evento.data).format('DD/MM/YYYY'),
                     tecnicoName: evento.tecnicoName,
                     luogoNave: evento.naveId ? naviMap.get(evento.naveId) : luoghiMap.get(luogoId),
                     ingresso: { impostato: null, reale: null },
@@ -131,6 +139,7 @@ export function processaPresenze(checkins: Checkin[], navi: Nave[], luoghi: Luog
         }
     }
 
+    // Converte le mappe in array per la visualizzazione
     return {
         orariLavoro: Array.from(orariLavoroMap.values()) as OrarioLavoroRow[],
         interventi: Array.from(interventiMap.values()) as InterventoRow[],
