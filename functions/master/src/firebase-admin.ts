@@ -1,11 +1,16 @@
 
-import * as admin from "firebase-admin";
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getMessaging } from 'firebase-admin/messaging';
 
-// Inizializza l'app solo una volta
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
+// NOTA: Non includere qui le credenziali di servizio, 
+// le Cloud Functions le ottengono automaticamente dall'ambiente.
 
-// Esporta le istanze dei servizi che verranno utilizzate in tutta l'applicazione
-export const db = admin.firestore();
-export const auth = admin.auth();
+initializeApp();
+
+const db = getFirestore();
+const auth = getAuth();
+const messaging = getMessaging();
+
+export { db, auth, messaging };

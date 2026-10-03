@@ -2,8 +2,27 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Nega tutte le letture e scritture dirette dal client.
-    // Solo le Cloud Functions (backend) avranno accesso.
+
+    // Consenti agli utenti autenticati di leggere le notifiche.
+    // La scrittura rimane bloccata per sicurezza (dovrebbe essere gestita dal backend).
+    match /notifiche/{notificationId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    
+    // I tecnici possono leggere i propri dati.
+    match /tecnici/{tecnicoId} {
+      allow read: if request.auth != null && request.auth.uid == tecnicoId;
+    }
+
+    // Esempio per una collezione "pubblica" leggibile da tutti
+    match /public_info/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Nega tutte le altre letture e scritture dirette dal client.
+    // Questa è la regola di default per tutte le altre collezioni.
     match /{document=**} {
       allow read, write: if false;
     }

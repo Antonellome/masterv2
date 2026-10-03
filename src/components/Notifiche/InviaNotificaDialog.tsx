@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
-import { collection, doc, writeBatch, Timestamp, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/config/firebase"; // CORRECTED IMPORT PATH
+import { collection, doc, addDoc, Timestamp } from "firebase/firestore";
+import { db } from "@/config/firebase";
 import {
   Dialog,
   DialogTitle,
@@ -9,68 +9,45 @@ import {
   DialogActions,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Checkbox,
-  ListItemText,
-  OutlinedInput,
   Box,
-  CircularProgress, 
-  Alert
+  CircularProgress,
+  Alert,
+  Typography,
 } from "@mui/material";
-import { useRapportiniStore } from "@/store/useRapportiniStore";
 import { logger } from "@/utils/logger";
-
-const ITEM_HEIGHT = 48;
-const ITEM_PADDING_TOP = 8;
-const MenuProps = {
-  PaperProps: {
-    style: {
-      maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
-      width: 250,
-    },
-  },
-};
+import type { NotificationTarget } from "@/models/definitions";
 
 interface InviaNotificaDialogProps {
   open: boolean;
   onClose: () => void;
+  target: NotificationTarget | null;
 }
 
-const InviaNotificaDialog = ({ open, onClose }: InviaNotificaDialogProps) => {
-  const [targetType, setTargetType] = useState("all");
-  const [selectedTecnici, setSelectedTecnici] = useState<string[]>([]);
+const InviaNotificaDialog = ({ open, onClose, target }: InviaNotificaDialogProps) => {
   const [title, setTitle] = useState("");
-  const [message, setMessage] = useState("");
+  const [body, setBody] = useState(""); // Rinominato da 'message' a 'body' per coerenza
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const tecnici = useRapportiniStore((state) => state.tecnici);
-
   useEffect(() => {
     if (open) {
-      // Reset state on open
-      setTargetType("all");
-      setSelectedTecnici([]);
       setTitle("");
-      setMessage("");
+      setBody("");
       setError(null);
       setSuccess(null);
+      setIsSubmitting(false);
     }
   }, [open]);
 
-  const handleTecniciChange = (event: any) => {
-    const { target: { value } } = event;
-    setSelectedTecnici(typeof value === "string" ? value.split(",") : value);
-  };
-
   const handleSubmit = async () => {
-    if (!title || !message) {
-        setError("Titolo e messaggio sono obbligatori.");
-        return;
+    if (!title || !body) {
+      setError("Titolo e messaggio sono obbligatori.");
+      return;
+    }
+    if (!target) {
+      setError("Nessun destinatario valido specificato.");
+      return;
     }
 
     setIsSubmitting(true);
@@ -78,58 +55,62 @@ const InviaNotificaDialog = ({ open, onClose }: InviaNotificaDialogProps) => {
     setSuccess(null);
 
     try {
-        const batch = writeBatch(db);
-        const notificheCollection = collection(db, "notifiche");
+      const notificheCollection = collection(db, "notifiche");
 
-        let targetUids: string[] = [];
+      // Costruisci il documento di notifica secondo le specifiche di notifiche.md
+      const notificaData: any = {
+        title: title,
+        body: body,
+        createdAt: Timestamp.now(),
+        isRead: false,
+        letta: false, // Campo legacy come da specifiche
+      };
 
-        if (targetType === "all") {
-            targetUids = tecnici.map(t => t.id);
-        } else if (targetType === "specific" && selectedTecnici.length > 0) {
-            targetUids = selectedTecnici;
-        }
+      // Aggiungi il campo di targeting corretto
+      switch (target.type) {
+        case 'user':
+          notificaData.tecnicoId = target.id;
+          break;
+        case 'all':
+          notificaData.target = 'all';
+          break;
+        case 'category':
+          notificaData.categoriaId = target.id;
+          break;
+        default:
+          throw new Error("Tipo di target non valido.");
+      }
 
-        if (targetUids.length === 0) {
-            setError("Nessun destinatario selezionato.");
-            setIsSubmitting(false);
-            return;
-        }
-        
-        // Create notification documents in batch
-        targetUids.forEach(uid => {
-            const newNotificaRef = doc(notificheCollection);
-            batch.set(newNotificaRef, {
-                userId: uid,
-                title,
-                message,
-                isRead: false,
-                createdAt: Timestamp.now(),
-                type: 'info' // O un altro tipo se necessario
-            });
-        });
+      logger.log("[DialogNotifica] Creazione documento notifica...", notificaData);
 
-        await batch.commit();
+      // Aggiungi il singolo documento a Firestore
+      await addDoc(notificheCollection, notificaData);
 
-        logger.log(`Notifiche inviate con successo a ${targetUids.length} utenti.`);
-        setSuccess(`Notifica inviata con successo a ${targetUids.length} destinatari.`);
-        setTimeout(() => {
-           onClose();
-        }, 2000);
+      logger.log("[DialogNotifica] Documento di notifica creato con successo.");
+      setSuccess(`Notifica per "${target.name}" creata e pronta per essere processata dal sistema.`);
+      
+      setTimeout(() => {
+        onClose();
+      }, 2500);
 
     } catch (e: any) {
-        logger.error("Errore durante l'invio delle notifiche:", e);
-        setError(`Errore: ${e.message}`);
+      logger.error("[DialogNotifica] Errore durante la creazione della notifica:", e);
+      setError(`Errore critico: ${e.message}`);
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Invia Nuova Notifica</DialogTitle>
+      <DialogTitle>Crea Notifica</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+
+        <Typography sx={{ mb: 2 }}>
+          Destinatario: <Typography component="span" sx={{ fontWeight: 'bold' }}>{target?.name || 'N/D'}</Typography>
+        </Typography>
 
         <TextField
           autoFocus
@@ -145,65 +126,22 @@ const InviaNotificaDialog = ({ open, onClose }: InviaNotificaDialogProps) => {
         />
         <TextField
           margin="dense"
-          id="message"
+          id="body"
           label="Messaggio"
           type="text"
           fullWidth
           multiline
           rows={4}
           variant="outlined"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
           disabled={isSubmitting}
         />
-        <FormControl fullWidth margin="dense" disabled={isSubmitting}>
-          <InputLabel id="target-type-label">Destinatari</InputLabel>
-          <Select
-            labelId="target-type-label"
-            id="target-type"
-            value={targetType}
-            label="Destinatari"
-            onChange={(e) => setTargetType(e.target.value)}
-          >
-            <MenuItem value="all">Tutti i Tecnici</MenuItem>
-            <MenuItem value="specific">Seleziona Tecnici</MenuItem>
-          </Select>
-        </FormControl>
-
-        {targetType === "specific" && (
-          <FormControl fullWidth margin="dense" disabled={isSubmitting}>
-            <InputLabel id="tecnici-select-label">Tecnici</InputLabel>
-            <Select
-              labelId="tecnici-select-label"
-              id="tecnici-select"
-              multiple
-              value={selectedTecnici}
-              onChange={handleTecniciChange}
-              input={<OutlinedInput label="Tecnici" />}
-              renderValue={(selected) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {(selected as string[]).map((id) => {
-                      const tecnico = tecnici.find(t => t.id === id);
-                      return <span key={id}>{tecnico ? `${tecnico.cognome} ${tecnico.nome}` : id}</span>;
-                  }).join(', ')}
-                </Box>
-              )}
-              MenuProps={MenuProps}
-            >
-              {tecnici.map((tecnico) => (
-                <MenuItem key={tecnico.id} value={tecnico.id}>
-                  <Checkbox checked={selectedTecnici.indexOf(tecnico.id) > -1} />
-                  <ListItemText primary={`${tecnico.cognome} ${tecnico.nome}`} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ p: '16px 24px' }}>
         <Button onClick={onClose} disabled={isSubmitting}>Annulla</Button>
         <Button onClick={handleSubmit} variant="contained" disabled={isSubmitting}>
-          {isSubmitting ? <CircularProgress size={24} /> : "Invia"}
+          {isSubmitting ? <CircularProgress size={24} color="inherit" /> : "Crea e Invia"}
         </Button>
       </DialogActions>
     </Dialog>

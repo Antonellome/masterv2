@@ -1,8 +1,11 @@
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useGlobalStore } from '@/stores/globalStore';
+import { useRapportiniStore } from '@/store/useRapportiniStore';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '@/config/firebase';
 import { Box, CircularProgress, Typography, Paper, Button } from '@mui/material';
 import { useAuthInitializer } from '@/auth/authHooks';
 import { authService } from '@/auth/authService';
@@ -10,6 +13,7 @@ import { GlobalAlert } from '@/components/GlobalAlert';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
 import { AnagraficheProvider } from '@/contexts/AnagraficheContext';
+import { logger } from '@/utils/logger';
 
 // Lazy load delle pagine
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -95,7 +99,31 @@ const AppContent = () => (
 const AuthWrapper = () => {
   const { authLoading, user, isAdmin } = useAuthStore();
   const isAppLoading = useGlobalStore((state) => state.appLoading);
+  const setData = useRapportiniStore((state) => state.setData); // CORRETTO
   const isAuthenticated = !!user;
+
+  // Effetto per caricare i tecnici quando l'utente è admin
+  useEffect(() => {
+    const fetchTecnici = async () => {
+      try {
+        logger.log("AuthWrapper: Admin detected, fetching tecnici...");
+        const tecniciCollection = collection(db, 'tecnici');
+        const tecniciSnapshot = await getDocs(tecniciCollection);
+        const tecniciList = tecniciSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // @ts-ignore - Temporaneamente per evitare problemi di tipo con lo stato parziale
+        setData({ tecnici: tecniciList }); // CORRETTO
+
+        logger.log(`AuthWrapper: Successfully loaded ${tecniciList.length} tecnici into store.`);
+      } catch (error) {
+        logger.error("AuthWrapper: Error fetching tecnici:", error);
+      }
+    };
+
+    if (isAdmin) {
+      fetchTecnici();
+    }
+  }, [isAdmin, setData]);
 
   // 1. Caricamento iniziale (autenticazione o sync globale)
   if (authLoading || isAppLoading) {

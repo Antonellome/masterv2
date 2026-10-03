@@ -1,20 +1,111 @@
 
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import { db, auth } from "./firebase-admin";
+import { auth, db, messaging } from "./firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 // Helper function to check for admin privileges
 const checkAdmin = async (uid: string) => {
     const user = await auth.getUser(uid);
-    const customClaims = (user.customClaims || {}) as { admin?: boolean };
+    const customClaims = (user.customClaims || {});
     if (customClaims.admin !== true) {
         logger.warn(`User ${uid} attempted an admin action without privileges.`);
         throw new HttpsError("permission-denied", "This operation is restricted to administrators.");
     }
 };
 
+
 // ===============================================================================================
-// FUNZIONI PER GESTIONE AMMINISTRATORI (CORRETTE)
+// NUOVA FUNZIONE PER INVIO NOTIFICHE PUSH (LOGICA CORRETTA)
+// ===============================================================================================
+
+export const master_inviaNotifichePush = onCall({ region: "europe-west6", cors: true }, async (request) => {
+    logger.info("FORCE DEPLOY LOG V4"); // LOG INUTILE PER FORZARE IL DEPLOY
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+    await checkAdmin(request.auth.uid);
+
+    const { userIds, title, message } = request.data;
+
+    if (!Array.isArray(userIds) || userIds.length === 0 || !title || !message) {
+        throw new HttpsError("invalid-argument", "Payload must include userIds (array), title, and message.");
+    }
+
+    logger.info(`[master_inviaNotifichePush] Ricevuta richiesta di invio a ${userIds.length} utenti da parte di ${request.auth.uid}`);
+
+    const tokens: string[] = [];
+    const tokenPromises = userIds.map(uid => db.collection('tecnici').doc(uid).get());
+    const tokenSnapshots = await Promise.all(tokenPromises);
+
+    tokenSnapshots.forEach(snap => {
+        if (snap.exists && snap.data()?.fcmToken) {
+            tokens.push(snap.data()!.fcmToken);
+        }
+    });
+
+    if (tokens.length === 0) {
+        logger.warn("[master_inviaNotifichePush] Nessun token FCM valido trovato per gli utenti specificati.");
+        return { success: true, successCount: 0, failureCount: 0, message: "Nessun token di destinazione trovato." };
+    }
+    
+    const payload = {
+        notification: {
+            title,
+            body: message
+        },
+        webpush: {
+            fcmOptions: {
+                link: 'https://rapportini-b8328.web.app/rapportini' // URL di default se non specificato
+            }
+        }
+    };
+
+    try {
+        // 1. PRIMA INVIO LA NOTIFICA PUSH
+        const response = await messaging.sendToDevice(tokens, payload);
+        const successCount = response.successCount;
+        const failureCount = response.failureCount;
+        logger.info(`[master_inviaNotifichePush] Invio FCM completato. Successi: ${successCount}, Fallimenti: ${failureCount}.`);
+
+        if (failureCount > 0) {
+            response.results.forEach((result, index) => {
+                if (result.error) {
+                    logger.error(`Fallimento invio al token ${tokens[index]}:`, result.error);
+                }
+            });
+        }
+
+        // 2. SOLO SE L'INVIO HA AVUTO SUCCESSO (ANCHE PARZIALE), SCRIVO LA CRONOLOGIA
+        if (successCount > 0) {
+            const batch = db.batch();
+            const notificheCollection = db.collection('notifiche');
+            userIds.forEach(uid => {
+                const newNotificaRef = notificheCollection.doc(); // Crea un nuovo documento con ID automatico
+                batch.set(newNotificaRef, {
+                    userId: uid,
+                    title,
+                    message,
+                    isRead: false,
+                    createdAt: FieldValue.serverTimestamp(),
+                    type: 'info' // O un tipo più specifico se necessario
+                });
+            });
+            await batch.commit();
+            logger.info(`[master_inviaNotifichePush] Cronologia notifiche scritta su Firestore per ${userIds.length} utenti.`);
+        }
+
+        return { success: true, successCount, failureCount };
+
+    } catch (error) {
+        logger.error("[master_inviaNotifichePush] Errore critico durante l'invio dei messaggi FCM:", error);
+        throw new HttpsError("internal", "Errore interno durante l'invio delle notifiche push.");
+    }
+});
+
+
+// ===============================================================================================
+// FUNZIONI ESISTENTI (MODIFICATE/INTEGRATE)
 // ===============================================================================================
 
 /**
@@ -30,10 +121,6 @@ export const admin_getAllUsers = onCall({ region: "europe-west6", cors: true }, 
 
     try {
         const listUsersResult = await auth.listUsers();
-        // FILTRA E MAPPA:
-        // 1. Filtra per tenere SOLO gli utenti che hanno il claim 'admin' definito.
-        //    Questo esclude i tecnici, che non hanno questo claim.
-        // 2. Mappa i dati per il frontend.
         const users = listUsersResult.users
             .filter(user => {
                 const customClaims = (user.customClaims || {}) as { admin?: any };
@@ -48,7 +135,7 @@ export const admin_getAllUsers = onCall({ region: "europe-west6", cors: true }, 
                     ruolo: customClaims.admin === true ? 'admin' : 'user',
                 };
             });
-            
+
         logger.info(`[admin_getAllUsers] Found ${users.length} panel users for admin ${request.auth.uid}.`);
         return users;
 
@@ -59,19 +146,14 @@ export const admin_getAllUsers = onCall({ region: "europe-west6", cors: true }, 
 });
 
 
-/**
- * Gestisce le operazioni CRUD sugli utenti (Creazione, Aggiornamento, Eliminazione, Cambio Ruolo).
- * Richiede privilegi di amministratore.
- */
 export const amministrazione_gestisciUtenti = onCall({ region: "europe-west6", cors: true }, async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "Authentication is required to perform this action.");
     }
     await checkAdmin(request.auth.uid);
-
+    
     const { action, ...data } = request.data;
-
-    logger.info(`[amministrazione_gestisciUtenti] Received action: \'${action}\'`, { data });
+    logger.info(`[amministrazione_gestisciUtenti] Received action: '${action}'`, { data });
 
     try {
         switch (action) {
@@ -81,8 +163,6 @@ export const amministrazione_gestisciUtenti = onCall({ region: "europe-west6", c
                     throw new HttpsError("invalid-argument", "Email, nome, and password are required for user creation.");
                 }
                 const newUserRecord = await auth.createUser({ email, password, displayName: nome });
-                // I nuovi utenti nascono come utenti standard (NON admin) del pannello.
-                // Questo claim 'admin' li distingue dai tecnici.
                 await auth.setCustomUserClaims(newUserRecord.uid, { admin: false });
                 logger.info(`User ${newUserRecord.uid} created successfully by ${request.auth.uid}.`);
                 return { success: true, id: newUserRecord.uid };
@@ -120,31 +200,27 @@ export const amministrazione_gestisciUtenti = onCall({ region: "europe-west6", c
                     throw new HttpsError("permission-denied", "Administrators cannot change their own role.");
                 }
                 await auth.setCustomUserClaims(roleUid, { admin: role === 'admin' });
-                logger.info(`Role for user ${roleUid} was changed to \'${role}\' by ${request.auth.uid}.`);
+                logger.info(`Role for user ${roleUid} was changed to '${role}' by ${request.auth.uid}.`);
                 return { success: true };
             }
 
             default:
-                logger.warn(`[amministrazione_gestisciUtenti] Unsupported action called: \'${action}\'`);
-                throw new HttpsError("invalid-argument", `The action \'${action}\' is not supported.`);
+                logger.warn(`[amministrazione_gestisciUtenti] Unsupported action called: '${action}'`);
+                throw new HttpsError("invalid-argument", `The action '${action}' is not supported.`);
         }
     } catch (e: any) {
-        logger.error(`[amministrazione_gestisciUtenti] Critical error on action \'${action}\'':`, e);
+        logger.error(`[amministrazione_gestisciUtenti] Critical error on action '${action}':`, e);
         throw new HttpsError("internal", e.message || `An internal error occurred while performing the action: ${action}.`);
     }
 });
 
-
-// ===============================================================================================
-// FUNZIONI ESISTENTI (Lasciate intatte)
-// ===============================================================================================
 
 export const master_gestisciTecnico = onCall({ region: "europe-west6", cors: true }, async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "Authentication is required.");
     }
     await checkAdmin(request.auth.uid);
-
+    
     const operation = request.data.operation ? String(request.data.operation).trim() : null;
     const data = request.data.payload || request.data.data;
 
@@ -152,106 +228,121 @@ export const master_gestisciTecnico = onCall({ region: "europe-west6", cors: tru
         throw new HttpsError("invalid-argument", "Incomplete payload.");
     }
 
-    logger.info(`[master_gestisciTecnico] Executing: \'${operation}\' with payload:`, data);
+    logger.info(`[master_gestisciTecnico] Executing: '${operation}' with payload:`, data);
 
-    if (operation === 'add') {
-        if (!data.email || !data.password || !data.nome || !data.cognome) {
-            throw new HttpsError("invalid-argument", "Email, password, nome, and cognome are required for creation.");
-        }
-        try {
+    const { id, password, ...restData } = data;
+
+    try {
+        if (operation === 'add') {
+            if (!restData.email || !password || !restData.nome || !restData.cognome) {
+                throw new HttpsError("invalid-argument", "Email, password, nome, and cognome are required for creation.");
+            }
             const newUserRecord = await auth.createUser({
-                email: data.email,
-                password: data.password,
-                displayName: `${data.nome} ${data.cognome}`,
+                email: restData.email,
+                password: password,
+                displayName: `${restData.nome} ${restData.cognome}`,
                 disabled: false,
             });
 
-            // I tecnici NON hanno il claim 'admin'
-
-            const { password, ...firestoreData } = data;
-            const dataToSave = {
-                ...firestoreData,
-                id: newUserRecord.uid,
-                attivo: true,
-                appAccess: true,
-                accessoApp: true,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+            const firestoreData = { 
+                ...restData,
+                id: newUserRecord.uid, 
+                attivo: true, 
+                appAccess: true, 
+                accessoApp: true, 
+                createdAt: FieldValue.serverTimestamp(), 
+                updatedAt: FieldValue.serverTimestamp()
             };
-
-            await db.collection('tecnici').doc(newUserRecord.uid).set(dataToSave);
-
+            await db.collection('tecnici').doc(newUserRecord.uid).set(firestoreData);
             logger.info(`Successfully created technician ${newUserRecord.uid}`);
             return { success: true, id: newUserRecord.uid };
 
-        } catch (e: any) {
-            logger.error(`Error during \'add\' execution:`, e);
-            throw new HttpsError("internal", e.message);
-        }
-
-    } else if (operation === 'update') {
-        if (!data.id) {
-            throw new HttpsError("invalid-argument", "'id' is required for update.");
-        }
-        try {
-            const { id, password, ...updateData } = data;
-            await db.collection('tecnici').doc(id).update({
-                ...updateData,
-                updatedAt: new Date(),
-            });
-
-            if (updateData.email) {
-                await auth.updateUser(id, { email: updateData.email });
+        } else if (operation === 'update') {
+            if (!id) throw new HttpsError("invalid-argument", "'id' is required for update.");
+            
+            await db.collection('tecnici').doc(id).update({ ...restData, updatedAt: FieldValue.serverTimestamp() });
+            if (restData.email) {
+                await auth.updateUser(id, { email: restData.email });
             }
-
             logger.info(`Successfully updated technician ${id}`);
             return { success: true, id: id };
 
-        } catch (e: any) {
-            logger.error(`Error during \'update\' execution:`, e);
-            throw new HttpsError("internal", e.message);
-        }
-
-    } else if (operation === 'toggle-attivo') {
-        if (!data.id || typeof data.attivo !== 'boolean') {
-            throw new HttpsError("invalid-argument", "'id' and 'attivo' (boolean) are required.");
-        }
-        try {
-            await db.collection('tecnici').doc(data.id).update({ attivo: data.attivo, updatedAt: new Date() });
-            if (data.attivo === false) {
-                 await db.collection('tecnici').doc(data.id).update({ appAccess: false, accessoApp: false });
-                 await auth.updateUser(data.id, { disabled: true });
-            } else {
-                 await auth.updateUser(data.id, { disabled: false });
+        } else if (operation === 'toggle-attivo') {
+            if (!id || typeof restData.attivo !== 'boolean') {
+                throw new HttpsError("invalid-argument", "'id' and 'attivo' (boolean) are required.");
+            }
+            await db.collection('tecnici').doc(id).update({ attivo: restData.attivo, updatedAt: FieldValue.serverTimestamp() });
+            await auth.updateUser(id, { disabled: !restData.attivo });
+            // If technician is deactivated, also block app access
+            if (restData.attivo === false) {
+                await db.collection('tecnici').doc(id).update({ appAccess: false, accessoApp: false });
             }
             return { success: true };
-        } catch(e: any) {
-            logger.error(`Error during \'toggle-attivo\' execution:`, e);
-            throw new HttpsError("internal", e.message);
-        }
 
-    } else if (operation === 'toggle-access') {
-        if (!data.id || typeof data.appAccess !== 'boolean') {
-            throw new HttpsError("invalid-argument", "'id' and 'appAccess' (boolean) are required.");
-        }
-        const tecnicoDoc = await db.collection('tecnici').doc(data.id).get();
-        if (!tecnicoDoc.exists || tecnicoDoc.data()?.attivo === false) {
-            throw new HttpsError("failed-precondition", "Cannot change access for an inactive technician.");
-        }
-        await db.collection('tecnici').doc(data.id).update({ appAccess: data.appAccess, accessoApp: data.appAccess, updatedAt: new Date() });
-        await auth.updateUser(data.id, { disabled: !data.appAccess });
-        return { success: true };
+        } else if (operation === 'toggle-access') {
+            if (!id || typeof restData.appAccess !== 'boolean') {
+                throw new HttpsError("invalid-argument", "'id' and 'appAccess' (boolean) are required.");
+            }
+            const tecnicoDoc = await db.collection('tecnici').doc(id).get();
+            if (!tecnicoDoc.exists || tecnicoDoc.data()?.attivo === false) {
+                throw new HttpsError("failed-precondition", "Cannot change access for an inactive technician.");
+            }
+            await db.collection('tecnici').doc(id).update({ appAccess: restData.appAccess, accessoApp: restData.appAccess, updatedAt: FieldValue.serverTimestamp() });
+            await auth.updateUser(id, { disabled: !restData.appAccess });
+            return { success: true };
 
-    } else {
-        logger.error(`FATAL: Operation \'${operation}\' did not match any IF/ELSE branch.`);
-        throw new HttpsError("invalid-argument", `Operation \'${operation}\' is not supported.`);
+        } else {
+            logger.error(`FATAL: Operation '${operation}' did not match any IF/ELSE branch.`);
+            throw new HttpsError("invalid-argument", `Operation '${operation}' is not supported.`);
+        }
+    } catch (e: any) {
+        logger.error(`Error during '${operation}' execution:`, e);
+        throw new HttpsError("internal", e.message);
     }
 });
 
-// Ignored functions
-export const master_gestisciAnagrafica = onCall({ region: "europe-west6" }, async (request) => {
+
+export const deleteNotificationBatch = onCall({ region: "europe-west6", cors: true }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Authentication is required to perform this action.");
+    }
+    await checkAdmin(request.auth.uid);
+
+    const collectionRef = db.collection('notifiche');
+    const batchSize = 499;
+    logger.info(`[deleteNotificationBatch] Starting batch deletion for 'notifiche', requested by admin ${request.auth.uid}.`);
+
+    try {
+        let deletedCount = 0;
+        let snapshot;
+        do {
+            snapshot = await collectionRef.limit(batchSize).get();
+            if (snapshot.empty) break;
+
+            const batch = db.batch();
+            snapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+            deletedCount += snapshot.size;
+            logger.info(`[deleteNotificationBatch] Deleted a batch of ${snapshot.size} notifications.`);
+
+        } while (snapshot.size > 0);
+
+        logger.info(`[deleteNotificationBatch] Deletion completed. Total deleted: ${deletedCount}.`);
+        return { success: true, deletedCount };
+
+    } catch (e: any) {
+        logger.error(`[deleteNotificationBatch] Critical error during batch deletion:`, e);
+        throw new HttpsError("internal", e.message || "An internal server error occurred during notification deletion.");
+    }
+});
+
+
+// Ignored/deprecated functions
+export const master_gestisciAnagrafica = onCall({ region: "europe-west6" }, async () => {
     throw new HttpsError("unimplemented", "Function not implemented.");
 });
-export const master_resetPasswordTecnico = onCall({ region: "europe-west6" }, async (request) => {
+export const master_resetPasswordTecnico = onCall({ region: "europe-west6" }, async () => {
     throw new HttpsError("unimplemented", "Function not implemented.");
 });
