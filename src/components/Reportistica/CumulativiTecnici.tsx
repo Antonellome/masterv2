@@ -1,9 +1,10 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
-    Box, Paper, Typography, Grid, TextField, Button, Autocomplete, CircularProgress, Checkbox,
+    Box, Paper, Typography, TextField, Button, Autocomplete, CircularProgress, Checkbox,
     useTheme, Alert, Tooltip, IconButton
 } from '@mui/material';
+import Grid from '@mui/material/Unstable_Grid2';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
@@ -87,6 +88,11 @@ const formatCellData = (dayData: DailyHours | undefined): string => {
     let codeString = '';
     if (dayData.codice === 'T') codeString = 'T';
     else if (dayData.codice === 'N' && dayData.oreCodice > 0) codeString = `${String(dayData.oreCodice).replace('.', ',')}N`;
+    
+    if (workString && codeString && dayData.codice === 'N') {
+        return `${workString}+${codeString}`;
+    }
+
     return [workString, codeString].filter(Boolean).join(' ');
 };
 
@@ -374,18 +380,18 @@ const CumulativiTecnici: React.FC = () => {
             <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
                 <Paper elevation={3} sx={{ p: 3, mb: 4, borderRadius: 2 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={4} md={2}><DatePicker label="Mese" views={['month', 'year']} value={selectedDate} onChange={(d) => d && setSelectedDate(d)} slotProps={{ textField: { fullWidth: true } }} /></Grid>
-                        <Grid item xs={12} sm={4} md={2}><Autocomplete options={options.clienti} value={selectedCliente} onChange={(_,v) => setSelectedCliente(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Cliente" />} /></Grid>
-                        <Grid item xs={12} sm={4} md={2}><Autocomplete multiple options={options.ditte} value={selectedDitte} onChange={(_,v) => setSelectedDitte(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Ditta" />} /></Grid>
-                        <Grid item xs={12} sm={4} md={2}><Autocomplete multiple options={options.luoghi} value={selectedLuoghi} onChange={(_,v) => setSelectedLuoghi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Luoghi" />} /></Grid>
-                        <Grid item xs={12} sm={4} md={2}><Autocomplete multiple options={options.navi} value={selectedNavi} onChange={(_,v) => setSelectedNavi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Nave"/>} /></Grid>
-                        <Grid item xs={12} sm={4} md={2}><Autocomplete multiple options={options.categorie} value={selectedCategorie} onChange={(_,v) => setSelectedCategorie(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Categoria" />} /></Grid>
+                        <Grid xs={12} sm={4} md={2}><DatePicker label="Mese" views={['month', 'year']} value={selectedDate} onChange={(d) => d && setSelectedDate(d)} slotProps={{ textField: { fullWidth: true } }} /></Grid>
+                        <Grid xs={12} sm={4} md={2}><Autocomplete options={options.clienti} value={selectedCliente} onChange={(_,v) => setSelectedCliente(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Cliente" />} /></Grid>
+                        <Grid xs={12} sm={4} md={2}><Autocomplete multiple options={options.ditte} value={selectedDitte} onChange={(_,v) => setSelectedDitte(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Ditta" />} /></Grid>
+                        <Grid xs={12} sm={4} md={2}><Autocomplete multiple options={options.luoghi} value={selectedLuoghi} onChange={(_,v) => setSelectedLuoghi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Luoghi" />} /></Grid>
+                        <Grid xs={12} sm={4} md={2}><Autocomplete multiple options={options.navi} value={selectedNavi} onChange={(_,v) => setSelectedNavi(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Nave"/>} /></Grid>
+                        <Grid xs={12} sm={4} md={2}><Autocomplete multiple options={options.categorie} value={selectedCategorie} onChange={(_,v) => setSelectedCategorie(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Categoria" />} /></Grid>
 
-                        <Grid item xs={12} sm={12} md={4}><Autocomplete multiple options={options.tipiGiornata} value={selectedTipiGiornata} onChange={(_,v) => setSelectedTipiGiornata(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Tipo Giornata" />} /></Grid>
-                        <Grid item xs={12} sm={9} md={6}><Autocomplete multiple disableCloseOnSelect options={options.tecnici} value={selectedTecnici} onChange={(_, v) => setSelectedTecnici(v)} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} isOptionEqualToValue={isOptionEqualToValue}
+                        <Grid xs={12} md={4}><Autocomplete multiple options={options.tipiGiornata} value={selectedTipiGiornata} onChange={(_,v) => setSelectedTipiGiornata(v)} getOptionLabel={(o) => o.nome || ''} isOptionEqualToValue={isOptionEqualToValue} renderInput={(p) => <TextField {...p} label="Tipo Giornata" />} /></Grid>
+                        <Grid xs={12} sm={9} md={6}><Autocomplete multiple disableCloseOnSelect options={options.tecnici} value={selectedTecnici} onChange={(_, v) => setSelectedTecnici(v)} getOptionLabel={(o) => `${o.cognome} ${o.nome}`} isOptionEqualToValue={isOptionEqualToValue}
                                 renderOption={(props, option, { selected }) => (<li {...props} key={option.id}><Checkbox icon={<CheckBoxOutlineBlankIcon fontSize="small" />} checkedIcon={<CheckBoxIcon fontSize="small" />} checked={selected} />{`${option.cognome} ${option.nome}`}</li>)}
                                 renderInput={(params) => <TextField {...params} label="Tecnici" />}/></Grid>
-                        <Grid item xs={12} sm={3} md={2}><Button variant="contained" size="large" onClick={handleGeneraMatrice} disabled={isLoading || anagraficheLoading} sx={{ width: '100%', height: '56px' }}>{isLoading ? <CircularProgress size={24}/> : 'Genera'}</Button></Grid>
+                        <Grid xs={12} sm={3} md={2}><Button variant="contained" size="large" onClick={handleGeneraMatrice} disabled={isLoading || anagraficheLoading} sx={{ width: '100%', height: '56px' }}>{isLoading ? <CircularProgress size={24}/> : 'Genera'}</Button></Grid>
                     </Grid>
                 </Paper>
                 
@@ -398,8 +404,8 @@ const CumulativiTecnici: React.FC = () => {
                             return (
                                 <Box key={index} sx={{ mb: 4 }}>
                                     <Grid container spacing={2} justifyContent="space-between" alignItems="flex-start">
-                                        <Grid item xs={12} md="auto"><Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold' }}>{table.title}</Typography></Grid>
-                                        <Grid item xs={12} md="grow">
+                                        <Grid xs={12} md="auto"><Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold' }}>{table.title}</Typography></Grid>
+                                        <Grid xs={12} md>
                                             <Paper elevation={2} sx={{ p: 1, width: '100%' }}>
                                                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>Riepilogo Ore</Typography>
                                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing(2) }}>

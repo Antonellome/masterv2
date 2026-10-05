@@ -1,43 +1,48 @@
 import React from 'react';
 import { Dialog } from '@mui/material';
-import type { Tecnico, Rapportino } from '@/models/definitions'; // <-- CORRETTO
+import { useRapportiniStore } from '@/store/useRapportiniStore';
 import RapportinoForm from './RapportinoForm';
-import type { Dayjs } from 'dayjs';
-
-interface RapportinoFormControllerProps {
-  open: boolean;
-  onClose: () => void;
-  rapportino?: Rapportino | null;
-  currentTecnico?: Tecnico;
-  initialDate?: Dayjs;
-}
 
 /**
- * Questo componente agisce come un semplice wrapper. Gestisce l'apertura/chiusura
- * del Dialog e passa le props necessarie a RapportinoForm.
- * Tutta la logica di fetching e gestione del form è ora incapsulata in RapportinoForm.
+ * Questo controller ora è guidato dallo store globale (Zustand).
+ * Ascolta lo stato di `isRapportinoFormOpen` per decidere se rendersizzare il Dialog.
+ * Passa i dati necessari (`editingRapportino`, `initialDate`) a RapportinoForm.
+ * La funzione di chiusura (`onClose`) è anch'essa presa direttamente dallo store.
+ * È stato rimosso l'attributo `key` per evitare il re-mount non necessario del form.
+ * La logica di reset è ora gestita internamente da `RapportinoForm` tramite useEffect,
+ * che è un approccio più pulito e performante.
  */
-const RapportinoFormController: React.FC<RapportinoFormControllerProps> = ({
-  open,
-  onClose,
-  rapportino,
-  currentTecnico,
-  initialDate,
-}) => {
-  
+const RapportinoFormController: React.FC = () => {
+
+  // Legge lo stato e le azioni per il form direttamente dallo store
+  const {
+    isRapportinoFormOpen,
+    closeRapportinoForm,
+    editingRapportino,
+    rapportinoInitialDate
+  } = useRapportiniStore(state => ({
+    isRapportinoFormOpen: state.isRapportinoFormOpen,
+    closeRapportinoForm: state.closeRapportinoForm,
+    editingRapportino: state.editingRapportino,
+    rapportinoInitialDate: state.rapportinoInitialDate,
+  }));
+
   // Non renderizzare nulla se il dialog non è aperto per ottimizzare le performance
-  if (!open) {
+  if (!isRapportinoFormOpen) {
     return null;
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" key={rapportino?.id || 'new'}>
-        {/* RapportinoForm ora gestisce il proprio stato di caricamento internamente */}
+    <Dialog 
+      open={isRapportinoFormOpen} 
+      onClose={closeRapportinoForm} 
+      fullWidth 
+      maxWidth="md"
+    >
         <RapportinoForm
-            onClose={onClose}
-            rapportino={rapportino}
-            currentTecnico={currentTecnico}
-            initialDate={initialDate}
+            onClose={closeRapportinoForm}
+            rapportino={editingRapportino}
+            initialDate={rapportinoInitialDate}
         />
     </Dialog>
   );

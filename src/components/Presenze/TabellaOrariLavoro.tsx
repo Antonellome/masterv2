@@ -1,7 +1,7 @@
 
 import { FC } from 'react';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Typography, Box } from '@mui/material';
-import { OrarioLavoroRow } from '@/utils/presenzeUtils';
+import { OrarioLavoro } from '@/models/definitions';
 import dayjs from 'dayjs';
 
 interface OrarioCellProps {
@@ -20,12 +20,12 @@ const OrarioCell: FC<OrarioCellProps> = ({ impostato, reale }) => (
 );
 
 interface TabellaOrariLavoroProps {
-    rows: OrarioLavoroRow[];
+    rows: OrarioLavoro[];
 }
 
 const TabellaOrariLavoro: FC<TabellaOrariLavoroProps> = ({ rows }) => {
     if (rows.length === 0) {
-        return <Typography sx={{p: 2, textAlign: 'center'}}>Nessun orario di lavoro trovato.</Typography>;
+        return <Typography sx={{ p: 2, textAlign: 'center' }}>Nessun orario di lavoro trovato.</Typography>;
     }
 
     return (
@@ -33,22 +33,22 @@ const TabellaOrariLavoro: FC<TabellaOrariLavoroProps> = ({ rows }) => {
             <Table size="small">
                 <TableHead>
                     <TableRow>
-                        <TableCell sx={{fontWeight: 'bold'}}>Data</TableCell>
-                        <TableCell sx={{fontWeight: 'bold'}}>Tecnico</TableCell>
-                        <TableCell sx={{fontWeight: 'bold'}} align="center">Ingresso Lavoro</TableCell>
-                        <TableCell sx={{fontWeight: 'bold'}} align="center">Uscita Lavoro</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Data</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Tecnico</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }} align="center">Ingresso Lavoro</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }} align="center">Uscita Lavoro</TableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
                     {rows.map((row) => (
                         <TableRow key={row.id}>
-                            <TableCell>{row.data}</TableCell>
+                            <TableCell>{dayjs(row.data).format('DD/MM/YYYY')}</TableCell>
                             <TableCell>{row.tecnicoName}</TableCell>
                             <TableCell align="center">
                                 <OrarioCell impostato={row.ingresso.impostato} reale={row.ingresso.reale} />
                             </TableCell>
-                             <TableCell align="center">
-                               <OrarioCell impostato={row.uscita.impostato} reale={row.uscita.reale} />
+                            <TableCell align="center">
+                                <OrarioCell impostato={row.uscita.impostato} reale={row.uscita.reale} />
                             </TableCell>
                         </TableRow>
                     ))}

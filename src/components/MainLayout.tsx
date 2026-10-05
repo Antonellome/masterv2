@@ -5,6 +5,7 @@ import {
     useMediaQuery, Avatar, Menu, MenuItem, Badge, Tooltip, useTheme, 
     CircularProgress, keyframes, ListItemIcon
 } from '@mui/material';
+import Grid from '@mui/material/Unstable_Grid2';
 import MenuIcon from '@mui/icons-material/Menu';
 import PeopleIcon from '@mui/icons-material/People';
 import EventNoteIcon from '@mui/icons-material/EventNote';
@@ -36,6 +37,15 @@ const pulse = keyframes`
 const wink = keyframes`
   0%, 100% { transform: scale(1, 1); }
   50% { transform: scale(1, 0.1); }
+`;
+
+const spin = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 `;
 
 const menuItems = [
@@ -73,7 +83,8 @@ const MainLayout = () => {
     const user = useGlobalStore((state) => state.user);
     const loading = useGlobalStore((state) => state.isAuthLoading); 
     const logout = useGlobalStore((state) => state.logout);
-    const triggerRefresh = useGlobalStore((state) => state.triggerRefresh);
+    const runInitialSync = useGlobalStore((state) => state.runInitialSync);
+    const isSyncing = useGlobalStore((state) => state.isSyncing);
     const unreadCount = useGlobalStore((state) => state.unreadCount);
     const areNotificationsLoading = useGlobalStore((state) => state.areNotificationsLoading);
     const { activeScadenzeCount, overallStatus } = useScadenze();
@@ -132,7 +143,11 @@ const MainLayout = () => {
                         <Typography variant="h5" component="h1" noWrap sx={{ fontWeight: '600' }}>{currentPageTitle}</Typography>
                     </Box>
                     <Box sx={{ flexGrow: 1 }} />
-                    <Tooltip title="Aggiorna Dati"><IconButton color="inherit" onClick={triggerRefresh}><RefreshIcon /></IconButton></Tooltip>
+                    <Tooltip title="Aggiorna Dati">
+                        <IconButton color="inherit" onClick={runInitialSync} disabled={isSyncing}>
+                            <RefreshIcon sx={{ animation: isSyncing ? `${spin} 2s linear infinite` : 'none' }} />
+                        </IconButton>
+                    </Tooltip>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Tooltip title="Scadenze"><IconButton color="inherit" onClick={() => navigate('/scadenze')}><Badge badgeContent={activeScadenzeCount} color="error"><EventBusyIcon sx={getScadenzeIconStyle()} /></Badge></IconButton></Tooltip>
                         <Tooltip title="Notifiche"><IconButton color="inherit" component={NavLink} to="/notifications"><Badge badgeContent={unreadCount} color="error">{areNotificationsLoading ? <CircularProgress size={24} color="inherit" /> : <NotificationsIcon />}</Badge></IconButton></Tooltip>

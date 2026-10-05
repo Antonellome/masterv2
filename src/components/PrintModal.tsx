@@ -6,7 +6,6 @@ import {
   DialogActions,
   Button,
   IconButton,
-  Box,
   useTheme,
   useMediaQuery,
   DialogTitle,
@@ -25,15 +24,55 @@ const PrintModal: React.FC<PrintModalProps> = ({ open, onClose, children }) => {
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handlePrint = () => {
-    // This is a simple browser print. 
-    // It's often better to use CSS @media print for fine-grained control.
-    const printContent = document.getElementById('printable-content');
-    const originalContents = document.body.innerHTML;
-    document.body.innerHTML = printContent?.innerHTML || '';
-    window.print();
-    document.body.innerHTML = originalContents;
-    // Reload is necessary to re-apply React's listeners
-    window.location.reload(); 
+    const printableContent = document.getElementById('printable-content');
+    if (!printableContent) {
+        alert('Contenuto da stampare non trovato.');
+        return;
+    }
+
+    const printStyle = document.createElement('style');
+    printStyle.id = 'print-style';
+    printStyle.innerHTML = `
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-content, #printable-content * {
+                visibility: visible;
+            }
+            #printable-content {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .MuiDialog-paper {
+                box-shadow: none;
+            }
+        }
+    `;
+
+    document.head.appendChild(printStyle);
+
+    // Add a listener for after the print dialog is closed
+    const afterPrint = () => {
+        const styleElement = document.getElementById('print-style');
+        if (styleElement) {
+            styleElement.remove();
+        }
+        window.removeEventListener('afterprint', afterPrint);
+    };
+
+    window.addEventListener('afterprint', afterPrint);
+
+    try {
+        window.print();
+    } catch (e) {
+        console.error('Stampa fallita:', e);
+        alert(`Stampa fallita: ${e instanceof Error ? e.message : String(e)}`);
+        // Clean up immediately if print fails
+        afterPrint();
+    }
   };
 
   return (

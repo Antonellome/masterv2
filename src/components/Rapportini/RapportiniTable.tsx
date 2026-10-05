@@ -4,6 +4,7 @@ import { Box, Chip, Tooltip, Typography } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams, GridActionsCellItem } from '@mui/x-data-grid';
 import { Rapportino } from '@/models/definitions';
 import { parseToDayjs } from '@/utils/dateUtils';
+import { useRapportiniStore } from '@/store/useRapportiniStore'; // Importa lo store
 
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -12,12 +13,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 type AnagraficaMap = Map<string, { nome: string; cognome?: string }>;
 
+// Le props non includono più le funzioni di callback per le azioni
 interface RapportiniTableProps {
     rapportini: Rapportino[];
-    onRowClick: (rapportino: Rapportino) => void;
-    onEdit: (rapportino: Rapportino) => void;
-    onDelete: (rapportinoId: string) => void;
-    onPrint: (rapportino: Rapportino) => void;
     tecniciMap: AnagraficaMap;
     naviMap: AnagraficaMap;
     luoghiMap: AnagraficaMap;
@@ -25,31 +23,35 @@ interface RapportiniTableProps {
     loading: boolean;
 }
 
+// Componente per i dati mancanti
 const MissingDataChip = ({ label }: { label: string }) => (
-    <Tooltip title="Dato anagrafico non trovato. Il record potrebbe essere corrotto.">
+    <Tooltip title="Dato anagrafico non trovato. Il record potrebbe essere corrotto o obsoleto.">
         <Chip icon={<WarningAmberIcon />} label={label} color="warning" size="small" variant="outlined" />
     </Tooltip>
 );
 
+// Funzione helper per ottenere il nome da una mappa anagrafica
 const getNomeAnagrafica = (mappa: AnagraficaMap, id: string | undefined): string => {
     if (!id) return 'ID Mancante';
     const anagrafica = mappa.get(id);
-    if (!anagrafica) return 'Sconosciuto';
+    if (!anagrafica) return `ID: ${id.substring(0,5)}...`;
     return `${anagrafica.cognome || ''} ${anagrafica.nome}`.trim();
 };
 
 const RapportiniTable: React.FC<RapportiniTableProps> = ({ 
     rapportini, 
-    onRowClick, 
-    onEdit, 
-    onDelete, 
-    onPrint,
     tecniciMap,
     naviMap,
     luoghiMap,
     tipiGiornataMap,
     loading
 }) => {
+
+    // Usa le azioni direttamente dallo store
+    const openRapportinoForm = useRapportiniStore(state => state.openRapportinoForm);
+    // Qui potresti aggiungere anche le azioni per eliminare e stampare
+    // const deleteRapportino = useRapportiniStore(state => state.deleteRapportino);
+    // const printRapportino = useRapportiniStore(state => state.printRapportino);
 
     const columns: GridColDef<Rapportino>[] = [
         {
@@ -67,46 +69,33 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
             minWidth: 200,
             renderCell: (params: GridRenderCellParams<Rapportino>) => {
                 if (!params.row) return null;
+                const mainTecnicoNome = getNomeAnagrafica(tecniciMap, params.row.tecnicoScriventeId || params.row.tecnicoId);
+                const altriTecnici = (params.row.presenze || [])
+                    .filter(id => id !== (params.row.tecnicoScriventeId || params.row.tecnicoId))
+                    .map(id => getNomeAnagrafica(tecniciMap, id));
 
-                const mainTecnicoNome = getNomeAnagrafica(tecniciMap, params.row.tecnicoId);
-
-                const altriTecnici = (params.row.dettaglioOreTecnici || [])
-                    .filter(d => d.tecnicoId !== params.row.tecnicoId)
-                    .map(d => getNomeAnagrafica(tecniciMap, d.tecnicoId))
-                    .filter(nome => nome !== 'Sconosciuto' && nome !== 'ID Mancante');
-
-                if (mainTecnicoNome === 'Sconosciuto' || mainTecnicoNome === 'ID Mancante') {
-                    return <MissingDataChip label="Tecnico Resp. non trovato" />;
-                }
+                if (mainTecnicoNome.startsWith('ID')) return <MissingDataChip label="Tecnico Resp. non valido" />;
                 
                 const countAltri = altriTecnici.length;
                 const tooltipText = [mainTecnicoNome, ...altriTecnici].join(', ');
 
                 return (
                     <Tooltip title={tooltipText} placement="bottom-start">
-                        <Typography variant="body2" noWrap>
+                         <Typography variant="body2" noWrap>
                             <Box component="strong" sx={{ fontWeight: 'bold' }}>{mainTecnicoNome}</Box>
-                            {countAltri > 0 && <Box component="span" sx={{ ml: 0.5 }}> (+{countAltri})</Box>}
+                            {countAltri > 0 && <Box component="span" sx={{ ml: 0.5, color: 'text.secondary' }}> (+{countAltri})</Box>}
                         </Typography>
                     </Tooltip>
                 );
             }
         },
         {
-            field: 'tipoGiornata',
-            headerName: 'Tipo Giornata',
-            width: 150,
-            renderCell: (params) => {
-                const nomeTipoGiornata = getNomeAnagrafica(tipiGiornataMap, params.row?.tipoGiornataId);
-                return <Typography variant="body2" noWrap>{nomeTipoGiornata}</Typography>;
-            }
-        },
-        { 
-            field: 'lavoroEseguito', 
-            headerName: 'Descrizione', 
-            flex: 1.5, 
-            minWidth: 250, 
-            valueGetter: (params) => params.row?.lavoroEseguito || '–'
+            field: 'descrizioneBreve',
+            headerName: 'Descrizione Intervento',
+            flex: 1.5,
+            minWidth: 250,
+            valueGetter: (params) => params.row?.descrizioneBreve || params.row?.lavoroEseguito || '–',
+            renderCell: (params) => <Typography variant="body2" noWrap title={params.value}>{params.value}</Typography>
         },
         { 
             field: 'naveNome', 
@@ -114,25 +103,11 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
             width: 180, 
             renderCell: (params) => {
                 const nomeNave = getNomeAnagrafica(naviMap, params.row?.naveId);
-                if (nomeNave === 'Sconosciuto' || nomeNave === 'ID Mancante') {
-                    return <MissingDataChip label="Nave non trovata" />;
-                }
+                if (nomeNave.startsWith('ID')) return <MissingDataChip label="Nave non valida" />;
                 return <Typography variant="body2" noWrap>{nomeNave}</Typography>;
             }
         },
-        {
-            field: 'luogoNome',
-            headerName: 'Luogo',
-            width: 180,
-            renderCell: (params) => {
-                const nomeLuogo = getNomeAnagrafica(luoghiMap, params.row?.luogoId);
-                if (nomeLuogo === 'Sconosciuto' || nomeLuogo === 'ID Mancante') {
-                    return <MissingDataChip label="Luogo non trovato" />;
-                }
-                return <Typography variant="body2" noWrap>{nomeLuogo}</Typography>;
-            }
-        },
-        {
+         {
             field: 'oreTotali',
             headerName: 'Ore',
             width: 80,
@@ -142,7 +117,7 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
                 const dettaglio = params.row?.dettaglioOreTecnici;
                 return Array.isArray(dettaglio) ? dettaglio.reduce((sum, item) => sum + (item.ore || 0), 0) : 0;
             },
-            renderCell: (params) => <Typography variant="body2" sx={{ textAlign: 'right', width: '100%' }}>{(params.value || 0).toFixed(1)}h</Typography>
+            renderCell: (params) => <Typography variant="body2" sx={{ fontWeight: '500', textAlign: 'right', width: '100%' }}>{(params.value || 0).toFixed(1)}h</Typography>
         },
         {
             field: 'actions',
@@ -153,28 +128,33 @@ const RapportiniTable: React.FC<RapportiniTableProps> = ({
             getActions: (params) => {
                 if (!params.row?.id) return [];
                 return [
-                    <GridActionsCellItem icon={<EditIcon />} label="Modifica" onClick={() => onEdit(params.row)} showInMenu />,
-                    <GridActionsCellItem icon={<PrintIcon />} label="Stampa/PDF" onClick={() => onPrint(params.row)} showInMenu />,
-                    <GridActionsCellItem icon={<DeleteIcon />} label="Elimina" onClick={() => onDelete(params.row.id)} showInMenu />,
+                    // L'azione di modifica ora chiama direttamente lo store
+                    <GridActionsCellItem 
+                        icon={<EditIcon />} 
+                        label="Modifica Rapportino" 
+                        onClick={() => openRapportinoForm(params.row)} // Usa l'azione dello store
+                    />,
+                    <GridActionsCellItem icon={<PrintIcon />} label="Stampa/PDF" onClick={() => alert('Stampa non implementata')} showInMenu />,
+                    <GridActionsCell-item icon={<DeleteIcon />} label="Elimina" onClick={() => alert('Eliminazione non implementata')} showInMenu />,
                 ];
             }
         },
     ];
 
     return (
-        <Box sx={{ height: '75vh', width: '100%' }}>
+        <Box sx={{ height: 'calc(100vh - 200px)', width: '100%' }}>
             <DataGrid
                 rows={rapportini}
                 columns={columns}
                 loading={loading}
-                rowHeight={45}
+                rowHeight={40}
                 density="compact"
-                onRowClick={(params) => params.row && onRowClick(params.row)}
+                onRowClick={(params) => params.row && openRapportinoForm(params.row)}
                 initialState={{
-                    pagination: { paginationModel: { pageSize: 50 } },
+                    pagination: { paginationModel: { pageSize: 100 } },
                     sorting: { sortModel: [{ field: 'data', sort: 'desc' }] },
                 }}
-                pageSizeOptions={[25, 50, 100]}
+                pageSizeOptions={[50, 100, 200]}
                 sx={{
                     cursor: 'pointer',
                     border: 0,

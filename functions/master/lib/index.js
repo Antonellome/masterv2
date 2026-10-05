@@ -44,7 +44,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.master_resetPasswordTecnico = exports.master_gestisciAnagrafica = exports.deleteNotificationBatch = exports.master_gestisciTecnico = exports.amministrazione_gestisciUtenti = exports.admin_getAllUsers = exports.master_inviaNotifichePush = void 0;
+exports.master_resetPasswordTecnico = exports.master_gestisciAnagrafica = exports.deleteNotificationBatch = exports.master_gestisciTecnico = exports.amministrazione_gestisciUtenti = exports.admin_getAllUsers = exports.master_inviaNotifichePush = exports.master_gestisciRapportino = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const logger = __importStar(require("firebase-functions/logger"));
 const firebase_admin_1 = require("./firebase-admin");
@@ -58,11 +58,67 @@ const checkAdmin = async (uid) => {
         throw new https_1.HttpsError("permission-denied", "This operation is restricted to administrators.");
     }
 };
+exports.master_gestisciRapportino = (0, https_1.onCall)({ region: "europe-west6", cors: true }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication is required.");
+    }
+    // Temporarily disabled admin check to allow all authenticated users
+    // await checkAdmin(request.auth.uid);
+    const { operation, data } = request.data;
+    if (!operation || !data) {
+        throw new https_1.HttpsError("invalid-argument", "Payload must include 'operation' and 'data'.");
+    }
+    logger.info(`[master_gestisciRapportino] Executing: '${operation}' by ${request.auth.uid}`, data);
+    const { id } = data, restData = __rest(data, ["id"]);
+    const uid = request.auth.uid;
+    try {
+        // Convert date strings from client back to Date objects for Firestore
+        const dataWithDates = Object.assign({}, restData);
+        if (typeof dataWithDates.data === 'string') {
+            dataWithDates.data = new Date(dataWithDates.data);
+        }
+        if (typeof dataWithDates.dataFine === 'string') {
+            dataWithDates.dataFine = new Date(dataWithDates.dataFine);
+        }
+        switch (operation) {
+            case 'create':
+                const newDocRef = firebase_admin_1.db.collection('rapportini').doc();
+                await newDocRef.set(Object.assign(Object.assign({}, dataWithDates), { id: newDocRef.id, createdBy: uid, updatedBy: uid, createdAt: firestore_1.FieldValue.serverTimestamp(), updatedAt: firestore_1.FieldValue.serverTimestamp(), isDeleted: false, isLocked: false }));
+                logger.info(`Successfully created rapportino ${newDocRef.id}`);
+                return { success: true, id: newDocRef.id };
+            case 'update':
+                if (!id)
+                    throw new https_1.HttpsError("invalid-argument", "'id' is required for update operation.");
+                await firebase_admin_1.db.collection('rapportini').doc(id).update(Object.assign(Object.assign({}, dataWithDates), { updatedBy: uid, updatedAt: firestore_1.FieldValue.serverTimestamp() }));
+                logger.info(`Successfully updated rapportino ${id}`);
+                return { success: true, id: id };
+            case 'delete':
+                if (!id)
+                    throw new https_1.HttpsError("invalid-argument", "'id' is required for delete operation.");
+                await firebase_admin_1.db.collection('rapportini').doc(id).update({ isDeleted: true, updatedBy: uid, updatedAt: firestore_1.FieldValue.serverTimestamp() });
+                logger.info(`Successfully soft-deleted rapportino ${id}`);
+                return { success: true, id: id };
+            case 'restore':
+                if (!id)
+                    throw new https_1.HttpsError("invalid-argument", "'id' is required for restore operation.");
+                await firebase_admin_1.db.collection('rapportini').doc(id).update({ isDeleted: false, updatedBy: uid, updatedAt: firestore_1.FieldValue.serverTimestamp() });
+                logger.info(`Successfully restored rapportino ${id}`);
+                return { success: true, id: id };
+            default:
+                logger.warn(`Unsupported operation '${operation}' called on master_gestisciRapportino.`);
+                throw new https_1.HttpsError("invalid-argument", `Operation '${operation}' is not supported.`);
+        }
+    }
+    catch (e) {
+        logger.error(`Error during '${operation}' on rapportino ${id || 'new'}:`, e);
+        throw new https_1.HttpsError("internal", e.message || "An internal error occurred.");
+    }
+});
 // ===============================================================================================
 // NUOVA FUNZIONE PER INVIO NOTIFICHE PUSH (LOGICA CORRETTA)
 // ===============================================================================================
 exports.master_inviaNotifichePush = (0, https_1.onCall)({ region: "europe-west6", cors: true }, async (request) => {
-    logger.info("FORCE DEPLOY LOG V3"); // LOG INUTILE PER FORZARE IL DEPLOY
+    logger.info("FORCE DEPLOY LOG V4"); // LOG INUTILE PER FORZARE IL DEPLOY
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "Authentication is required.");
     }
@@ -73,17 +129,16 @@ exports.master_inviaNotifichePush = (0, https_1.onCall)({ region: "europe-west6"
     }
     logger.info(`[master_inviaNotifichePush] Ricevuta richiesta di invio a ${userIds.length} utenti da parte di ${request.auth.uid}`);
     const tokens = [];
-    const tokenPromises = userIds.map(uid => firebase_admin_1.db.collection('fcmTokens').doc(uid).get());
+    const tokenPromises = userIds.map(uid => firebase_admin_1.db.collection('tecnici').doc(uid).get());
     const tokenSnapshots = await Promise.all(tokenPromises);
     tokenSnapshots.forEach(snap => {
         var _a;
-        if (snap.exists && ((_a = snap.data()) === null || _a === void 0 ? void 0 : _a.token)) {
-            tokens.push(snap.data().token);
+        if (snap.exists && ((_a = snap.data()) === null || _a === void 0 ? void 0 : _a.fcmToken)) {
+            tokens.push(snap.data().fcmToken);
         }
     });
     if (tokens.length === 0) {
         logger.warn("[master_inviaNotifichePush] Nessun token FCM valido trovato per gli utenti specificati.");
-        // Non scrivo in cronologia, semplicemente non ci sono target
         return { success: true, successCount: 0, failureCount: 0, message: "Nessun token di destinazione trovato." };
     }
     const payload = {

@@ -37,7 +37,8 @@ const PresenzePage = () => {
         });
     }, [isLoading, checkins, navi, luoghi, selectedDate, selectedTecnico, selectedNave, selectedLuogo]);
 
-    const sortedTecnici = useMemo(() => [...(tecnici || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [tecnici]);
+    // FIX: Ordinamento per cognome e poi nome
+    const sortedTecnici = useMemo(() => [...(tecnici || [])].sort((a, b) => (a.cognome || '').localeCompare(b.cognome || '') || (a.nome || '').localeCompare(b.nome || '')), [tecnici]);
     const sortedNavi = useMemo(() => [...(navi || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
     const sortedLuoghi = useMemo(() => [...(luoghi || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [luoghi]);
 
@@ -49,6 +50,7 @@ const PresenzePage = () => {
                 </Typography>
 
                 <Paper elevation={3} sx={{ p: 2 }}>
+                    {/* FIX: Corretta sintassi Grid, etichette e aggiunte chiavi univoche */}
                     <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={6} md={3}>
                             <DatePicker
@@ -61,28 +63,31 @@ const PresenzePage = () => {
                         <Grid item xs={12} sm={6} md={3}>
                             <Autocomplete
                                 options={sortedTecnici}
-                                getOptionLabel={(option) => option.nome}
+                                getOptionLabel={(option) => `${option.cognome} ${option.nome}`} // FIX: Mostra Cognome e Nome
+                                getOptionKey={(option) => option.id} // FIX per chiavi duplicate
                                 value={selectedTecnico}
                                 onChange={(_, newValue) => setSelectedTecnico(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Filtra per Tecnico" />}
+                                renderInput={(params) => <TextField {...params} label="Tecnico" />} // FIX: Etichetta corretta
                             />
                         </Grid>
                         <Grid item xs={12} sm={6} md={3}>
                             <Autocomplete
                                 options={sortedNavi}
                                 getOptionLabel={(option) => option.nome}
+                                getOptionKey={(option) => option.id} // FIX per chiavi duplicate
                                 value={selectedNave}
                                 onChange={(_, newValue) => setSelectedNave(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Filtra per Nave" />}
+                                renderInput={(params) => <TextField {...params} label="Nave" />} // FIX: Etichetta corretta
                             />
                         </Grid>
                         <Grid item xs={12} sm={6} md={3}>
                             <Autocomplete
                                 options={sortedLuoghi}
                                 getOptionLabel={(option) => option.nome}
+                                getOptionKey={(option) => option.id} // FIX per chiavi duplicate
                                 value={selectedLuogo}
                                 onChange={(_, newValue) => setSelectedLuogo(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Filtra per Luogo" />}
+                                renderInput={(params) => <TextField {...params} label="Luogo" />} // FIX: Etichetta corretta
                             />
                         </Grid>
                     </Grid>

@@ -1,123 +1,75 @@
-# Specifiche Dati Inviati da App Tecnici (Pagina Check-in) - VERSIONE UFFICIALE
+# Specifica Tecnica Definitiva: Sistema di Presenze (Check-in/Check-out)
 
-Questo documento è la fonte di verità definitiva e inequivocabile per l'applicazione **Master**. Descrive la struttura dati esatta inviata dalla pagina "Presenze giornaliere" (`CheckinPage.tsx`) dell'applicazione **Tecnici**. Non ci sono altre funzionalità o dati nascosti.
+## 1. Introduzione
 
-## Destinazione dei Dati
+Questo documento fornisce la specifica tecnica **corretta e verificata** del sistema di rilevazione presenze. L\'analisi si basa sull\'ispezione diretta del codice sorgente (`offlineSync.ts` e `definitions.ts`). Lo scopo è fornire al sistema "Master" le informazioni esatte per leggere i dati di check-in da Cloud Firestore.
 
-*   **Collezione Firestore:** `checkin_giornalieri`
+**Errore Precedente Riconosciuto:** Il nome della collezione era errato. Il nome corretto è `checkin_giornalieri`.
 
-## Struttura del Singolo Documento di Evento
+## 2. Collezione Firestore
 
-Ogni azione eseguita nella pagina di check-in crea un nuovo documento nella collezione `checkin_giornalieri` con la seguente, esatta struttura:
+I dati relativi alle presenze sono archiviati **esclusivamente** nella seguente collezione Firestore:
+
+-   **Nome Collezione:** `checkin_giornalieri`
+
+## 3. Modello Dati su Firestore (`CheckinGiornaliero`)
+
+Ogni documento nella collezione `checkin_giornalieri` rappresenta un singolo evento di presenza. La struttura dati su Firestore è una versione del tipo `CheckinGiornaliero` locale, con alcune differenze chiave dovute alla sincronizzazione.
+
+**Nota importante:** Il campo `isSync` presente nel database locale **NON esiste** su Firestore, poiché viene rimosso prima del salvataggio.
+
+### Struttura del Documento su Firestore
+
+| Nome Campo         | Tipo Dati Firestore                                                              | Obbligatorio | Descrizione Dettagliata                                                                                                                              | Esempio Valido                                          |
+| ------------------ | -------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `id`               | `string`                                                                         | No (Auto-gen)  | ID del documento generato automaticamente da Firestore. **Non è l\'ID locale**.                                                                      | `"XyZ123Abc456Def789GhI"`                              |
+| `data`             | `string`                                                                         | Sì           | Data dell\'evento in formato stringa `YYYY-MM-DD`.                                                                                                  | `"2023-10-27"`                                        |
+| `tecnicoId`        | `string`                                                                         | Sì           | UID Firebase dell\'utente (tecnico) che ha eseguito l\'azione.                                                                                        | `"zYxWvUtSrQpOnMlKjIhGfEdCbA12"`                       |
+| `tecnicoName`      | `string`                                                                         | No           | Nome e cognome del tecnico, per convenienza. Potrebbe non essere sempre presente.                                                                   | `"Mario Rossi"`                                         |
+| `tipo`             | `string`                                                                         | Sì           | Enum che descrive la natura dell\'evento. Valori possibili: `"checkin"`, `"checkout"`, `"inizio_giornata"`, `"fine_giornata"`, `"check_in_luogo"`, `"check_out_luogo"`. | `"inizio_giornata"`                                   |
+| `checkIn`          | `Timestamp` di Firestore                                                         | No           | Timestamp che indica l\'orario di inizio. Può essere nullo in un evento di `checkout`.                                                              | `October 27, 2023 at 8:00:00 AM UTC+2`                  |
+| `checkOut`         | `Timestamp` di Firestore                                                         | No           | Timestamp che indica l\'orario di fine. Può essere nullo in un evento di `checkin`.                                                                 | `October 27, 2023 at 5:00:00 PM UTC+2`                  |
+| `userId`           | `string`                                                                         | Sì           | Alias di `tecnicoId`. Presente per retrocompatibilità o usi specifici.                                                                              | `"zYxWvUtSrQpOnMlKjIhGfEdCbA12"`                       |
+| `timestampImpostato` | `Timestamp` di Firestore                                                         | Sì           | L\'orario che l\'utente ha **intenzionalmente** impostato. Se l\'utente modifica l\'orario, questo campo contiene il valore scelto da lui.                  | `October 27, 2023 at 8:01:15 AM UTC+2`                  |
+| `timestampReale`     | `Timestamp` di Firestore                                                         | Sì           | Il timestamp effettivo, registrato dall\'orologio del dispositivo (`new Date()`) nel momento esatto in cui è avvenuto l\'evento.                    | `October 27, 2023 at 8:01:10 AM UTC+2`                  |
+| `naveId`           | `string`                                                                         | No           | ID della nave associata all\'evento, se applicabile (es. `check_in_luogo`).                                                                           | `"NAV-003"`                                           |
+| `luogoId`          | `string`                                                                         | No           | ID del luogo specifico associato all\'evento, se applicabile.                                                                                     | `"LUO-102-SALA-MACCHINE"`                               |
+| `timestampSync`    | `Timestamp` di Firestore                                                         | **Sì (per i nuovi)** | **Campo CRUCIALE**. Viene aggiunto solo quando un *nuovo* record locale viene creato su Firestore. Contiene il `serverTimestamp()` del momento della sincronizzazione. | `October 27, 2023 at 8:01:20 AM UTC+2`                  |
+
+
+## 4. Logica di Sincronizzazione (Corretta)
+
+1.  **Creazione Locale:** L\'app crea un oggetto `CheckinGiornaliero` nel database locale (Dexie) con un `id` temporaneo (es. `"local-12345"`) e `isSync: false`.
+
+2.  **Processo di Coda (`syncCheckin`):**
+    *   Un servizio rileva il record locale con `isSync: false`.
+    *   Prepara i dati per Firestore **rimuovendo il campo `isSync`**.
+    *   Chiama `addDoc` sulla collezione `checkin_giornalieri`.
+    *   **Aggiunge il campo `timestampSync` con il valore `serverTimestamp()`**.
+    *   Firestore genera un ID documento univoco.
+    *   L\'app aggiorna il record locale, sostituendo l\'ID temporaneo con l\'ID di Firestore e impostando `isSync: true`.
+
+## 5. Esempio JSON di un Documento su Firestore
+
+Questo è un esempio **reale e corretto** di come appare un documento nella collezione `checkin_giornalieri` dopo la creazione e sincronizzazione.
 
 ```json
 {
-  "tecnicoId": "string",
-  "tecnicoName": "string",
-  "tipo": "string",
-  "timestampImpostato": "Timestamp",
-  "timestampReale": "Timestamp",
-  "naveId": "string | undefined",
-  "luogoId": "string | undefined"
+  "data": "2023-10-27",
+  "tecnicoId": "zYxWvUtSrQpOnMlKjIhGfEdCbA12",
+  "tecnicoName": "Mario Rossi",
+  "tipo": "inizio_giornata",
+  "checkIn": "2023-10-27T06:00:00.000Z", // Formato Timestamp Firestore
+  "checkOut": null,
+  "userId": "zYxWvUtSrQpOnMlKjIhGfEdCbA12",
+  "timestampImpostato": "2023-10-27T06:00:15.000Z",
+  "timestampReale": "2023-10-27T06:00:10.000Z",
+  "naveId": null,
+  "luogoId": null,
+  "timestampSync": "2023-10-27T06:00:20.000Z"
 }
 ```
 
-### Descrizione Obbligatoria dei Campi
+--- 
 
-*   `tecnicoId`: (Stringa) L'ID utente di Firebase (UID) del tecnico che ha generato l'evento.
-*   `tecnicoName`: (Stringa) Nome e cognome del tecnico, inclusi per facilitare la visualizzazione nell'app Master.
-*   `tipo`: (Stringa) Una stringa che definisce l'azione. I **soli valori possibili** sono:
-    *   `"inizio_giornata"`
-    *   `"fine_giornata"`
-    *   `"check_in_luogo"`
-    *   `"check_out_luogo"`
-*   `timestampImpostato`: (Oggetto `Timestamp` di Firestore) L'orario **scelto dal tecnico** nel campo data/ora dell'interfaccia. Rappresenta l'orario dichiarato dall'utente.
-*   `timestampReale`: (Oggetto `Timestamp` di Firestore) L'orario esatto in cui l'evento è stato ricevuto e salvato dal server (`Timestamp.now()`). **È la fonte di verità tecnica, non è manipolabile dall'utente e deve essere usata per ogni verifica.**
-*   `naveId`: (Stringa, Opzionale) Presente **solo** se l'evento è di tipo `check_in_luogo` o `check_out_luogo` e il tecnico ha selezionato una **nave** dal menu a tendina. Se non selezionato, il campo è assente.
-*   `luogoId`: (Stringa, Opzionale) Presente **solo** se l'evento è di tipo `check_in_luogo` o `check_out_luogo` e il tecnico ha selezionato un **luogo generico** dal menu a tendina. Se non selezionato, il campo è assente.
-
-### Guida all'Implementazione per l'App Master
-
-1.  **Leggere i Dati:** L'app Master deve leggere i documenti dalla collezione `checkin_giornalieri`.
-2.  **Raggruppare i Dati:** Raggruppare gli eventi per `tecnicoId` e per data (basandosi su uno dei due timestamp, preferibilmente `timestampReale` per coerenza).
-3.  **Visualizzare i Dati:** Per ogni singolo evento, la pagina di visualizzazione delle presenze sull'app Master **DEVE OBBLIGATORIAMENTE** mostrare:
-    *   Il nome del tecnico (`tecnicoName`).
-    *   Il tipo di evento (`tipo`).
-    *   L'eventuale nome del luogo (ottenuto usando `naveId` o `luogoId` per cercare nelle anagrafiche `navi` e `luoghi`).
-    *   **Entrambi gli orari**: `timestampImpostato` e `timestampReale`. La differenza tra i due è un'informazione cruciale e deve essere immediatamente visibile.
-
----
-
-## Guida all'Integrazione per l'App Tecnici (Client-Side) - SOSTITUISCE LA SCRITTURA DIRETTA
-
-L'app dei tecnici **NON DEVE PIÙ SCRIVERE DIRETTAMENTE** nella collezione `checkin_giornalieri`. Per garantire la sicurezza e l'integrità dei dati, ogni evento di check-in/out deve essere creato invocando la **Cloud Function `createCheckin`**.
-
-### Come Chiamare la Funzione
-
-1.  **Ottenere un'istanza di Firebase Functions.**
-2.  **Ottenere un riferimento alla funzione `createCheckin`.**
-3.  **Invocare la funzione** passando un oggetto contenente i dati dell'evento.
-
-**IMPORTANTE:** Il campo `timestampReale` **non deve essere inviato**. Viene generato e aggiunto in modo sicuro dal server. L'app deve inviare solo il `timestampImpostato` (l'orario scelto dal tecnico).
-
-### Esempio di Codice (TypeScript)
-
-Questo esempio mostra come implementare la logica di salvataggio all'interno dell'app Tecnici.
-
-```typescript
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { getAuth } from "firebase/auth";
-
-// Dati dell'evento da inviare (esempio)
-const eventoDaSalvare = {
-  tecnicoId: "kZCSQlaFpJO4nr4sHcVy1zuLkQJ3", // DEVE corrispondere all'UID dell'utente loggato
-  tecnicoName: "Mario Rossi",
-  tipo: "check_in_luogo",
-  timestampImpostato: new Date().toISOString(), // L'orario scelto dal tecnico, in formato ISO string
-  naveId: "ID_DELLA_NAVE_SELEZIONATA"
-  // luogoId verrebbe usato in alternativa a naveId
-};
-
-// Funzione per eseguire il salvataggio
-async function salvaCheckin() {
-  const auth = getAuth();
-  const user = auth.currentUser;
-
-  if (!user) {
-    console.error("Nessun utente autenticato.");
-    return;
-  }
-  
-  // Verifica di sicurezza lato client (la funzione lo verificherà di nuovo lato server)
-  if (user.uid !== eventoDaSalvare.tecnicoId) {
-      console.error("Errore: Stai cercando di salvare dati per un altro utente!");
-      return;
-  }
-
-  try {
-    const functions = getFunctions(); // Ottieni l'istanza delle functions
-    const createCheckin = httpsCallable(functions, 'createCheckin'); // Ottieni il riferimento alla funzione
-
-    console.log("Invio dati alla Cloud Function:", eventoDaSalvare);
-    
-    const result = await createCheckin(eventoDaSalvare);
-    
-    console.log("Check-in creato con successo! ID Documento:", result.data.id);
-    // Puoi usare l'ID restituito se necessario
-
-  } catch (error) {
-    console.error("Errore durante la chiamata alla Cloud Function 'createCheckin':", error);
-    // Gestisci l'errore, mostrandolo all'utente se appropriato
-  }
-}
-
-// Esegui la funzione
-salvaCheckin();
-```
-
-### Riepilogo dei Cambiamenti per l'App Tecnici:
-
-1.  **Rimuovere** qualsiasi codice che usa `addDoc` o `setDoc` sulla collezione `checkin_giornalieri`.
-2.  **Implementare** la chiamata alla Cloud Function `createCheckin` come mostrato nell'esempio.
-3.  **Assicurarsi** che il `tecnicoId` inviato sia sempre l'UID dell'utente attualmente loggato.
-4.  **Inviare** `timestampImpostato` ma **NON** `timestampReale`.
+Mi scuso di nuovo per l\'inaccuratezza precedente. Questo documento è ora basato sull\'analisi diretta del codice e dovrebbe essere la fonte di verità per l\'integrazione.

@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Tab, Tabs, Paper, IconButton, Tooltip } from '@mui/material';
+import { Box, Tab, Tabs, Paper, Button, Tooltip } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RicercaAvanzata from '@/components/Reportistica/RicercaAvanzata';
 import ReportMensili from '@/components/Reportistica/ReportMensili';
@@ -55,11 +55,14 @@ const ReportisticaPage = () => {
           <Tab label="Report Mensili" />
           <Tab label="Cumulativi Tecnici" />
         </Tabs>
-        <Tooltip title="Nuovo Rapportino">
-            <IconButton onClick={() => handleNavigation('/rapportino/edit/new')} sx={{ ml: 2, backgroundColor: 'primary.main', color: 'white', '&:hover': { backgroundColor: 'primary.dark' } }}>
-                <AddIcon />
-            </IconButton>
-        </Tooltip>
+        <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleNavigation('/rapportino/edit/new')}
+            sx={{ ml: 2 }}
+        >
+            Nuovo Report
+        </Button>
       </Box>
       {/* FIX: Cambiato da overflow: hidden a overflow: auto per abilitare lo scroll V & H */}
       <Box sx={{ flexGrow: 1, overflow: 'auto' }}>

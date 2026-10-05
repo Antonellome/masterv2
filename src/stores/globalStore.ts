@@ -188,7 +188,7 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
   },
 
   syncCollectionByName: async (collectionName: CollectionName) => {
-    logger.log(`GlobalStore: Avvio sincronizzazione mirata per "${collectionName}"...`);
+    logger.log(`GlobalStore: Avvio sincronizzazione mirata per \"${collectionName}\"...`);
     set({ isSyncing: true });
 
     try {
@@ -205,11 +205,11 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
         }
 
         await config.table.clear();
-        logger.log(`GlobalStore: Tabella locale "${config.name}" pulita.`);
+        logger.log(`GlobalStore: Tabella locale \"${config.name}\" pulita.`);
 
         const snapshot = await getDocs(collection(firestoreDb, config.name));
         if (snapshot.empty) {
-            logger.log(`GlobalStore: Nessun record da sincronizzare per "${config.name}".`);
+            logger.log(`GlobalStore: Nessun record da sincronizzare per \"${config.name}\".`);
             return;
         }
 
@@ -218,16 +218,16 @@ const useGlobalStore = create<GlobalState & GlobalActions>((set, get) => ({
 
         if (dataToStore.length > 0) {
             await config.table.bulkPut(dataToStore);
-            logger.log(`GlobalStore: ${dataToStore.length} record inseriti nella tabella "${config.name}".`);
+            logger.log(`GlobalStore: ${dataToStore.length} record inseriti nella tabella \"${config.name}\".`);
         }
 
     } catch (error) {
         const typedError = error as Error;
-        logger.error(`ERRORE durante la sincronizzazione mirata di "${collectionName}".`, typedError.message);
+        logger.error(`ERRORE durante la sincronizzazione mirata di \"${collectionName}\".`, typedError.message);
         get().showNotification(`Errore sincronizzazione ${collectionName}`, 'error');
     } finally {
         set({ isSyncing: false });
-        logger.log(`GlobalStore: Fine ciclo di sincronizzazione mirata per "${collectionName}".`);
+        logger.log(`GlobalStore: Fine ciclo di sincronizzazione mirata per \"${collectionName}\".`);
     }
   },
 

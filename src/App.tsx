@@ -3,9 +3,6 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useGlobalStore } from '@/stores/globalStore';
-import { useRapportiniStore } from '@/store/useRapportiniStore';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/config/firebase';
 import { Box, CircularProgress, Typography, Paper, Button } from '@mui/material';
 import { useAuthInitializer } from '@/auth/authHooks';
 import { authService } from '@/auth/authService';
@@ -13,7 +10,9 @@ import { GlobalAlert } from '@/components/GlobalAlert';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
 import { AnagraficheProvider } from '@/contexts/AnagraficheContext';
-import { logger } from '@/utils/logger';
+
+// Il controller del form rimane, è necessario per la logica del popup globale
+import RapportinoFormController from '@/components/Rapportini/RapportinoFormController';
 
 // Lazy load delle pagine
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -36,23 +35,14 @@ const AccessDenied = () => {
   const handleLogout = async () => {
     try {
       await authService.logout();
-    } catch (error) {
-      console.error("Errore durante il logout forzato:", error);
-    }
+    } catch (error) { console.error("Errore durante il logout forzato:", error); }
   };
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', textAlign: 'center', p: 2, backgroundColor: '#121212' }}>
       <Paper elevation={3} sx={{ p: 4, borderRadius: 2, backgroundColor: '#1e1e1e', color: 'white' }}>
-        <Typography variant="h4" gutterBottom color="error">
-          Accesso Negato
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 3 }}>
-          Non disponi dei privilegi di amministratore necessari per accedere a questa applicazione.
-        </Typography>
-        <Button variant="contained" color="primary" onClick={handleLogout}>
-          Torna alla pagina di Login
-        </Button>
+        <Typography variant="h4" gutterBottom color="error">Accesso Negato</Typography>
+        <Typography variant="body1" sx={{ mb: 3 }}>Non disponi dei privilegi necessari per accedere a questa applicazione.</Typography>
+        <Button variant="contained" color="primary" onClick={handleLogout}>Torna alla pagina di Login</Button>
       </Paper>
     </Box>
   );
@@ -69,6 +59,7 @@ const GlobalLoader = ({ message }: { message: string }) => (
 // --- Contenuto Principale dell'Applicazione ---
 const AppContent = () => (
   <AnagraficheProvider>
+    <RapportinoFormController /> 
     <Suspense fallback={<GlobalLoader message="Caricamento pagina..." />}>
       <Routes>
         <Route element={<ProtectedRoute />}>
@@ -99,38 +90,14 @@ const AppContent = () => (
 const AuthWrapper = () => {
   const { authLoading, user, isAdmin } = useAuthStore();
   const isAppLoading = useGlobalStore((state) => state.appLoading);
-  const setData = useRapportiniStore((state) => state.setData); // CORRETTO
   const isAuthenticated = !!user;
 
-  // Effetto per caricare i tecnici quando l'utente è admin
-  useEffect(() => {
-    const fetchTecnici = async () => {
-      try {
-        logger.log("AuthWrapper: Admin detected, fetching tecnici...");
-        const tecniciCollection = collection(db, 'tecnici');
-        const tecniciSnapshot = await getDocs(tecniciCollection);
-        const tecniciList = tecniciSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // @ts-ignore - Temporaneamente per evitare problemi di tipo con lo stato parziale
-        setData({ tecnici: tecniciList }); // CORRETTO
+  // QUESTO ERA IL CODICE CHE CAUSAVA IL BLOCCO. L'HO RIMOSSO.
+  // La logica di caricamento dati non deve stare qui per evitare conflitti
+  // con le pagine che usano il database locale (Dexie).
 
-        logger.log(`AuthWrapper: Successfully loaded ${tecniciList.length} tecnici into store.`);
-      } catch (error) {
-        logger.error("AuthWrapper: Error fetching tecnici:", error);
-      }
-    };
+  if (authLoading || isAppLoading) return <GlobalLoader message="Verifica autorizzazioni..." />;
 
-    if (isAdmin) {
-      fetchTecnici();
-    }
-  }, [isAdmin, setData]);
-
-  // 1. Caricamento iniziale (autenticazione o sync globale)
-  if (authLoading || isAppLoading) {
-    return <GlobalLoader message="Verifica autorizzazioni e caricamento dati..." />;
-  }
-
-  // 2. Utente non autenticato -> Pagine pubbliche
   if (!isAuthenticated) {
     return (
       <Suspense fallback={<GlobalLoader message="Caricamento..." />}>
@@ -143,18 +110,14 @@ const AuthWrapper = () => {
     );
   }
 
-  // 3. Utente autenticato ma non admin -> Accesso Negato
-  if (!isAdmin) {
-    return <AccessDenied />;
-  }
+  if (!isAdmin) return <AccessDenied />;
 
-  // 4. Utente autenticato e admin -> App principale
   return <AppContent />;
 };
 
 // --- Componente Root dell'App ---
 function App() {
-  useAuthInitializer(); // Hook che inizializza il listener di autenticazione
+  useAuthInitializer();
 
   return (
     <>

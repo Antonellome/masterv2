@@ -85,7 +85,7 @@ const VersioneAppTab = () => {
                 Versione Applicazione
             </Typography>
             <Typography variant="body1" sx={{ mb: 2 }}>
-                Master Office V 2.0
+                Master Office V 3.0
             </Typography>
 
             {/* --- SEZIONE CONTROLLO AGGIORNAMENTI --- */}
@@ -103,7 +103,7 @@ const VersioneAppTab = () => {
 
             {checkError && (
                 <Alert severity="error" sx={{ mt: 2 }}>
-                    Errore durante il controllo: {checkError}
+                    Errore during il controllo: {checkError}
                 </Alert>
             )}
 
@@ -131,7 +131,7 @@ const VersioneAppTab = () => {
 
             {installError && (
                 <Alert severity="error" sx={{ mt: 2 }}>
-                    Errore durante l'installazione: {installError}
+                    Errore during l'installazione: {installError}
                 </Alert>
             )}
             

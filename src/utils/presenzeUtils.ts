@@ -1,147 +1,118 @@
 
+import { Checkin, OrarioLavoro, Intervento } from '@/models/definitions';
 import dayjs from 'dayjs';
-import isBetween from 'dayjs/plugin/isBetween';
-import { Checkin, Tecnico, Nave, Luogo } from '@/models/definitions';
 
-dayjs.extend(isBetween);
+// --- HELPERS ---
 
-// --- TIPI DI DATO PER LE RIGHE DELLE TABELLE ---
+const toDate = (value: string | number | Date | null | undefined): Date | null => {
+    if (!value) return null;
+    if (value instanceof Date && !isNaN(value.getTime())) return value;
+    const date = dayjs(value);
+    return date.isValid() ? date.toDate() : null;
+};
 
-// Singolo evento con orario impostato e reale
-interface OrarioEntry {
-    impostato: Date | null;
-    reale: Date | null;
-}
+const groupBy = <T>(array: T[], key: (item: T) => string): Record<string, T[]> => {
+    return array.reduce((result, item) => {
+        const keyValue = key(item);
+        (result[keyValue] = result[keyValue] || []).push(item);
+        return result;
+    }, {} as Record<string, T[]>);
+};
 
-// Riga per la tabella "Orario di Lavoro"
-export interface OrarioLavoroRow {
-    id: string; // data + tecnicoId
-    data: string;
-    tecnicoName: string;
-    ingresso: OrarioEntry;
-    uscita: OrarioEntry;
-}
+const pairEventsWithStack = (eventi: Checkin[], tipoInizio: string, tipoFine: string): [Checkin | null, Checkin | null][] => {
+    const stack: Checkin[] = [];
+    const pairs: [Checkin | null, Checkin | null][] = [];
 
-// Riga per la tabella "Interventi"
-export interface InterventoRow {
-    id: string; // id del check-in o check-out
-    data: string;
-    tecnicoName: string;
-    luogoNave: string;
-    ingresso: OrarioEntry;
-    uscita: OrarioEntry;
-}
+    const eventiOrdinati = [...eventi].sort((a, b) => new Date(a.timestampReale!).getTime() - new Date(b.timestampReale!).getTime());
 
-// Oggetto restituito dalla funzione principale
-export interface ProcessedPresenze {
-    orariLavoro: OrarioLavoroRow[];
-    interventi: InterventoRow[];
-}
-
-// --- FUNZIONE DI ELABORAZIONE PRINCIPALE ---
-
-export function processaPresenze(checkins: Checkin[], navi: Nave[], luoghi: Luogo[], filtri: {
-    dataInizio: dayjs.Dayjs | null,
-    dataFine: dayjs.Dayjs | null,
-    tecnico: Tecnico | null,
-    nave: Nave | null,
-    luogo: Luogo | null,
-}): ProcessedPresenze {
-    
-    if (!checkins) return { orariLavoro: [], interventi: [] };
-
-    // Creazione di mappe per un accesso rapido ai nomi di navi e luoghi
-    const luoghiMap = new Map(luoghi.map(l => [l.id, l.nome]));
-    const naviMap = new Map(navi.map(n => [n.id, n.nome]));
-
-    // Funzione helper per convertire stringhe di timestamp in oggetti Date
-    // Restituisce null se il timestamp non è valido per evitare crash
-    const toDate = (ts: string | null | undefined): Date | null => {
-        if (!ts || !dayjs(ts).isValid()) {
-            return null;
-        }
-        return dayjs(ts).toDate();
-    };
-
-    // Filtra gli eventi in base ai filtri applicati nell'interfaccia utente
-    const eventiFiltrati = checkins.filter(c => {
-        const checkinDate = dayjs(c.data);
-
-        // Controlla se l'evento rientra nell'intervallo di date selezionato
-        const isInDateRange = filtri.dataInizio && filtri.dataFine ? 
-            checkinDate.isBetween(filtri.dataInizio.startOf('day'), filtri.dataFine.endOf('day'), 'day', '[]') :
-            true; // Se non c'è un filtro di data, non filtrare
-        
-        // Controlla la corrispondenza con il tecnico, la nave o il luogo selezionati
-        const tecnicoMatch = !filtri.tecnico || c.tecnicoId === filtri.tecnico.id;
-        const naveMatch = !filtri.nave || c.naveId === filtri.nave.id;
-        const luogoMatch = !filtri.luogo || c.luogoId === filtri.luogo.id;
-
-        return isInDateRange && tecnicoMatch && naveMatch && luogoMatch;
-    });
-
-    // Map per raggruppare gli eventi di inizio/fine giornata
-    const orariLavoroMap = new Map<string, Partial<OrarioLavoroRow>>();
-    // Map per raggruppare gli interventi su luoghi/navi
-    const interventiMap = new Map<string, Partial<InterventoRow>>();
-
-    for (const evento of eventiFiltrati) {
-        const dataKey = evento.data; // Usa il campo 'data' come chiave
-        
-        // Gestisce gli eventi di inizio e fine giornata lavorativa
-        if (evento.tipo === 'inizio_giornata' || evento.tipo === 'fine_giornata') {
-            const key = `${dataKey}_${evento.tecnicoId}`;
-            if (!orariLavoroMap.has(key)) {
-                orariLavoroMap.set(key, {
-                    id: key,
-                    data: dayjs(evento.data).format('DD/MM/YYYY'),
-                    tecnicoName: evento.tecnicoName,
-                    ingresso: { impostato: null, reale: null },
-                    uscita: { impostato: null, reale: null },
-                });
-            }
-            const riga = orariLavoroMap.get(key)!;
-
-            if (evento.tipo === 'inizio_giornata') {
-                riga.ingresso!.impostato = toDate(evento.timestampImpostato);
-                riga.ingresso!.reale = toDate(evento.timestampReale);
-            } else { // fine_giornata
-                riga.uscita!.impostato = toDate(evento.timestampImpostato);
-                riga.uscita!.reale = toDate(evento.timestampReale);
-            }
-        }
-
-        // Gestisce gli eventi di check-in e check-out da luoghi o navi
-        if (evento.tipo === 'check_in_luogo' || evento.tipo === 'check_out_luogo') {
-            const luogoId = evento.naveId || evento.luogoId;
-            if (!luogoId) continue; // Salta se non c'è un luogo/nave associato
-
-            const key = `${dataKey}_${evento.tecnicoId}_${luogoId}`;
-             if (!interventiMap.has(key)) {
-                interventiMap.set(key, {
-                    id: evento.id, 
-                    data: dayjs(evento.data).format('DD/MM/YYYY'),
-                    tecnicoName: evento.tecnicoName,
-                    luogoNave: evento.naveId ? naviMap.get(evento.naveId) : luoghiMap.get(luogoId),
-                    ingresso: { impostato: null, reale: null },
-                    uscita: { impostato: null, reale: null },
-                });
-            }
-            const riga = interventiMap.get(key)!;
-
-            if (evento.tipo === 'check_in_luogo') {
-                riga.ingresso!.impostato = toDate(evento.timestampImpostato);
-                riga.ingresso!.reale = toDate(evento.timestampReale);
-            } else { // check_out_luogo
-                riga.uscita!.impostato = toDate(evento.timestampImpostato);
-                riga.uscita!.reale = toDate(evento.timestampReale);
+    for (const evento of eventiOrdinati) {
+        if (evento.tipo === tipoInizio) {
+            stack.push(evento);
+        } else if (evento.tipo === tipoFine) {
+            if (stack.length > 0) {
+                const inizio = stack.pop();
+                pairs.push([inizio, evento]);
+            } else {
+                pairs.push([null, evento]);
             }
         }
     }
 
-    // Converte le mappe in array per la visualizzazione
-    return {
-        orariLavoro: Array.from(orariLavoroMap.values()) as OrarioLavoroRow[],
-        interventi: Array.from(interventiMap.values()) as InterventoRow[],
+    stack.forEach(inizio => pairs.push([inizio, null]));
+    return pairs;
+};
+
+
+export const processaPresenze = (eventi: Checkin[]): { orariLavoro: OrarioLavoro[], interventi: Intervento[] } => {
+    if (!eventi || eventi.length === 0) {
+        return { orariLavoro: [], interventi: [] };
+    }
+
+    const eventiSanificati = eventi.map(e => {
+        let dataValida = e.data;
+        if (!dayjs(dataValida, 'YYYY-MM-DD', true).isValid()) {
+            dataValida = e.timestampReale ? dayjs(e.timestampReale).format('YYYY-MM-DD') : 'invalid';
+        }
+        return { ...e, data: dataValida };
+    }).filter(e => e.data !== 'invalid' && e.tecnicoId && e.timestampReale);
+
+    const allOrariLavoro: OrarioLavoro[] = [];
+    const allInterventi: Intervento[] = [];
+
+    const gruppiPerTecnico = groupBy(eventiSanificati, item => item.tecnicoId);
+
+    for (const tecnicoId in gruppiPerTecnico) {
+        const eventiTecnico = gruppiPerTecnico[tecnicoId];
+        const gruppiPerGiorno = groupBy(eventiTecnico, item => item.data);
+
+        for (const data in gruppiPerGiorno) {
+            const eventiDelGiorno = gruppiPerGiorno[data];
+
+            const eventiLavoro = eventiDelGiorno.filter(e => e.tipo === 'inizio_giornata' || e.tipo === 'fine_giornata');
+            const coppieLavoro = pairEventsWithStack(eventiLavoro, 'inizio_giornata', 'fine_giornata');
+
+            coppieLavoro.forEach(([inizio, fine]) => {
+                allOrariLavoro.push({
+                    id: `lavoro_${inizio?.id || 'orphanIn'}_${fine?.id || 'orphanOut'}`,
+                    tecnicoId: inizio?.tecnicoId || fine!.tecnicoId,
+                    tecnicoName: inizio?.tecnicoName || fine!.tecnicoName,
+                    data: inizio?.data || fine!.data,
+                    ingresso: { impostato: toDate(inizio?.timestampImpostato), reale: toDate(inizio?.timestampReale) },
+                    uscita: { impostato: toDate(fine?.timestampImpostato), reale: toDate(fine?.timestampReale) },
+                });
+            });
+
+            const eventiIntervento = eventiDelGiorno.filter(e => e.tipo === 'check_in_luogo' || e.tipo === 'check_out_luogo');
+            const coppieIntervento = pairEventsWithStack(eventiIntervento, 'check_in_luogo', 'check_out_luogo');
+
+            coppieIntervento.forEach(([inizio, fine]) => {
+                allInterventi.push({
+                     id: `intervento_${inizio?.id || 'orphanIn'}_${fine?.id || 'orphanOut'}`,
+                    tecnicoId: inizio?.tecnicoId || fine!.tecnicoId,
+                    tecnicoName: inizio?.tecnicoName || fine!.tecnicoName,
+                    data: inizio?.data || fine!.data,
+                    naveId: inizio?.naveId || fine?.naveId,
+                    luogoId: inizio?.luogoId || fine?.luogoId,
+                    ingresso: { impostato: toDate(inizio?.timestampImpostato), reale: toDate(inizio?.timestampReale) },
+                    uscita: { impostato: toDate(fine?.timestampImpostato), reale: toDate(fine?.timestampReale) },
+                });
+            });
+        }
+    }
+
+    const sortFn = (a: OrarioLavoro | Intervento, b: OrarioLavoro | Intervento) => {
+        const dateA = dayjs(a.data);
+        const dateB = dayjs(b.data);
+        if (dateA.isBefore(dateB)) return -1;
+        if (dateA.isAfter(dateB)) return 1;
+        const timeA = a.ingresso.reale || a.uscita.reale;
+        const timeB = b.ingresso.reale || b.uscita.reale;
+        if (timeA && timeB) return timeA.getTime() - timeB.getTime();
+        return 0;
     };
-}
+
+    return {
+        orariLavoro: allOrariLavoro.sort(sortFn),
+        interventi: allInterventi.sort(sortFn)
+    };
+};

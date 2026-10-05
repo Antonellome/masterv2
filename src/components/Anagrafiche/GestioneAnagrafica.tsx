@@ -1,18 +1,23 @@
+
 import React, { useState, useMemo, useCallback } from 'react';
-import { Box, Typography, Alert, CircularProgress } from '@mui/material';
+import { Box, Typography, Alert, CircularProgress, Button } from '@mui/material';
 import {
-  DataGrid, GridRowModel, GridActionsCellItem, GridRowModesModel, GridRowModes, GridToolbar
+  DataGrid, GridRowModel, GridActionsCellItem, GridRowModesModel, GridRowModes,
+  GridToolbarContainer, GridToolbarColumnsButton, GridToolbarFilterButton, GridToolbarDensitySelector, useGridApiRef
 } from '@mui/x-data-grid';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
+import PrintIcon from '@mui/icons-material/Print';
 import { useAnagrafiche } from '@/contexts/AnagraficheContext';
 import { Anagrafica } from '@/models/definitions';
 import { anagraficheConfig, AnagraficaKey } from '@/config/anagrafiche.config';
 import { logger } from '@/utils/logger';
 import AnagraficaForm from './AnagraficaForm';
 import { anagraficheService } from '@/services/anagraficheService';
+import PrintModal from '@/components/PrintModal';
+import PrintableTechnicianList from '@/components/PrintableTechnicianList';
 
 interface GestioneAnagraficaProps {
   anagraficaType: AnagraficaKey;
@@ -20,25 +25,39 @@ interface GestioneAnagraficaProps {
 
 const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType }) => {
   const config = anagraficheConfig[anagraficaType];
+  const apiRef = useGridApiRef();
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({});
   const [error, setError] = useState<string | null>(null);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [rowsToPrint, setRowsToPrint] = useState<any[]>([]);
 
   const { loading, ...anagraficheData } = useAnagrafiche();
-
   const rows = (anagraficheData as any)[anagraficaType] || [];
+
+  const handlePrint = () => {
+    const currentRows = Array.from(apiRef.current.getSortedRows().values());
+    setRowsToPrint(currentRows);
+    setPrintModalOpen(true);
+  };
+  
+  const CustomPrintingToolbar = () => (
+    <GridToolbarContainer>
+      <GridToolbarColumnsButton />
+      <GridToolbarFilterButton />
+      <GridToolbarDensitySelector />
+      <Button onClick={handlePrint} startIcon={<PrintIcon />} size="small">Stampa Vista</Button>
+    </GridToolbarContainer>
+  );
 
   const finalColumns = useMemo(() => {
     if (!config) return [];
-
     const resolvedColumns = [...config.columns];
-
     if (config.relations) {
       Object.keys(config.relations).forEach(field => {
         const relation = config.relations![field];
         const relationData = (anagraficheData as any)[relation.collection] || [];
         const relationMap = new Map(relationData.map((item: any) => [item.id, item[relation.displayField]]));
         const relationOptions = relationData.map((item: any) => ({ value: item.id, label: item[relation.displayField] }));
-
         const colIndex = resolvedColumns.findIndex((col) => col.field === field);
         if (colIndex !== -1) {
           resolvedColumns[colIndex] = {
@@ -49,7 +68,6 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
         }
       });
     }
-
     return [...resolvedColumns, {
       field: 'actions', type: 'actions', headerName: 'Azioni', width: 100, cellClassName: 'actions',
       getActions: ({ id }) => {
@@ -70,14 +88,12 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
 
   const formFields = useMemo(() => {
     if (!config) return [];
-
     const newFields = [...config.fields];
     if (config.relations) {
         Object.keys(config.relations).forEach(field => {
             const relation = config.relations![field];
             const relationData = (anagraficheData as any)[relation.collection] || [];
             const relationOptions = relationData.map((item: any) => ({ value: item.id, label: item[relation.displayField] }));
-
             const fieldIndex = newFields.findIndex((f) => f.name === field);
             if (fieldIndex !== -1) {
                 newFields[fieldIndex] = {
@@ -89,7 +105,6 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
     }
     return newFields;
 }, [config, anagraficheData]);
-
 
   const processRowUpdate = useCallback(async (newRow: GridRowModel<Anagrafica>) => {
     try {
@@ -148,17 +163,21 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
         <DataGrid
           rows={rows}
           columns={finalColumns}
+          apiRef={apiRef}
           getRowId={(row) => row.id}
           editMode="row"
           rowModesModel={rowModesModel}
           onRowModesModelChange={setRowModesModel}
           processRowUpdate={processRowUpdate}
           onProcessRowUpdateError={(err) => setError(`Update Error: ${String(err)}`)}
-          slots={{ toolbar: GridToolbar }}
+          slots={{ toolbar: CustomPrintingToolbar }}
           slotProps={{ toolbar: { showQuickFilter: true } }}
           density="compact"
         />
       </Box>
+      <PrintModal open={printModalOpen} onClose={() => setPrintModalOpen(false)}>
+          <PrintableTechnicianList data={rowsToPrint} fields={config.fields} />
+      </PrintModal>
     </Box>
   );
 };

@@ -5,15 +5,13 @@
   "targets": {
     "riso-project-app": {
       "hosting": {
+        "dev": [
+          "riso-master-office"
+        ],
         "prod": [
           "riso-master-office-prod"
         ]
       }
-    }
-  },
-  "etags": {
-    "riso-project-app": {
-      "extensionInstances": {}
     }
   }
 }

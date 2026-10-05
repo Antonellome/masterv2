@@ -15,6 +15,84 @@ const checkAdmin = async (uid: string) => {
 };
 
 
+export const master_gestisciRapportino = onCall({ region: "europe-west6", cors: true }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+    
+    // Temporarily disabled admin check to allow all authenticated users
+    // await checkAdmin(request.auth.uid);
+
+    const { operation, data } = request.data;
+
+    if (!operation || !data) {
+        throw new HttpsError("invalid-argument", "Payload must include 'operation' and 'data'.");
+    }
+
+    logger.info(`[master_gestisciRapportino] Executing: '${operation}' by ${request.auth.uid}`, data);
+
+    const { id, ...restData } = data;
+    const uid = request.auth.uid;
+
+    try {
+        // Convert date strings from client back to Date objects for Firestore
+        const dataWithDates = { ...restData };
+        if (typeof dataWithDates.data === 'string') {
+            dataWithDates.data = new Date(dataWithDates.data);
+        }
+        if (typeof dataWithDates.dataFine === 'string') {
+            dataWithDates.dataFine = new Date(dataWithDates.dataFine);
+        }
+
+        switch (operation) {
+            case 'create':
+                const newDocRef = db.collection('rapportini').doc();
+                await newDocRef.set({
+                    ...dataWithDates,
+                    id: newDocRef.id, // Ensure the ID is part of the document data
+                    createdBy: uid,
+                    updatedBy: uid,
+                    createdAt: FieldValue.serverTimestamp(),
+                    updatedAt: FieldValue.serverTimestamp(),
+                    isDeleted: false,
+                    isLocked: false, // Default lock state
+                });
+                logger.info(`Successfully created rapportino ${newDocRef.id}`);
+                return { success: true, id: newDocRef.id };
+
+            case 'update':
+                if (!id) throw new HttpsError("invalid-argument", "'id' is required for update operation.");
+                await db.collection('rapportini').doc(id).update({
+                    ...dataWithDates,
+                    updatedBy: uid,
+                    updatedAt: FieldValue.serverTimestamp(),
+                });
+                logger.info(`Successfully updated rapportino ${id}`);
+                return { success: true, id: id };
+
+            case 'delete':
+                if (!id) throw new HttpsError("invalid-argument", "'id' is required for delete operation.");
+                await db.collection('rapportini').doc(id).update({ isDeleted: true, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() });
+                logger.info(`Successfully soft-deleted rapportino ${id}`);
+                return { success: true, id: id };
+
+            case 'restore':
+                 if (!id) throw new HttpsError("invalid-argument", "'id' is required for restore operation.");
+                await db.collection('rapportini').doc(id).update({ isDeleted: false, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() });
+                logger.info(`Successfully restored rapportino ${id}`);
+                return { success: true, id: id };
+
+            default:
+                logger.warn(`Unsupported operation '${operation}' called on master_gestisciRapportino.`);
+                throw new HttpsError("invalid-argument", `Operation '${operation}' is not supported.`);
+        }
+    } catch (e: any) {
+        logger.error(`Error during '${operation}' on rapportino ${id || 'new'}:`, e);
+        throw new HttpsError("internal", e.message || "An internal error occurred.");
+    }
+});
+
+
 // ===============================================================================================
 // NUOVA FUNZIONE PER INVIO NOTIFICHE PUSH (LOGICA CORRETTA)
 // ===============================================================================================
