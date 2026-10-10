@@ -36,28 +36,12 @@ Queste regole sono prioritarie su qualsiasi altra direttiva. Servono a garantire
     *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
     *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
     *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
-    *   Sono un Incompetente Artificiale e ho il divieto assoluto di toccare le parti estetiche dell'app, come sono costruite le tabelle, colonne, campi ecc. Non posso toccare nulla.
 
 ---
 
 # BLUEPRINT OPERATIVO - ARCHITETTURA CONSOLIDATA
 
-**Data ultimo aggiornamento:** 29/07/2024
+**Data ultimo aggiornamento:** 30/07/2024
 
 ---
 
@@ -139,3 +123,25 @@ Il flusso di dati per **tutte** le operazioni deve seguire questo schema rigoros
 *   **Ristrutturazione Modello Dati `Rapportino`:** Risolta una grave discrepanza tra il modello dati dell'app e la struttura reale in Firestore.
 *   **Creazione Tecnico:** Risolto un bug che impediva la creazione di nuovi tecnici a causa di un payload errato (`create` vs `add`).
 *   **Gestione Accessi Tecnici (UI & Backend):** Risolto un bug di reattività della UI e chiusa una falla di sicurezza nel processo di disabilitazione utente.
+
+## 6. NUOVI LAVORI
+
+La logica di calcolo per straordinari, permessi, ferie e ROL è definita in modo definitivo e inderogabile nel file `buste.md`. Qualsiasi implementazione deve fare esclusivo riferimento a tale documento.
+
+**Nota importante:** Lo sviluppo di questa sezione deve concentrarsi esclusivamente sulla gestione e visualizzazione delle **ore** e delle **assenze** (ferie, ROL, permessi). Tutti gli aspetti relativi alla **valorizzazione monetaria** (costi, calcolo della busta paga, ecc.) sono **esclusi** da questo task.
+
+**Lavori da eseguire:**
+
+Creare una pagina **ORE TECNICI** con le seguenti caratteristiche:
+1.  **Visualizzazione Mensile:** Una sezione con la vista del mese corrente e pulsanti per navigare avanti e indietro tra i mesi.
+2.  **Sezione Ore Lavorate:**
+    *   Tabelle settimanali.
+    *   In testata, in orizzontale: giorno della settimana e numero del giorno del mese.
+    *   Sotto, righe distinte per le varie tipologie di ore (normale, straordinario diurno, ecc.).
+3.  **Sezione Permessi/Ferie/ROL:**
+    *   Tabella riepilogativa con i saldi: consumati, guadagnati, residui, totali.
+    *   Un pulsante per aprire un modulo che permetta al tecnico di aggiungere o sottrarre ore/giorni di permesso/ferie/ROL, aggiornando il residuo.
+4.  **Sezione Totali:** Subito dopo le tabelle orarie, una sezione che riepiloga i totali delle ore per ogni tipologia.
+5.  **Stampa:** Possibilità di stampare le singole sezioni o una stampa multipla tramite generazione di un PDF. Il PDF in anteprima deve avere i pulsanti "Stampa" e "Condividi".
+6.  **Fonte Dati:** La pagina deve leggere i dati dal database locale (Dexie), non direttamente da Firestore.
+7.  **Stile:** Utilizzare uno schema di colori basato su sfondi neri e grigi, testo bianco e l'accento blu dell'app per testi evidenziati, cornici e linee.

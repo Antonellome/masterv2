@@ -1,179 +1,98 @@
+export type LivelloInquadramento = 'D1' | 'D2' | 'C1' | 'C2' | 'C3' | 'B1' | 'B2' | 'B3' | 'A1';
 
-import type { Table } from 'dexie';
-
-// ==========================================================================
-// TIPI DEL DATABASE LOCALE (DEXIE)
-// ==========================================================================
-
-export interface Anagrafica {
-    id?: string;
-    nome: string;
-    [key: string]: any;
+export enum TipoAssenza {
+    FERIE = 'FERIE',
+    ROL = 'ROL',
+    EX_FESTIVITA = 'EX_FESTIVITA',
+    MALATTIA = 'MALATTIA',
+    BANCA_ORE = 'BANCA_ORE',
+    PERMESSO = 'PERMESSO',
+    LEGGE_104 = 'LEGGE_104',
+    ORDINARIA = 'ORDINARIA' // Anche se non è un'assenza, serve per il mapping
 }
 
-export interface Rapportino {
-    id: string;
-    clienteId: string;
-    completed: boolean;
-    createdAt: any; 
-    createdBy: string;
-    data: any; 
-    descrizioneBreve: string;
-    dettaglioOreTecnici: {
-        isManual: boolean;
-        nome: string;
-        oraFine: string;
-        oraInizio: string;
-        ore: number;
-        pausa: number;
-        tecnicoId: string;
-    }[];
-    dittaId: string;
-    firmaFirmatarioNome: string;
-    firmaFirmatarioSocieta: string;
-    firmaVettoriale: string;
-    includeTrasferta: boolean;
-    isDeleted: boolean;
-    isLocked: boolean;
-    lavoroEseguito: string;
-    luogoId: string;
-    materialiImpiegati: string;
-    naveId: string;
-    nome: string;
-    ordineLavoro: string;
-    oreLavoro: number;
-    presenze: string[];
-    tecnicoId: string;
-    tecnicoScriventeId: string;
-    tipoGiornataId: string;
-    trasfertaId: string;
-    updatedAt: any;
-    userId: string;
-    veicoloId: string;
-    version: number;
+export interface Dipendente {
+  id: string;
+  nome: string;
+  cognome: string;
+  livello: LivelloInquadramento;
+  isTurnista: boolean;
+  orarioSettimanaleContrattuale: number; // Default: 40
+  anzianitaAnni: number;                 // Utile per gestione comporto malattia
 }
 
-export interface Cliente {
-    id?: string;
-    nome: string;
-    [key: string]: any;
+export interface TimbratureGiornaliere {
+  dipendenteId: string;
+  data: string;                       // Formato: YYYY-MM-DD
+  oraIngresso?: string;               // Formato: HH:mm
+  oraUscita?: string;                 // Formato: HH:mm
+  oreLavorateEffettive?: number;      // Opzionale se inserite direttamente
+  oreTeorichePreviste: number;        // Default: 8.0
+  pausa?: number;                     // Pausa in minuti
+  isFestivo: boolean;
+  isDomenica: boolean;
+  isSabato: boolean;
+  isFestivoGiornoSuccessivo?: boolean; // Importante per turni a cavallo della mezzanotte
 }
 
-export interface Ditta {
-    id?: string;
-    nome: string;
-    [key: string]: any;
+export interface GiustificativoAssenza {
+  dipendenteId: string;
+  data: string;
+  tipo: TipoAssenza;
+  ore: number;
+  giornoInizioMalattia?: boolean;     // True se è il 1° giorno dell'evento di malattia
+  giornoMalattiaProgressivo?: number; // Es: 1, 2, 3 (Carenza 100% ditta), 4+ (INPS + integrazione)
 }
 
-export interface Luogo {
-    id?: string;
-    nome: string;
-    [key: string]: any;
+export interface SaldiContatori {
+  dipendenteId: string;
+  anno: number;
+  saldoFerieOre: number;               // Base annua: 160h (20 giorni)
+  saldoRolOre: number;                 // Base annua: 72h
+  saldoExFestivitaOre: number;         // Base annua: 16h
+  saldoBancaOre: number;
+  giorniMalattiaAccumulatiAnno: number; // Controllo periodo di comporto
+  permesso104ResiduoOre: number; 
 }
 
-export interface Nave {
-    id?: string;
-    nome: string;
-    clienteId: string;
-    [key: string]: any;
+export interface AnalisiIntervalloACavallo {
+  oreTotali: number;
+  oreNotturnoSerale: number;          // Fascia 20:00 - 22:00
+  oreNotturnoPieno: number;           // Fascia 22:00 - 06:00
+  oreSconfinamentoFestivo: number;    // Ore ricadenti dopo le 00:00 in giorno festivo
 }
 
-export interface Categoria {
-    id?: string;
-    nome: string;
-    [key: string]: any;
+export interface RisultatoGiornoCCNL {
+  data: string;
+  pagaBaseOre: number;
+  trasfertaOre?: number;
+
+  // Gestione Malattia
+  oreMalattiaCarenzaAzienda: number;
+  oreMalattiaIntegrazione: number;
+  
+  // Maggiorazioni Straordinari Ordinari
+  strDiu12Intero: number;
+  strDiuSuccessIntero: number;
+  straordinarioSabatoDiurno50: number;
+  straordinarioFestivo55: number;
+  
+  // Maggiorazioni Notturne
+  oreNotturnoSeraleOrd: number;
+  oreNotturnoPienoOrd: number;
+  straordinarioNotturnoFestivo75: number;
+  
+  // Banca Ore
+  bancaOreSolaMaggiorazione25: number;
+  bancaOreSolaMaggiorazione30: number;
+  
+  // Scali dei Contatori
+  rolScalati: number;
+  ferieScalate: number;
+  exFestivitaScalate: number;
+  permessiScalati?: number;
+  legge104Scalate?: number;
+  
+  // Anomalie
+  anomaliaDebitoUncovered: number; 
 }
-
-export interface TipoGiornata {
-    id?: string;
-    nome: string;
-    [key: string]: any;
-}
-
-export interface Veicolo {
-    id?: string;
-    nome: string;
-    [key: string]: any;
-}
-
-export interface Checkin {
-    id: string;
-    data: Date;
-    tecnicoId: string;
-    location: { latitude: number; longitude: number };
-}
-
-export interface Scadenza {
-    id: string;
-    nome: string;
-    dataScadenza: Date;
-    tipo: 'personale' | 'veicolo' | 'attrezzatura';
-    ownerId: string;
-}
-
-
-// ==========================================================================
-// TIPI DELLO STORE GLOBALE (ZUSTAND)
-// ==========================================================================
-
-export type NotificationType = 'success' | 'error' | 'info' | 'warning';
-
-export interface NotificationState {
-    message: string;
-    type: NotificationType;
-    open: boolean;
-}
-
-export interface DialogState {
-    open: boolean;
-    title: string;
-    message: string;
-    onConfirm?: () => void;
-    cancelText?: string;
-    confirmText?: string;
-}
-
-/**
- * Stato globale della UI gestito da Zustand.
- */
-export interface GlobalState {
-    appLoading: boolean;
-    lastSync: Date | null;
-    isSidebarOpen: boolean;
-    notification: NotificationState;
-    dialog: DialogState;
-}
-
-/**
- * Azioni per modificare lo stato globale della UI.
- */
-export interface GlobalActions {
-    setAppLoading: (loading: boolean) => void;
-    setLastSync: (syncDate: Date) => void;
-    setIsSidebarOpen: (isOpen: boolean) => void;
-    toggleSidebar: () => void;
-    showNotification: (message: string, type?: NotificationType) => void;
-    hideNotification: () => void;
-    showDialog: (options: Omit<DialogState, 'open'>) => void;
-    hideDialog: () => void;
-}
-
-// ==========================================================================
-// ALTRI TIPI
-// ==========================================================================
-
-export type CollectionName =
-    | 'rapportini'
-    | 'tecnici'
-    | 'clienti'
-    | 'ditte'
-    | 'navi'
-    | 'luoghi'
-    | 'categorie'
-    | 'tipiGiornata' // Corretto da 'tipi_giornata'
-    | 'veicoli'
-    | 'checkin_giornalieri'
-    | 'documenti'; // Corretto da 'scadenze'
-
-
-export type AnagraficaTable = Table<Anagrafica>;

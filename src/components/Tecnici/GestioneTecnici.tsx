@@ -36,14 +36,25 @@ const GestioneTecnici = () => {
 
     const handleSave = useCallback(async (formData: Partial<Tecnico> & { password?: string }) => {
         setIsSaving(true);
-        setUpdatingId(formData.id ?? 'new');
+        const tecnicoId = selectedTecnico?.id ?? formData.id ?? 'new';
+        setUpdatingId(tecnicoId);
         showSnackbar('Salvataggio in corso...', 'info');
 
         try {
-            const isNew = !formData.id;
-            const operation = isNew ? 'add' : 'update'; // Corrected 'create' to 'add'
+            const isNew = !selectedTecnico?.id;
+            const operation = isNew ? 'create' : 'update';
+            
+            // ======= PAYLOAD CORRETTO PER LA CLOUD FUNCTION =======
+            // Per l'update, assicuriamoci di passare l'UID di autenticazione,
+            // che è memorizzato nel documento del tecnico.
+            const payload = {
+                ...formData,
+                uid: isNew ? undefined : selectedTecnico.uid, // UID per l'update
+                id: isNew ? undefined : selectedTecnico.id,   // ID documento per riferimento
+            };
+            // =======================================================
 
-            await tecniciService(operation, formData);
+            await tecniciService(operation, payload);
 
             showSnackbar(isNew ? 'Tecnico creato con successo.' : 'Tecnico aggiornato con successo.', 'success');
             setFormOpen(false);
@@ -51,11 +62,12 @@ const GestioneTecnici = () => {
 
         } catch (e) {
             logger.error("Errore durante il salvataggio (GestioneTecnici):", e);
+            showSnackbar("Errore durante il salvataggio. Controlla la console per i dettagli.", "error");
         } finally {
             setIsSaving(false);
             setUpdatingId(null);
         }
-    }, []);
+    }, [selectedTecnico]);
 
     const handleDelete = (id: string) => {
         setTecnicoToAction(id);
@@ -67,14 +79,21 @@ const GestioneTecnici = () => {
         showSnackbar('Aggiornamento stato in corso...', 'info');
         
         try {
-            await tecniciService('toggle-active', { id: id, attivo: newStatus });
+             // Troviamo il tecnico corrispondente per ottenere il suo UID di autenticazione
+            const tecnico = tecnici.find(t => t.id === id);
+            if (!tecnico || !tecnico.uid) {
+                throw new Error("Impossibile trovare l'UID di autenticazione per questo tecnico.");
+            }
+
+            await tecniciService('toggle-active', { id: tecnico.uid, attivo: newStatus });
             showSnackbar(`Stato del tecnico aggiornato.`, 'success');
         } catch (e: any) {
             logger.error("Errore durante il cambio di stato (GestioneTecnici):", e);
+            showSnackbar("Errore durante l'aggiornamento dello stato.", "error");
         } finally {
             setUpdatingId(null);
         }
-    }, []);
+    }, [tecnici]);
 
     const confirmDelete = useCallback(async () => {
         if (!tecnicoToAction) return;

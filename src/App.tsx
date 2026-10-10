@@ -29,6 +29,7 @@ const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const RapportinoEdit = lazy(() => import('@/pages/RapportinoEdit'));
 const RapportiniList = lazy(() => import('@/pages/RapportiniList'));
 const AnagrafichePage = lazy(() => import('@/pages/AnagrafichePage'));
+const OreTecniciPage = lazy(() => import('@/pages/OreTecniciPage'));
 
 // --- Componente per Accesso Negato ---
 const AccessDenied = () => {
@@ -72,6 +73,7 @@ const AppContent = () => (
             <Route path="/rapportino/edit/new" element={<RapportinoEdit />} />
             <Route path="/rapportino/edit/:id" element={<RapportinoEdit />} />
             <Route path="/tecnici" element={<TecniciPage />} />
+            <Route path="/ore-tecnici" element={<OreTecniciPage />} />
             <Route path="/documenti" element={<DocumentiPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/presenze" element={<PresenzePage />} />

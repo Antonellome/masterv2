@@ -7,6 +7,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import AssessmentIcon from '@mui/icons-material/Assessment'; // Icona per Reportistica
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 export const navItems = [
   {
@@ -23,6 +24,11 @@ export const navItems = [
     text: 'Tecnici',
     icon: EngineeringIcon,
     path: '/anagrafiche/tecnici'
+  },
+  {
+    text: 'Ore Tecnici',
+    icon: AccessTimeIcon,
+    path: '/ore-tecnici'
   },
   {
     text: 'Presenze',

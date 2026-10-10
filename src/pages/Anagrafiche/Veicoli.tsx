@@ -33,19 +33,19 @@ const Veicoli: React.FC = () => {
 
     const processRowUpdate = async (newRow: Veicolo) => {
         try {
-            await db.veicoli.update(newRow.id, newRow);
+            await db.veicoli.update(newRow.id!, newRow);
             setNotification({ type: 'success', message: 'Veicolo aggiornato con successo!' });
             return newRow;
         } catch (error) {
             logger.error('Failed to update veicolo:', error);
             setNotification({ type: 'error', message: 'Errore durante l'aggiornamento del veicolo.' });
-            return editRowsModel[newRow.id];
+            return editRowsModel[newRow.id!];
         }
     };
 
-    const handleDelete = async (id: string | number) => {
+    const handleDelete = async (id: string) => {
         try {
-            await db.veicoli.delete(id as any);
+            await db.veicoli.delete(id);
             setNotification({ type: 'success', message: 'Veicolo eliminato con successo!' });
         } catch (error) {
             logger.error('Failed to delete veicolo:', error);
@@ -121,7 +121,7 @@ const Veicoli: React.FC = () => {
                         key="delete"
                         icon={<DeleteIcon />}
                         label="Delete"
-                        onClick={() => handleDelete(id)}
+                        onClick={() => handleDelete(id as string)}
                         color="inherit"
                     />,
                 ];

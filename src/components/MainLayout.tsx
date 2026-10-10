@@ -18,6 +18,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ArchiveIcon from '@mui/icons-material/Archive';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DnsIcon from '@mui/icons-material/Dns';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import SentimentSatisfiedAltOutlinedIcon from '@mui/icons-material/SentimentSatisfiedAltOutlined';
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useGlobalStore } from '@/stores/globalStore';
@@ -52,6 +53,7 @@ const menuItems = [
     { text: 'Dashboard', icon: <HomeIcon />, path: '/dashboard' }, 
     { text: 'Reportistica', icon: <ArchiveIcon />, path: '/reportistica' },
     { text: 'Tecnici', icon: <PeopleIcon />, path: '/tecnici' },
+    { text: 'Ore Tecnici', icon: <AccessTimeIcon />, path: '/ore-tecnici' },
     { text: 'Presenze', icon: <EventNoteIcon />, path: '/presenze' },
     { text: 'Anagrafiche', icon: <DnsIcon />, path: '/anagrafiche' },
     { text: 'Documenti', icon: <DescriptionIcon />, path: '/documenti' },
@@ -64,6 +66,7 @@ const pageTitles: { [key: string]: string } = {
     '/dashboard': 'Dashboard', 
     '/reportistica': 'Reportistica',
     '/tecnici': 'Tecnici',
+    '/ore-tecnici': 'Ore Tecnici',
     '/presenze': 'Presenze', 
     '/anagrafiche': 'Anagrafica',
     '/documenti': 'Documenti',

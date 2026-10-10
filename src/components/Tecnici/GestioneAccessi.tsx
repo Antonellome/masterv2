@@ -6,11 +6,10 @@ import { itIT } from '@mui/x-data-grid/locales';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { Tecnico } from '@/models/definitions';
-import ConfirmationDialog from '@/components/ConfirmationDialog';
+import ConfirmationDialog from '@/components/Anagrafiche/ConfirmationDialog'; // Corretto percorso
 import { useAnagrafiche } from '@/contexts/AnagraficheContext';
-import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { logger } from '@/utils/logger';
+import { tecniciService, resetPasswordTecnico } from '@/services/tecniciService'; // Import consolidati
 
 interface DialogState {
   open: boolean;
@@ -31,61 +30,45 @@ const GestioneAccessi = () => {
   };
 
   const handleToggleAccess = useCallback(async (tecnico: Tecnico) => {
-    if (!tecnico.id) {
-        showSnackbar('ID del tecnico mancante. Impossibile procedere.', 'error');
+    const docId = tecnico.id; // L'ID del documento è sempre tecnico.id
+    if (!docId) {
+        showSnackbar('ID del documento tecnico mancante. Impossibile procedere.', 'error');
         return;
     }
+    
+    // *** LA VERA CORREZIONE: USARE L'IDENTIFICATORE CORRETTO PER AUTH ***
+    const authIdentifier = tecnico.uid || tecnico.id; // Usa l'UID se esiste, altrimenti fallback sull'ID (per i vecchi dati)
+    // **********************************************************************
 
-    setOperatingRowId(tecnico.id);
+    setOperatingRowId(docId);
     showSnackbar('Aggiornamento accesso in corso...', 'info');
 
-    const app = getApp();
-    const functions = getFunctions(app, 'europe-west6');
-    const callable = httpsCallable(functions, 'master_gestisciTecnico');
-    // Leggiamo lo stato attuale da `appAccess` e lo invertiamo.
     const newAccessStatus = !tecnico.appAccess;
 
     try {
-      const result = await callable({
-        operation: 'toggle-access',
-        data: { 
-            id: tecnico.id,
-            appAccess: newAccessStatus
-        }
+      await tecniciService('toggle-active', { 
+          id: authIdentifier, 
+          attivo: newAccessStatus 
       });
       
-      const resultData = result.data as { success: boolean };
+      // La logica di sync è già nel service, non serve updateTecnico qui.
+      showSnackbar(`Accesso per ${tecnico.cognome} ${newAccessStatus ? 'abilitato' : 'revocato'}.`, 'success');
 
-      if (resultData.success) {
-          // <<-- LA MODIFICA DEFINITIVA È QUI -->>
-          // Aggiorniamo ENTRAMBI i campi nel nostro database locale (Dexie).
-          // Questo forzerà la UI a ricaricare lo stato corretto.
-          await updateTecnico(tecnico.id, { 
-              appAccess: newAccessStatus,
-              accessoApp: newAccessStatus
-            });
-          showSnackbar(`Accesso per ${tecnico.cognome} ${newAccessStatus ? 'abilitato' : 'revocato'}.`, 'success');
-      } else {
-          // Se il server nega l'operazione, ripristiniamo lo stato visivo originale per coerenza
-          await updateTecnico(tecnico.id, { appAccess: !newAccessStatus, accessoApp: !newAccessStatus });
-          throw new Error("Il server ha negato l'operazione senza un errore esplicito.");
-      }
     } catch (e: any) {
-        // In caso di errore, ripristiniamo lo stato visivo originale
-        await updateTecnico(tecnico.id, { appAccess: !newAccessStatus, accessoApp: !newAccessStatus });
         logger.error("Errore durante l'aggiornamento dell'accesso:", e);
-        const errorMessage = e.message || 'Errore sconosciuto. Controllare i log della console per i dettagli.';
-        showSnackbar(errorMessage, 'error');
-        console.error("Oggetto errore Firebase completo:", e);
-
+        showSnackbar(e.message || 'Errore sconosciuto.', 'error');
     } finally {
         setOperatingRowId(null);
     }
   }, [updateTecnico]);
 
   const executeResetPassword = async (email: string) => {
-      console.warn("Reset password non ancora implementato.", email);
-      showSnackbar('Funzionalità non ancora implementata.', 'info');
+      try {
+          await resetPasswordTecnico(email);
+          // La notifica di successo è già gestita nel service
+      } catch (e) {
+          // La notifica di errore è già gestita nel service
+      }
       setDialog({ open: false, title: '', content: '', onConfirm: () => {} });
   };
 
@@ -130,14 +113,14 @@ const GestioneAccessi = () => {
       )
     },
     {
-      field: 'appAccess', // La colonna è correttamente legata ad `appAccess`
+      field: 'appAccess',
       headerName: 'Accesso App',
       width: 130, align: 'center', headerAlign: 'center',
       renderCell: (params: GridRowParams<Tecnico>) => (
         <Tooltip title={getTooltipTitle(params.row)}>
           <span>
             <Switch
-              checked={params.row.appAccess || false} // Lo switch è correttamente legato ad `appAccess`
+              checked={params.row.appAccess || false}
               onChange={() => handleToggleAccess(params.row)}
               disabled={operatingRowId === params.row.id || !params.row.id}
               color="primary"
@@ -151,7 +134,7 @@ const GestioneAccessi = () => {
         headerName: 'Password',
         sortable: false, disableColumnMenu: true, width: 100, align: 'center', headerAlign: 'center',
         renderCell: (params: GridRowParams<Tecnico>) => (
-            <Tooltip title={!params.row.email ? "Email non disponibile" : "Invia Email per impostare/resettare la Password"}>
+            <Tooltip title={!params.row.email ? "Email non disponibile" : "Invia Email per resettare la Password"}>
               <span>
                 <IconButton
                     onClick={() => handleResetPassword(params.row.email)}
@@ -196,10 +179,10 @@ const GestioneAccessi = () => {
 
       <ConfirmationDialog 
         open={dialog.open}
-        title={dialog.title}
-        content={dialog.content}
+        onClose={handleCloseDialog}
         onConfirm={dialog.onConfirm}
-        onCancel={handleCloseDialog}
+        title={dialog.title}
+        message={dialog.content} // Corretto da 'content' a 'message'
       />
 
       <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={!!operatingRowId}>
