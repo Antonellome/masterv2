@@ -5,12 +5,41 @@ import { Dipendente, SaldiContatori, GiustificativoAssenza, RisultatoGiornoCCNL,
 dayjs.extend(isSameOrBefore);
 
 const tipiAssenzaMap: { [key: string]: TipoAssenza } = {
-    'Ferie': 'FERIE',
-    'Malattia': 'MALATTIA',
-    'Permesso': 'PERMESSO',
-    'Legge 104': 'LEGGE_104',
-    'ROL': 'ROL'
+    'ferie': 'FERIE',
+    'malattia': 'MALATTIA',
+    'permesso': 'PERMESSO',
+    '104': 'LEGGE_104',
+    'legge 104': 'LEGGE_104',
+    'rol': 'ROL',
+    'ex festività': 'EX_FESTIVITA'
 };
+
+function createEmptyDayResult(data: string): RisultatoGiornoCCNL {
+    return {
+        data,
+        pagaBaseOre: 0,
+        trasfertaOre: 0,
+        oreMalattiaCarenzaAzienda: 0,
+        oreMalattiaIntegrazione: 0,
+        strDiu12Intero: 0,
+        strDiuSuccessIntero: 0,
+        straordinarioSabatoDiurno50: 0,
+        straordinarioFestivo55: 0,
+        oreNotturnoSeraleOrd: 0,
+        oreNotturnoPienoOrd: 0,
+        straordinarioNotturno50: 0,
+        straordinarioNotturnoFestivo75: 0,
+        bancaOreSolaMaggiorazione25: 0,
+        bancaOreSolaMaggiorazione30: 0,
+        rolScalati: 0,
+        ferieScalate: 0,
+        exFestivitaScalate: 0,
+        permessiScalati: 0,
+        legge104Scalate: 0,
+        anomaliaDebitoUncovered: 0,
+    };
+}
+
 
 export function analizzaIntervalloACavallo(
   oraIngresso: string, 
@@ -73,40 +102,49 @@ export function calcolaGiornata(
   
     const { data, oreDiurne, oreNotturnoSerale, oreNotturnoPieno, oreSconfinamentoFestivo, isSabato, isDomenica, isFestivo, oreTeorichePreviste } = datiGiorno;
   
-    const risultato: RisultatoGiornoCCNL = {
-        data, pagaBaseOre: 0, trasfertaOre: 0,
-        oreMalattiaCarenzaAzienda: 0, oreMalattiaIntegrazione: 0,
-        strDiu12Intero: 0, strDiuSuccessIntero: 0, straordinarioSabatoDiurno50: 0, straordinarioFestivo55: 0,
-        oreNotturnoSeraleOrd: 0, oreNotturnoPienoOrd: 0, straordinarioNotturno50: 0, straordinarioNotturnoFestivo75: 0,
-        bancaOreSolaMaggiorazione25: 0, bancaOreSolaMaggiorazione30: 0,
-        rolScalati: 0, ferieScalate: 0, exFestivitaScalate: 0, permessiScalati: 0, legge104Scalate: 0,
-        anomaliaDebitoUncovered: 0,
-    };
-  
+    const risultato = createEmptyDayResult(data);
     const saldiAggiornati = { ...saldi };
     let totaleOreAssenza = 0;
 
     for (const assenza of assenze) {
         totaleOreAssenza += assenza.ore;
         switch(assenza.tipo) {
-            case 'FERIE': risultato.ferieScalate += assenza.ore; break;
-            case 'ROL': risultato.rolScalati += assenza.ore; break;
+            case 'FERIE': 
+                risultato.ferieScalate += assenza.ore; 
+                saldiAggiornati.saldoFerieOre -= assenza.ore;
+                break;
+            case 'ROL': 
+                risultato.rolScalati += assenza.ore; 
+                saldiAggiornati.saldoRolOre -= assenza.ore;
+                break;
+            case 'EX_FESTIVITA':
+                risultato.exFestivitaScalate += assenza.ore;
+                saldiAggiornati.saldoExFestivitaOre -= assenza.ore;
+                break;
+            case 'LEGGE_104':
+                risultato.legge104Scalate += assenza.ore;
+                break;
+            case 'PERMESSO':
+                risultato.permessiScalati += assenza.ore;
+                break;
+            case 'MALATTIA':
+                risultato.oreMalattiaCarenzaAzienda += assenza.ore;
+                break;
         }
-    }
-    
-    if (assenze.length > 0 && assenze.some(a => a.ore >= oreTeorichePreviste)) {
-      return { risultato, saldiAggiornati };
     }
 
     const oreLavorateTotali = oreDiurne + oreNotturnoSerale + oreNotturnoPieno + oreSconfinamentoFestivo;
     
     if (oreLavorateTotali <= 0 && totaleOreAssenza <= 0) {
       if (oreTeorichePreviste > 0) {
-        const debitoIniziale = oreTeorichePreviste - totaleOreAssenza;
-        const rolDaUsare = Math.min(debitoIniziale, saldiAggiornati.saldoRolOre);
-        risultato.rolScalati = rolDaUsare;
-        saldiAggiornati.saldoRolOre -= rolDaUsare;
-        risultato.anomaliaDebitoUncovered = debitoIniziale - rolDaUsare;
+        let debito = oreTeorichePreviste;
+        const rolDaUsare = Math.min(debito, saldiAggiornati.saldoRolOre);
+        if (rolDaUsare > 0) {
+            risultato.rolScalati += rolDaUsare; 
+            saldiAggiornati.saldoRolOre -= rolDaUsare;
+            debito -= rolDaUsare;
+        }
+        risultato.anomaliaDebitoUncovered = debito;
       }
       return { risultato, saldiAggiornati };
     }
@@ -120,7 +158,6 @@ export function calcolaGiornata(
     }
     
     if (isSabato) {
-        const totaleOreSabato = oreDiurne + oreNotturnoSerale + oreNotturnoPieno;
         risultato.straordinarioSabatoDiurno50 = oreDiurne;
         risultato.straordinarioNotturno50 = oreNotturnoSerale + oreNotturnoPieno;
         return { risultato, saldiAggiornati };
@@ -129,29 +166,22 @@ export function calcolaGiornata(
     const oreOrdinarieDaCoprire = Math.max(0, oreTeorichePreviste - totaleOreAssenza);
 
     const ordDiurne = Math.min(oreDiurne, oreOrdinarieDaCoprire);
-    const strDiurne = oreDiurne - ordDiurne;
+    risultato.pagaBaseOre += ordDiurne;
     
     const ordNottSerale = Math.min(oreNotturnoSerale, Math.max(0, oreOrdinarieDaCoprire - ordDiurne));
-    const strNottSerale = oreNotturnoSerale - ordNottSerale;
+    risultato.oreNotturnoSeraleOrd = ordNottSerale;
     
     const ordNottPieno = Math.min(oreNotturnoPieno, Math.max(0, oreOrdinarieDaCoprire - ordDiurne - ordNottSerale));
-    const strNottPieno = oreNotturnoPieno - ordNottPieno;
-
-    risultato.pagaBaseOre = ordDiurne;
-    risultato.oreNotturnoSeraleOrd = ordNottSerale;
     risultato.oreNotturnoPienoOrd = ordNottPieno;
 
-    const totaleStraordinarioFerialeDiurno = strDiurne + strNottSerale;
-    if (totaleStraordinarioFerialeDiurno > 0) {
-        const oreA25 = Math.min(totaleStraordinarioFerialeDiurno, 2.0);
-        const oreA30 = totaleStraordinarioFerialeDiurno - oreA25;
-        risultato.strDiu12Intero += oreA25;
-        risultato.strDiuSuccessIntero += oreA30;
-    }
+    const strDiurne = oreDiurne - ordDiurne;
+    const strNottSerale = oreNotturnoSerale - ordNottSerale;
+    const strNottPieno = oreNotturnoPieno - ordNottPieno;
 
-    if (strNottPieno > 0) {
-        risultato.straordinarioNotturno50 += strNottPieno;
-    }
+    const totaleStraordinarioFeriale = strDiurne + strNottSerale;
+    risultato.strDiu12Intero = Math.min(totaleStraordinarioFeriale, 2);
+    risultato.strDiuSuccessIntero = Math.max(0, totaleStraordinarioFeriale - 2);
+    risultato.straordinarioNotturno50 = strNottPieno;
 
     let debitoOrario = Math.max(0, oreOrdinarieDaCoprire - (ordDiurne + ordNottSerale + ordNottPieno));
     if (debitoOrario > 0) {
@@ -162,10 +192,7 @@ export function calcolaGiornata(
             debitoOrario -= copribileConRol;
         }
     }
-
-    if (debitoOrario > 0) { 
-        risultato.anomaliaDebitoUncovered = debitoOrario; 
-    }
+    risultato.anomaliaDebitoUncovered = debitoOrario;
 
     return { risultato, saldiAggiornati };
 }
@@ -194,73 +221,71 @@ export function processaMese(
             continue;
         }
         
-        let oreDiurneNetTot = 0;
-        let oreNotturnoSeraleTot = 0;
-        let oreNotturnoPienoTot = 0;
-        let oreSconfinamentoFestivoTot = 0;
+        let oreDiurneLorde = 0;
+        let oreNotturnoSeraleLorde = 0;
+        let oreNotturnoPienoLorde = 0;
+        let oreSconfinamentoFestivoLorde = 0;
         let pausaTotaleOre = 0;
         const assenzeGiorno: GiustificativoAssenza[] = [];
 
-        let fasceLordeGiorno = {
-            oreTotali: 0,
-            oreNotturnoSerale: 0,
-            oreNotturnoPieno: 0,
-            oreSconfinamentoFestivo: 0
-        };
+        for (const rapportino of rapportiniDelGiorno) {
+            const dettaglioTecnico = rapportino.dettaglioOreTecnici?.find(det => det.tecnicoId === dipendente.id);
+            if (!dettaglioTecnico || !dettaglioTecnico.ore || dettaglioTecnico.ore <= 0) {
+                continue;
+            }
 
-        const tipoAssenzaRapp = rapportiniDelGiorno.length > 0 ? tipiGiornataMap.get(rapportiniDelGiorno[0].tipoGiornataId) : undefined;
-        const tipoAssenza = tipoAssenzaRapp ? tipiAssenzaMap[tipoAssenzaRapp] : undefined;
+            const oreRapportino = dettaglioTecnico.ore;
+            const nomeTipoGiornata = tipiGiornataMap.get(rapportino.tipoGiornataId)?.toLowerCase().trim();
+            const tipoAssenza = nomeTipoGiornata ? tipiAssenzaMap[nomeTipoGiornata] : undefined;
 
-        if (tipoAssenza) {
-            assenzeGiorno.push({ dipendenteId: dipendente.id, data: dataCorrenteString, tipo: tipoAssenza, ore: 8 });
-        } else {
-            for (const rapportino of rapportiniDelGiorno) {
-                 const dettaglioTecnico = rapportino.dettaglioOreTecnici?.find(det => det.tecnicoId === dipendente.id);
-                if (!dettaglioTecnico) continue;
-
+            if (tipoAssenza) {
+                assenzeGiorno.push({ 
+                    dipendenteId: dipendente.id, 
+                    data: dataCorrenteString, 
+                    tipo: tipoAssenza, 
+                    ore: oreRapportino 
+                });
+            } else {
                 pausaTotaleOre += (dettaglioTecnico.pausa || 0) / 60;
 
-                if (dettaglioTecnico.isManual && dettaglioTecnico.ore) {
-                    fasceLordeGiorno.oreTotali += dettaglioTecnico.ore;
-                } else if (dettaglioTecnico.oraInizio && dettaglioTecnico.oraFine) {
+                if (dettaglioTecnico.isManual || !dettaglioTecnico.oraInizio || !dettaglioTecnico.oraFine) {
+                    oreDiurneLorde += oreRapportino;
+                } else {
                     const fasceSegmento = analizzaIntervalloACavallo(dettaglioTecnico.oraInizio, dettaglioTecnico.oraFine, false);
-                    fasceLordeGiorno.oreTotali += fasceSegmento.oreTotali;
-                    fasceLordeGiorno.oreNotturnoSerale += fasceSegmento.oreNotturnoSerale;
-                    fasceLordeGiorno.oreNotturnoPieno += fasceSegmento.oreNotturnoPieno;
-                    fasceLordeGiorno.oreSconfinamentoFestivo += fasceSegmento.oreSconfinamentoFestivo; 
+                    
+                    const diurneSegmento = fasceSegmento.oreTotali - fasceSegmento.oreNotturnoSerale - fasceSegmento.oreNotturnoPieno - fasceSegmento.oreSconfinamentoFestivo;
+
+                    oreDiurneLorde += diurneSegmento;
+                    oreNotturnoSeraleLorde += fasceSegmento.oreNotturnoSerale;
+                    oreNotturnoPienoLorde += fasceSegmento.oreNotturnoPieno;
+                    oreSconfinamentoFestivoLorde += fasceSegmento.oreSconfinamentoFestivo;
                 }
             }
         }
         
-        let oreLordeDiurne = fasceLordeGiorno.oreTotali - fasceLordeGiorno.oreNotturnoSerale - fasceLordeGiorno.oreNotturnoPieno - fasceLordeGiorno.oreSconfinamentoFestivo;
-        
         let pausaResidua = pausaTotaleOre;
+        const oreDiurneNet = Math.max(0, oreDiurneLorde - pausaResidua);
+        pausaResidua = Math.max(0, pausaResidua - oreDiurneLorde);
 
-        const diurneNette = Math.max(0, oreLordeDiurne - pausaResidua);
-        pausaResidua = Math.max(0, pausaResidua - oreLordeDiurne);
+        const oreNotturnoSeraleNet = Math.max(0, oreNotturnoSeraleLorde - pausaResidua);
+        pausaResidua = Math.max(0, pausaResidua - oreNotturnoSeraleLorde);
 
-        const notturneSeraleNette = Math.max(0, fasceLordeGiorno.oreNotturnoSerale - pausaResidua);
-        pausaResidua = Math.max(0, pausaResidua - fasceLordeGiorno.oreNotturnoSerale);
-
-        const notturnePieneNette = Math.max(0, fasceLordeGiorno.oreNotturnoPieno - pausaResidua);
+        const oreNotturnoPienoNet = Math.max(0, oreNotturnoPienoLorde - pausaResidua);
         
-        oreDiurneNetTot = diurneNette;
-        oreNotturnoSeraleTot = notturneSeraleNette;
-        oreNotturnoPienoTot = notturnePieneNette;
-        oreSconfinamentoFestivoTot = fasceLordeGiorno.oreSconfinamentoFestivo; // Pausa non tocca lo sconfinamento
+        const oreSconfinamentoFestivoNet = oreSconfinamentoFestivoLorde;
 
         const oreTeoriche = (d.day() >= 1 && d.day() <= 5) ? 8 : 0;
         
         const { risultato, saldiAggiornati } = calcolaGiornata(
             {
                 data: dataCorrenteString,
-                oreDiurne: Math.round(oreDiurneNetTot * 100) / 100,
-                oreNotturnoSerale: Math.round(oreNotturnoSeraleTot * 100) / 100,
-                oreNotturnoPieno: Math.round(oreNotturnoPienoTot * 100) / 100,
-                oreSconfinamentoFestivo: Math.round(oreSconfinamentoFestivoTot*100)/100,
+                oreDiurne: Math.round(oreDiurneNet * 100) / 100,
+                oreNotturnoSerale: Math.round(oreNotturnoSeraleNet * 100) / 100,
+                oreNotturnoPieno: Math.round(oreNotturnoPienoNet * 100) / 100,
+                oreSconfinamentoFestivo: Math.round(oreSconfinamentoFestivoNet * 100) / 100,
                 isSabato: d.day() === 6,
                 isDomenica: d.day() === 0,
-                isFestivo: false, // Logica festività da implementare
+                isFestivo: false, 
                 oreTeorichePreviste: oreTeoriche
             },
             assenzeGiorno,

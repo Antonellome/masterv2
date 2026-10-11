@@ -33,6 +33,11 @@ const darkThemeStyles = {
         fontWeight: 'bold',
         backgroundColor: '#2a2a2a',
         borderBottom: '2px solid #007FFF'
+    },
+    totalValueCell: {
+        color: '#82b1ff', // Light blue for totals
+        fontWeight: 'bold',
+        fontFamily: 'monospace'
     }
 };
 
@@ -195,8 +200,6 @@ const OreTecniciPage = () => {
                     (r.dettaglioOreTecnici && r.dettaglioOreTecnici.some((d: any) => d.tecnicoId === selectedTechnicianId))
                 ))
                 .toArray();
-
-            console.log("RAW RAPPORTINI FETCHED:", JSON.stringify(rapportini, null, 2));
             
             const tipiGiornataMap = new Map(tipiGiornata.map(t => [t.id, t.nome]));
 
@@ -262,25 +265,42 @@ const OreTecniciPage = () => {
             ]
         }
     ];
-
-    const tutteLeColonne = useMemo(() => sezioni.flatMap(s => s.colonne), [sezioni]);
     
     const totaliMensili = useMemo(() => {
         const newTotals: { [key: string]: number } = {};
-        tutteLeColonne.forEach(col => {
+        sezioni.flatMap(s => s.colonne).forEach(col => {
             newTotals[col.id] = processedMonthData.reduce((sum, day) => sum + ((day as any)[col.id] as number || 0), 0);
         });
         return newTotals;
-    }, [processedMonthData, tutteLeColonne]);
+    }, [processedMonthData, sezioni]);
 
     const totaleOreLavorate = useMemo(() => {
         const chiaviOreLavorate = sezioni
             .filter(s => ['Lavoro Ordinario', 'Lavoro Straordinario'].includes(s.titolo))
             .flatMap(s => s.colonne.map(c => c.id));
-        return processedMonthData.reduce((acc, curr) => {
-            return acc + chiaviOreLavorate.reduce((dayTotal, key) => dayTotal + (Number((curr as any)[key]) || 0), 0);
+        return Object.keys(totaliMensili).reduce((acc, key) => {
+            if (chiaviOreLavorate.includes(key)) {
+                return acc + (totaliMensili[key] || 0);
+            }
+            return acc;
         }, 0);
-    }, [processedMonthData, sezioni]);
+    }, [totaliMensili, sezioni]);
+
+    const totaleOreAssenza = useMemo(() => {
+        const chiaviAssenze = sezioni
+            .filter(s => ['Assenze Retribuite', 'Malattia'].includes(s.titolo))
+            .flatMap(s => s.colonne.map(c => c.id));
+        return Object.keys(totaliMensili).reduce((acc, key) => {
+            if (chiaviAssenze.includes(key)) {
+                return acc + (totaliMensili[key] || 0);
+            }
+            return acc;
+        }, 0);
+    }, [totaliMensili, sezioni]);
+
+    const totaleOreRetribuite = useMemo(() => {
+        return totaleOreLavorate + totaleOreAssenza;
+    }, [totaleOreLavorate, totaleOreAssenza]);
 
     const handleGeneraBustaPaga = () => {
         if (!selectedTechnicianId || !technicians) return;
@@ -328,7 +348,7 @@ const OreTecniciPage = () => {
                         label="Seleziona Tecnico" 
                         sx={darkThemeStyles.select}
                       >
-                          {technicians?.map(tech => <MenuItem key={tech.id} value={tech.id}>{`${tech.cognome} ${tech.nome}`}</MenuItem>)}
+                          {technicians?.slice().sort((a, b) => a.cognome.localeCompare(b.cognome)).map(tech => <MenuItem key={tech.id} value={tech.id}>{`${tech.cognome} ${tech.nome}`}</MenuItem>)}
                       </Select>
                   </FormControl>
                 </Grid>
@@ -395,20 +415,42 @@ const OreTecniciPage = () => {
 
                             <Paper sx={darkThemeStyles.paper}>
                                 <Typography variant="h6" gutterBottom sx={{ color: '#64b5f6' }}>Totali Mensili</Typography>
-                                 <TableContainer component={Paper} sx={{ backgroundColor: '#1e1e1e' }}>
+                                <TableContainer component={Paper} sx={{ backgroundColor: '#1e1e1e' }}>
                                     <Table size="small">
                                         <TableHead><TableRow><TableCell sx={darkThemeStyles.tableCellHeader}>Tipo Ora</TableCell><TableCell align="right" sx={darkThemeStyles.tableCellHeader}>Totale</TableCell></TableRow></TableHead>
                                         <TableBody>
-                                            {tutteLeColonne.map(({id, label}) => (
-                                                <TableRow key={id}>
-                                                    <TableCell sx={darkThemeStyles.tableCell}>{label}</TableCell>
-                                                    <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...(id === 'anomaliaDebitoUncovered' && totaliMensili[id] > 0 && darkThemeStyles.anomalyCell)}}>
-                                                        {(totaliMensili[id] || 0).toFixed(2)}
-                                                    </TableCell>
-                                                </TableRow>
+                                            {sezioni.map(sezione => (
+                                                <React.Fragment key={sezione.titolo}>
+                                                    <TableRow>
+                                                        <TableCell colSpan={2} sx={{...darkThemeStyles.sectionTitleCell, borderTop: '2px solid #007FFF', borderBottom: '1px solid #007FFF'}}>
+                                                            {sezione.titolo}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                    {sezione.colonne.map(({id, label}) => (
+                                                        <TableRow key={id}>
+                                                            <TableCell sx={darkThemeStyles.tableCell}>{label}</TableCell>
+                                                            <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell, ...(id === 'anomaliaDebitoUncovered' && totaliMensili[id] > 0 && darkThemeStyles.anomalyCell)}}>
+                                                                {(totaliMensili[id] || 0).toFixed(2)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </React.Fragment>
                                             ))}
                                         </TableBody>
-                                        <TableFooter><TableRow sx={darkThemeStyles.totalRow}><TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>Totale Ore Lavorate</TableCell><TableCell align="right" sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>{totaleOreLavorate.toFixed(2)}</TableCell></TableRow></TableFooter>
+                                        <TableFooter>
+                                            <TableRow sx={darkThemeStyles.totalRow}>
+                                                <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>Totale Ore Lavorate</TableCell>
+                                                <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell}}>{totaleOreLavorate.toFixed(2)}</TableCell>
+                                            </TableRow>
+                                            <TableRow sx={darkThemeStyles.totalRow}>
+                                                <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>Totale Ore Assenza</TableCell>
+                                                <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell}}>{totaleOreAssenza.toFixed(2)}</TableCell>
+                                            </TableRow>
+                                            <TableRow sx={{...darkThemeStyles.totalRow, backgroundColor: '#002b4d' }}>
+                                                <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold', fontSize: '1.1rem'}}>Totale Ore Retribuite</TableCell>
+                                                <TableCell align="right" sx={{...darkThemeStyles.tableCell, fontWeight: 'bold', fontSize: '1.1rem', color: '#cce7ff'}}>{totaleOreRetribuite.toFixed(2)}</TableCell>
+                                            </TableRow>
+                                        </TableFooter>
                                     </Table>
                                 </TableContainer>
                             </Paper>

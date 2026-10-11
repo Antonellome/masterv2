@@ -308,8 +308,8 @@ export function calcolaGiornata(
         saldiAggiornati.saldoRolOre -= copribileConRol;
         debitoOrdinario -= copribileConRol;
     }
-    if (debitoOrdinario > 0) {
-        risultato.anomaliaDebitoUncovered = debitoOrdinario;
+    if (debitoOrario > 0) {
+        risultato.anomaliaDebitoUncovered = debitoOrario;
     }
   }
 
@@ -726,4 +726,346 @@ const risultatoGiornoSabato = {
   straordinarioFestivo55: 2.00            // Ore 06:00 - 08:00 (Domenica)
 };
 
+```
+LEGGE 104 DITTE OLTRE 15 DIPENDENTI:
+
+
+Passando al **CCNL Metalmeccanici (Industria - Federmeccanica/Assistal o PMI)**, l'impianto di base della Legge 104/92 resta lo stesso (3 giorni al mese o equivalente orario), ma cambiano le **variabili di orario contrattuale** e le **voci tipiche del cedolino** (come i ROL e le ex-festività) che convivono con la 104 nel cartellino presenze.
+
+---
+
+## 1. Il Calcolo del Plafond Orario nel Settore Metalmeccanico
+
+Nel settore metalmeccanico l'orario contrattuale standard è di **40 ore settimanali**, ma sono comunissimi gli accordi aziendali o specifici inquadramenti a **38 ore** o **37,5 ore** settimanali, oltre ai regimi di **lavoro a turni**.
+
+La formula standard INPS applicata ai vari regimi orari del CCNL Metalmeccanici:
+
+* **Full-Time 40h (su 5 giorni):**
+`(40 / 5) * 3 = ` **24,00 ore/mese**
+* **Full-Time 38h (su 5 giorni):**
+`(38 / 5) * 3 = ` **22,80 ore/mese** (22 ore e 48 minuti)
+* **Full-Time 37,5h (su 5 giorni):**
+`(37,5 / 5) * 3 = ` **22,50 ore/mese** (22 ore e 30 minuti)
+
+> **Attenzione alla turnazione:** Per i lavoratori turnisti (es. cicli continui o 3 turni), il calcolo deve considerare l'effettiva distribuzione contrattuale dell'orario settimanale di riferimento per evitare discrepanze nei giorni di riposo teorici.
+
+---
+
+## 2. Particolarità da Gestire nell'App per i Metalmeccanici
+
+Un'applicazione di rilevazione presenze focalizzata sui metalmeccanici deve gestire alcune peculiarità contrattuali che si intersecano con i permessi L.104:
+
+1. **Gestione dei ROL (Riduzione Orario di Lavoro):** Il CCNL Metalmeccanici prevede un cospicuo monte ore annuo di ROL (fino a 72 o 104 ore a seconda dell'azienda e della presenza o meno delle ex-festività). Il sistema deve isolare chiaramente la causale `L104` dai ROL, poiché la 104 non intacca il maturato dei permessi contrattuali.
+2. **Frazionabilità oraria:** I permessi 104 possono essere presi a ore. Nel metalmeccanico è frequente l'uso di permessi brevi (es. 1 o 2 ore a inizio/fine turno). L'engine deve validare che la somma mensile non superi il plafond calcolato (es. 24 o 22.8 ore).
+3. **Non cumulabilità:** Come per gli altri CCNL, le ore 104 non godute nel mese **non si accumulano** e si azzerano all'ultimo giorno del mese.
+
+---
+
+## 3. Mockup del Riepilogo Busta Paga (Stile Metalmeccanico)
+
+Ecco come appare una sezione di riepilogo presenze e permessi in un cedolino o cartellino digitale per un dipendente metalmeccanico (es. 40 ore settimanali):
+
+| Cod. Causale | Descrizione Voce | U.M. | Spettante Mese / Anno | Goduto Mese | Residuo / Disponibile |
+| --- | --- | --- | --- | --- | --- |
+| **L104** | Permessi Legge 104/92 | Ore | 24,00 | 4,00 | **20,00** *(Scadenza mensile)* |
+| **ROL** | Riduzione Orario Lavoro | Ore | 12,00 (Maturato) | 2,00 | **45,00** *(Residuo Anno)* |
+| **FERIE** | Ferie Contrattuali | Ore | 14,16 (Maturato) | 0,00 | **120,50** *(Residuo Anno)* |
+| **EX-FEST** | Ex Festività | Ore | 4,00 (Maturato) | 0,00 | **16,00** *(Residuo Anno)* |
+
+---ESEMPI
+Ecco un componente **React in TypeScript e Tailwind CSS** strutturato per visualizzare il riepilogo delle ore, dei permessi (inclusa la L.104 con scadenza mensile) e dei contatori in stile "busta paga/cartellino presenze".
+
+Il codice include le tipizzazioni, i dati di esempio e una UI pulita con badge informativi per distinguere i permessi a scadenza mensile da quelli con accumulo annuale (come ROL e Ferie).
+
+### Componente React: `PayStubSummaryTable.tsx`
+
+```tsx
+import React from 'react';
+
+// Tipizzazione dei dati per ogni voce del contatore
+export interface TimeCounterRow {
+  code: string;
+  description: string;
+  unit: 'Ore' | 'Giorni';
+  earnedOrDue: number; // Spettante / Maturato
+  used: number;        // Goduto del mese
+  balance: number;     // Residuo disponibile
+  resetType: 'MONTHLY' | 'YEARLY'; // Differenza di gestione L104 vs ROL/Ferie
+  note?: string;
+}
+
+export interface PayStubSummaryProps {
+  employeeName: string;
+  ccnlType: string;
+  period: string; // es. "Ottobre 2026"
+  rows: TimeCounterRow[];
+}
+
+export const PayStubSummaryTable: React.FC<PayStubSummaryProps> = ({
+  employeeName,
+  ccnlType,
+  period,
+  rows,
+}) => {
+  return (
+    <div className="w-full max-w-5xl mx-auto bg-white shadow-lg rounded-xl border border-slate-200 overflow-hidden my-6 font-sans">
+      {/* Intestazione del Cartellino */}
+      <div className="bg-slate-900 text-white px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 className="text-lg font-bold tracking-wide">Riepilogo Presenze e Contatori</h2>
+          <p className="text-slate-300 text-sm">Dipendente: <span className="font-semibold text-white">{employeeName}</span></p>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="bg-slate-800 text-indigo-300 px-3 py-1 rounded-full border border-slate-700 font-medium">
+            CCNL: {ccnlType}
+          </span>
+          <span className="bg-indigo-600/30 text-indigo-200 px-3 py-1 rounded-full border border-indigo-500/30 font-medium">
+            Periodo: {period}
+          </span>
+        </div>
+      </div>
+
+      {/* Tabella Dati */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-100 text-slate-700 text-xs uppercase tracking-wider border-b border-slate-200">
+              <th className="py-3 px-4 font-semibold">Cod.</th>
+              <th className="py-3 px-4 font-semibold">Causale / Voce</th>
+              <th className="py-3 px-4 font-semibold text-center">U.M.</th>
+              <th className="py-3 px-4 font-semibold text-right">Spettante</th>
+              <th className="py-3 px-4 font-semibold text-right">Goduto</th>
+              <th className="py-3 px-4 font-semibold text-right">Residuo</th>
+              <th className="py-3 px-4 font-semibold text-center">Scadenza</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 text-sm text-slate-700">
+            {rows.map((row) => (
+              <tr key={row.code} className="hover:bg-slate-50/80 transition-colors">
+                <td className="py-3 px-4 font-mono font-bold text-slate-900">{row.code}</td>
+                <td className="py-3 px-4 font-medium text-slate-900">
+                  {row.description}
+                  {row.note && <span className="block text-xs text-slate-500 font-normal">{row.note}</span>}
+                </td>
+                <td className="py-3 px-4 text-center text-slate-500">{row.unit}</td>
+                <td className="py-3 px-4 text-right font-mono">{row.earnedOrDue.toFixed(2)}</td>
+                <td className="py-3 px-4 text-right font-mono text-amber-600 font-medium">{row.used.toFixed(2)}</td>
+                <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">{row.balance.toFixed(2)}</td>
+                <td className="py-3 px-4 text-center">
+                  {row.resetType === 'MONTHLY' ? (
+                    <span className="inline-block bg-rose-50 text-rose-700 border border-rose-200 text-xs px-2.5 py-0.5 rounded-full font-medium">
+                      Mensile (Scade)
+                    </span>
+                  ) : (
+                    <span className="inline-block bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-0.5 rounded-full font-medium">
+                      Annuale (Riporto)
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer Informativo */}
+      <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 text-xs text-slate-500 flex flex-col sm:flex-row justify-between gap-1">
+        <span>* I permessi L.104/92 non sono cumulabili e si azzerano l'ultimo giorno del mese solare.</span>
+        <span className="font-medium text-slate-600">Generato da Engine Presenze Aziendali</span>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// ESEMPIO DI UTILIZZO
+// ==========================================
+export const SampleUsage: React.FC = () => {
+  const sampleData: TimeCounterRow[] = [
+    {
+      code: 'L104',
+      description: 'Permessi Legge 104/92',
+      unit: 'Ore',
+      earnedOrDue: 24.00,
+      used: 8.00,
+      balance: 16.00,
+      resetType: 'MONTHLY',
+      note: 'Plafond basato su orario 40h/settimana'
+    },
+    {
+      code: 'FERIE',
+      description: 'Ferie Ordinarie',
+      unit: 'Ore',
+      earnedOrDue: 14.16,
+      used: 0.00,
+      balance: 112.50,
+      resetType: 'YEARLY',
+      note: 'Maturazione pro-rata mensile'
+    },
+    {
+      code: 'ROL',
+      description: 'Riduzione Orario di Lavoro',
+      unit: 'Ore',
+      earnedOrDue: 6.00,
+      used: 4.00,
+      balance: 38.00,
+      resetType: 'YEARLY',
+      note: 'CCNL Metalmeccanici'
+    },
+    {
+      code: 'EX-FEST',
+      description: 'Permessi Ex Festività',
+      unit: 'Ore',
+      earnedOrDue: 2.66,
+      used: 0.00,
+      balance: 16.00,
+      resetType: 'YEARLY'
+    }
+  ];
+
+  return (
+    <div className="p-6 bg-slate-100 min-h-screen">
+      <PayStubSummaryTable 
+        employeeName="Mario Rossi" 
+        ccnlType="Metalmeccanici Industria" 
+        period="Ottobre 2026" 
+        rows={sampleData} 
+      />
+    </div>
+  );
+};
+
+```
+
+### Caratteristiche principali del componente:
+
+1. **Tipizzazione rigida (`TypeScript`)**: Modelli chiari per gestire sia le voci a scadenza mensile (`MONTHLY`, come la L.104) sia quelle ad accumulo annuale (`YEARLY`, come Ferie e ROL).
+2. **Design System pulito (`Tailwind CSS`)**: Uso di etichette cromatiche distinte (rosso/rosa per i permessi a scadenza secca, verde smeraldo per i residui annuali) per evitare errori da parte dell'operatore HR o del dipendente.
+3. **Responsività**: Ottimizzato con `overflow-x-auto` per adattarsi perfettamente anche a schermi ridotti o dispositivi mobili.
+
+altro sulla 104:
+
+Passando al **CCNL Metalmeccanici (Industria - Federmeccanica/Assistal o PMI)**, l'impianto di base della Legge 104/92 resta lo stesso (3 giorni al mese o equivalente orario), ma cambiano le **variabili di orario contrattuale** e le **voci tipiche del cedolino** (come i ROL e le ex-festività) che convivono con la 104 nel cartellino presenze.
+
+---
+
+## 1. Il Calcolo del Plafond Orario nel Settore Metalmeccanico
+
+Nel settore metalmeccanico l'orario contrattuale standard è di **40 ore settimanali**, ma sono comunissimi gli accordi aziendali o specifici inquadramenti a **38 ore** o **37,5 ore** settimanali, oltre ai regimi di **lavoro a turni**.
+
+La formula standard INPS applicata ai vari regimi orari del CCNL Metalmeccanici:
+
+* **Full-Time 40h (su 5 giorni):**
+`(40 / 5) * 3 = ` **24,00 ore/mese**
+* **Full-Time 38h (su 5 giorni):**
+`(38 / 5) * 3 = ` **22,80 ore/mese** (22 ore e 48 minuti)
+* **Full-Time 37,5h (su 5 giorni):**
+`(37,5 / 5) * 3 = ` **22,50 ore/mese** (22 ore e 30 minuti)
+
+> **Attenzione alla turnazione:** Per i lavoratori turnisti (es. cicli continui o 3 turni), il calcolo deve considerare l'effettiva distribuzione contrattuale dell'orario settimanale di riferimento per evitare discrepanze nei giorni di riposo teorici.
+
+---
+
+## 2. Particolarità da Gestire nell'App per i Metalmeccanici
+
+Un'applicazione di rilevazione presenze focalizzata sui metalmeccanici deve gestire alcune peculiarità contrattuali che si intersecano con i permessi L.104:
+
+1. **Gestione dei ROL (Riduzione Orario di Lavoro):** Il CCNL Metalmeccanici prevede un cospicuo monte ore annuo di ROL (fino a 72 o 104 ore a seconda dell'azienda e della presenza o meno delle ex-festività). Il sistema deve isolare chiaramente la causale `L104` dai ROL, poiché la 104 non intacca il maturato dei permessi contrattuali.
+2. **Frazionabilità oraria:** I permessi 104 possono essere presi a ore. Nel metalmeccanico è frequente l'uso di permessi brevi (es. 1 o 2 ore a inizio/fine turno). L'engine deve validare che la somma mensile non superi il plafond calcolato (es. 24 o 22.8 ore).
+3. **Non cumulabilità:** Come per gli altri CCNL, le ore 104 non godute nel mese **non si accumulano** e si azzerano all'ultimo giorno del mese.
+
+---
+
+## 3. Mockup del Riepilogo Busta Paga (Stile Metalmeccanico)
+
+Ecco come appare una sezione di riepilogo presenze e permessi in un cedolino o cartellino digitale per un dipendente metalmeccanico (es. 40 ore settimanali):
+
+| Cod. Causale | Descrizione Voce | U.M. | Spettante Mese / Anno | Goduto Mese | Residuo / Disponibile |
+| --- | --- | --- | --- | --- | --- |
+| **L104** | Permessi Legge 104/92 | Ore | 24,00 | 4,00 | **20,00** *(Scadenza mensile)* |
+| **ROL** | Riduzione Orario Lavoro | Ore | 12,00 (Maturato) | 2,00 | **45,00** *(Residuo Anno)* |
+| **FERIE** | Ferie Contrattuali | Ore | 14,16 (Maturato) | 0,00 | **120,50** *(Residuo Anno)* |
+| **EX-FEST** | Ex Festività | Ore | 4,00 (Maturato) | 0,00 | **16,00** *(Residuo Anno)* |
+
+---
+# REGISTRAZIONE ESEMPIO RAPPORTINO E TIPI GIORNATA
+
+**Data Registrazione: 26 Maggio 2024**
+
+Questa sezione documenta la struttura di un rapportino e la lista dei tipi di giornata come da input fornito, per garantire una corretta interpretazione dei dati grezzi.
+
+### Lista dei Tipi di Giornata
+
+La logica di calcolo deve essere in grado di mappare i seguenti `tipoGiornataId` alle rispettive causali (lavoro, assenza, trasferta).
+
+*   Festivo
+*   Trasferta Europa
+*   Permesso
+*   104
+*   Trasferta ExtraEuropea
+*   Malattia
+*   Trasferta Italia
+*   Straordinario
+*   Ordinaria
+*   Ferie
+
+### Struttura Dati di un Rapportino (Esempio `0SdNn8Km9GCPhB98fo2L`)
+
+La fonte delle ore per ogni tecnico è il campo `ore` nell'oggetto corrispondente all'interno dell'array `dettaglioOreTecnici`. La logica deve ciclare su tutti i rapportini di una giornata e sommare le ore in base al `tipoGiornataId` di ciascuno.
+
+```json
+{
+  "id": "0SdNn8Km9GCPhB98fo2L",
+  "clienteId": "tzqAkjBjQIwIk7QUL2yr",
+  "completed": false,
+  "createdAt": "15 settembre 2026 alle ore 01:05:00 UTC+2",
+  "createdBy": "IDAvSZayB1XBnF4E8CLHJAoYpqe2",
+  "data": {
+    "seconds": 1789338252,
+    "nanoseconds": 741000000
+  },
+  "descrizioneBreve": "Ups",
+  "dettaglioOreTecnici": [
+    {
+      "tecnicoId": "IDAvSZayB1XBnF4E8CLHJAoYpqe2",
+      "nome": "Scuderi Antonio",
+      "oraInizio": "07:00",
+      "oraFine": "09:30",
+      "pausa": 0,
+      "ore": 2.5,
+      "isManual": false
+    },
+    {
+      "tecnicoId": "LL3wOK8rM5qH7POYsxJZ",
+      "nome": "Riso Francesco",
+      "oraInizio": "07:00",
+      "oraFine": "09:30",
+      "pausa": 0,
+      "ore": 2.5,
+      "isManual": false
+    },
+    {
+      "tecnicoId": "YHJFIu2PRGVSJG03D8EgVYKce1q1",
+      "nome": "Carcame Mario",
+      "oraInizio": "07:30",
+      "oraFine": "09:30",
+      "pausa": 0,
+      "ore": 2,
+      "isManual": false
+    }
+  ],
+  "dittaId": "0EuJBKTo7As4z4qvc5Ta",
+  "lavoroEseguito": "Controllo commutatore linea emergenza normale/batterie. Collegamenti con cabur cavi batteria/linea",
+  "luogoId": "RXtlkYafqAqb3TwhmyfP",
+  "naveId": "y96J0gTZ5fIlYKkSgeNR",
+  "nome": "Rapportino del 14-09-2026",
+  "oreLavoro": 7,
+  "presenze": [
+    "IDAvSZayB1XBnF4E8CLHJAoYpqe2",
+    "LL3wOK8rM5qH7POYsxJZ",
+    "YHJFIu2PRGVSJG03D8EgVYKce1q1"
+  ],
+  "tecnicoId": "IDAvSZayB1XBnF4E8CLHJAoYpqe2",
+  "tipoGiornataId": "luLnspzVXpBJzrfLdlRu"
+}
 ```
