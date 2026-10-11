@@ -17,13 +17,14 @@ import { logger } from '@/utils/logger';
 import AnagraficaForm from './AnagraficaForm';
 import { anagraficheService } from '@/services/anagraficheService';
 import PrintModal from '@/components/PrintModal';
-import PrintableTechnicianList from '@/components/PrintableTechnicianList';
+import PrintableList from '@/components/PrintableList';
 
 interface GestioneAnagraficaProps {
   anagraficaType: AnagraficaKey;
+  title: string;
 }
 
-const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType }) => {
+const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType, title }) => {
   const config = anagraficheConfig[anagraficaType];
   const apiRef = useGridApiRef();
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({});
@@ -176,7 +177,7 @@ const GestioneAnagrafica: React.FC<GestioneAnagraficaProps> = ({ anagraficaType 
         />
       </Box>
       <PrintModal open={printModalOpen} onClose={() => setPrintModalOpen(false)}>
-          <PrintableTechnicianList data={rowsToPrint} fields={config.fields} />
+          <PrintableList data={rowsToPrint} columns={config.columns} title={title} />
       </PrintModal>
     </Box>
   );

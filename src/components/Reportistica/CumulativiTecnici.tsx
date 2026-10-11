@@ -22,7 +22,7 @@ import * as ExcelJS from 'exceljs';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/database';
 import { Tecnico, Nave, Ditta, Categoria, Rapportino, TipoGiornata, Cliente, Luogo } from '@/models/definitions';
-import PdfPreviewDialog from '@/components/common/PdfPreviewDialog';
+import PdfPreviewDialog from './PdfPreviewDialog';
 import { parseToDayjs } from '@/utils/dateUtils';
 
 dayjs.locale('it');
@@ -32,8 +32,6 @@ dayjs.extend(isBetween);
 const UI_HIGHLIGHT_COLOR = '#222222';
 const EXPORT_HIGHLIGHT_COLOR_BG_PDF = '#E0E0E0'; 
 const EXPORT_HIGHLIGHT_COLOR_BG_EXCEL = 'FFE0E0E0';
-const EXPORT_HIGHLIGHT_COLOR_TEXT_PDF = '#000000';
-const EXPORT_HIGHLIGHT_COLOR_TEXT_EXCEL = 'FF000000';
 const HEADER_EXCEL_GREEN_BG = 'FF16A085';
 const HEADER_PDF_GREEN_BG = '#16A085';
 const HEADER_WHITE_TEXT = '#FFFFFF';
@@ -357,12 +355,266 @@ const CumulativiTecnici: React.FC = () => {
     };
     
     const handleExportToExcel = useCallback(async () => {
-        // Implementation is complex and remains unchanged for now
-    }, [reportData, selectedDate, fullLegendaString, gtechId]);
+        const workbook = new ExcelJS.Workbook();
+        const monthYear = selectedDate.format('MMMM_YYYY');
     
-    const handleGeneratePdf = useCallback(() => {
-       // Implementation is complex and remains unchanged for now
-    }, [reportData, selectedDate, fullLegendaString, gtechId]);
+        const tableCols = cols.filter(c => c.field !== 'id');
+    
+        reportData.forEach((table) => {
+            const sheetName = table.title.replace(/[:*?/[\]]/g, '').substring(0, 31);
+            const worksheet = workbook.addWorksheet(sheetName, {
+                views: [{ state: 'frozen', xSplit: 1, ySplit: 1 }]
+            });
+    
+            // -- HEADERS --
+            worksheet.columns = tableCols.map(col => ({
+                header: col.headerName || col.field,
+                key: col.field,
+                width: col.field === 'tecnico' ? 30 : 10,
+            }));
+            
+            const headerRow = worksheet.getRow(1);
+            headerRow.font = { bold: true, color: { argb: HEADER_EXCEL_WHITE_TEXT } };
+            headerRow.eachCell(cell => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: HEADER_EXCEL_GREEN_BG },
+                };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            });
+    
+            // -- BODY --
+            const rows = table.rows.map(row => {
+                const rowData: any = {};
+                tableCols.forEach(col => {
+                    const cellValue = (row as any)[col.field!];
+                    if (col.field === 'tecnico' || col.field === 'totaleOre') {
+                        rowData[col.field!] = cellValue;
+                    } else {
+                        rowData[col.field!] = formatCellData(cellValue as DailyHours);
+                    }
+                });
+                return rowData;
+            });
+    
+            worksheet.addRows(rows);
+            
+            // -- STYLING --
+            worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+                if (rowNumber > 1) { // Skip header
+                    const dataRow = table.rows[rowNumber - 2] as PivotGridRowData; 
+                    if (!dataRow) return;
+                    
+                    if (dataRow.dittaId === gtechId) {
+                        row.eachCell(cell => {
+                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXPORT_HIGHLIGHT_COLOR_BG_EXCEL } };
+                        });
+                    }
+                    
+                    tableCols.forEach((col, colIndex) => {
+                        const dayNumber = parseInt(col.field!, 10);
+                        if (!isNaN(dayNumber)) {
+                            const day = selectedDate.date(dayNumber);
+                            if (day.day() === 0 || day.day() === 6) {
+                                 const cell = row.getCell(colIndex + 1);
+                                 if (!cell.fill) { // Don't override g-tech style
+                                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXPORT_HIGHLIGHT_COLOR_BG_EXCEL } };
+                                 }
+                            }
+                        }
+                    });
+                    
+                    row.getCell(1).font = { bold: true };
+                    row.getCell(tableCols.length).font = { bold: true };
+                    row.getCell(tableCols.length).alignment = { horizontal: 'right' };
+                }
+            });
+            
+            // -- SUMMARY --
+            const summaryRow = worksheet.addRow([]);
+            worksheet.addRow([]); // Add a spacer row
+            const summaryTitleCell = worksheet.getCell(`A${summaryRow.number + 2}`);
+            summaryTitleCell.value = "Riepilogo Ore";
+            summaryTitleCell.font = { bold: true, size: 12 };
+            
+            const displaySummary = processSummaryForDisplay(table.summary.byType);
+            let summaryText = Object.entries(displaySummary)
+                .sort((a,b) => a[0].localeCompare(b[0]))
+                .map(([tipo, ore]) => `${tipo}: ${String(ore).replace('.', ',')}`)
+                .join(' | ');
+            summaryText += ` | TOTALE: ${String(table.summary.grandTotal).replace('.', ',')}`;
+    
+            const summaryValueCell = worksheet.getCell(`A${summaryRow.number + 3}`);
+            summaryValueCell.value = summaryText;
+        });
+    
+        // -- LEGEND --
+        const legendSheet = workbook.addWorksheet('Legenda');
+        legendSheet.getCell('A1').value = "Legenda";
+        legendSheet.getCell('A1').font = { bold: true, size: 14 };
+        legendSheet.getCell('A3').value = fullLegendaString;
+        legendSheet.getColumn('A').width = 150;
+        legendSheet.getCell('A3').alignment = { wrapText: true };
+    
+        // --- DOWNLOAD ---
+        workbook.xlsx.writeBuffer().then((buffer) => {
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Report_Cumulativo_Tecnici_${monthYear}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        });
+    
+    }, [reportData, selectedDate, cols, gtechId, fullLegendaString, processSummaryForDisplay]);
+        
+    const handleGeneratePdf = useCallback(async () => {
+        setIsGeneratingPdf(true);
+    
+        try {
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a3' });
+            const monthYear = selectedDate.format('MMMM YYYY');
+            const mainTitle = `Report Cumulativo Tecnici - ${monthYear}`;
+    
+            const pageHeight = doc.internal.pageSize.height;
+            const pageWidth = doc.internal.pageSize.width;
+            const margin = 40;
+            let yPos = margin + 20;
+    
+            doc.setFontSize(20);
+            doc.text(mainTitle, pageWidth / 2, yPos, { align: 'center' });
+            yPos += 40;
+    
+            const tableCols = cols.filter(c => c.field !== 'id');
+            const head = [tableCols.map(c => c.headerName || c.field)];
+    
+            for (const table of reportData) {
+                if (yPos > pageHeight - 200) { 
+                    doc.addPage();
+                    yPos = margin;
+                }
+    
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text(table.title, margin, yPos);
+                yPos += 25;
+    
+                const body = table.rows.map(row => {
+                    return tableCols.map(col => {
+                        const cellValue = (row as any)[col.field!];
+                        if (col.field === 'tecnico' || col.field === 'totaleOre') {
+                            return cellValue?.toString() || '';
+                        }
+                        return formatCellData(cellValue as DailyHours);
+                    });
+                });
+    
+                autoTable(doc, {
+                    startY: yPos,
+                    head: head,
+                    body: body,
+                    theme: 'grid',
+                    headStyles: {
+                        fillColor: HEADER_PDF_GREEN_BG,
+                        textColor: HEADER_WHITE_TEXT,
+                        fontStyle: 'bold',
+                    },
+                    styles: {
+                        fontSize: 7,
+                        cellPadding: 3,
+                        overflow: 'linebreak',
+                    },
+                    columnStyles: {
+                        0: { fontStyle: 'bold', minCellWidth: 100 },
+                        [tableCols.length - 1]: { fontStyle: 'bold', halign: 'right' }
+                    },
+                    willDrawCell: (data) => {
+                        const row = table.rows[data.row.index] as PivotGridRowData;
+                        if (!row) return;
+                        
+                        if(row.dittaId === gtechId){
+                            data.cell.styles.fillColor = EXPORT_HIGHLIGHT_COLOR_BG_PDF;
+                        }
+    
+                        const col = tableCols[data.column.index];
+                        const dayNumber = parseInt(col.field!, 10);
+                        if (!isNaN(dayNumber)) {
+                            const day = selectedDate.date(dayNumber);
+                            if(day.day() === 0 || day.day() === 6) {
+                                data.cell.styles.fillColor = EXPORT_HIGHLIGHT_COLOR_BG_PDF;
+                            }
+                        }
+                    },
+                });
+                
+                yPos = (doc as any).lastAutoTable.finalY + 20;
+    
+                if (yPos > pageHeight - 80) {
+                    doc.addPage();
+                    yPos = margin;
+                }
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'bold');
+                doc.text("Riepilogo Ore:", margin, yPos);
+                yPos += 20;
+    
+                const displaySummary = processSummaryForDisplay(table.summary.byType);
+                const summaryEntries = Object.entries(displaySummary).sort((a,b) => a[0].localeCompare(b[0]));
+                
+                let currentX = margin;
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
+    
+                summaryEntries.forEach(([tipo, ore]) => {
+                    const text = `${tipo}: ${String(ore).replace('.', ',')}`;
+                    const textWidth = doc.getTextWidth(text) + 20;
+                    if (currentX + textWidth > pageWidth - margin) {
+                        currentX = margin;
+                        yPos += 15;
+                    }
+                    doc.text(text, currentX, yPos);
+                    currentX += textWidth;
+                });
+                
+                const totalText = `TOTALE: ${String(table.summary.grandTotal).replace('.', ',')}`;
+                const totalWidth = doc.getTextWidth(totalText) + 20;
+                 if (currentX + totalWidth > pageWidth - margin) {
+                    currentX = margin;
+                    yPos += 15;
+                }
+                doc.setFont(undefined, 'bold');
+                doc.text(totalText, currentX, yPos);
+    
+                yPos += 30;
+            }
+    
+            if (yPos > pageHeight - 80) {
+                doc.addPage();
+                yPos = margin;
+            }
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text("Legenda", margin, yPos);
+            yPos += 20;
+            doc.setFontSize(8);
+            doc.setFont(undefined, 'normal');
+            doc.text(fullLegendaString, margin, yPos, { maxWidth: pageWidth - (margin * 2) });
+    
+            const pdfOutput = doc.output('blob');
+            setPdfBlob(pdfOutput);
+            setIsPdfModalOpen(true);
+        } catch (error) {
+            console.error("Failed to generate PDF:", error);
+            setPdfBlob(null);
+            setIsPdfModalOpen(false);
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    }, [reportData, selectedDate, cols, gtechId, fullLegendaString, processSummaryForDisplay]);
 
 
     const CustomToolbar = () => (

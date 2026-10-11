@@ -1,14 +1,14 @@
 
-import { useRef } from 'react';
-import { 
-    Dialog, 
-    DialogTitle, 
-    DialogContent, 
-    DialogActions, 
-    Button, 
-    IconButton, 
-    Box, 
-    CircularProgress, 
+import { useRef, useEffect, useState } from 'react';
+import {
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    IconButton,
+    Box,
+    CircularProgress,
     Tooltip,
     Typography
 } from '@mui/material';
@@ -18,21 +18,32 @@ import { Share, Print, Download } from '@mui/icons-material';
 interface PdfPreviewDialogProps {
     open: boolean;
     onClose: () => void;
-    pdfUrl: string | null;
+    pdfBlob: Blob | null;
     fileName: string;
     isGenerating: boolean;
 }
 
-const PdfPreviewDialog = ({ open, onClose, pdfUrl, fileName, isGenerating }: PdfPreviewDialogProps) => {
+const PdfPreviewDialog = ({ open, onClose, pdfBlob, fileName, isGenerating }: PdfPreviewDialogProps) => {
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (pdfBlob) {
+            const url = URL.createObjectURL(pdfBlob);
+            setPdfUrl(url);
+            return () => {
+                URL.revokeObjectURL(url);
+                setPdfUrl(null);
+            };
+        } else {
+            setPdfUrl(null);
+        }
+    }, [pdfBlob]);
 
     const handleShare = async () => {
-        if (!pdfUrl) return;
+        if (!pdfBlob) return;
         try {
-            const response = await fetch(pdfUrl);
-            const blob = await response.blob();
-            const file = new File([blob], fileName, { type: 'application/pdf' });
-
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({
                     title: fileName,
@@ -51,7 +62,7 @@ const PdfPreviewDialog = ({ open, onClose, pdfUrl, fileName, isGenerating }: Pdf
     const handlePrint = () => {
         if (!iframeRef.current?.contentWindow) return;
         try {
-            iframeRef.current.contentWindow.focus(); // Focus on the iframe
+            iframeRef.current.contentWindow.focus();
             iframeRef.current.contentWindow.print();
         } catch (error) {
             console.error("Errore durante la stampa:", error);
