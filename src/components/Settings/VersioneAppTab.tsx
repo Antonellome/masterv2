@@ -85,7 +85,7 @@ const VersioneAppTab = () => {
                 Versione Applicazione
             </Typography>
             <Typography variant="body1" sx={{ mb: 2 }}>
-                Master Office V 3.0
+                Master Office V 3.1
             </Typography>
 
             {/* --- SEZIONE CONTROLLO AGGIORNAMENTI --- */}

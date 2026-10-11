@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Box, Typography, Paper, Button, IconButton, Table, TableBody, TableCell, 
     TableContainer, TableHead, TableRow, Select, MenuItem, FormControl, InputLabel, 
-    TableFooter, CircularProgress, Grid, Modal, TextField, ToggleButtonGroup, ToggleButton
+    TableFooter, CircularProgress, Grid, Modal, TextField, ToggleButtonGroup, ToggleButton, 
+    Snackbar, Alert, Dialog, AppBar, Toolbar, DialogContent
 } from '@mui/material';
-import { ArrowBack, ArrowForward, Print, Receipt } from '@mui/icons-material';
+import { ArrowBack, ArrowForward, Print, Share, Close } from '@mui/icons-material';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';
 import { getWeeksInMonth } from '@/utils/dateUtils';
@@ -12,8 +13,7 @@ import { db } from '@/db/database';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { processaMese, RisultatoGiornoCCNL } from '@/services/BustaPagaService';
 import { Dipendente, SaldiContatori } from '@/models/definitions';
-import PrintModal from '@/components/PrintModal';
-import BustaPagaPDF from '@/components/BustaPaga/BustaPagaPDF';
+import { oreTecniciPDFGenerator } from '@/services/oreTecniciPDFGenerator';
 
 dayjs.locale('it');
 
@@ -28,17 +28,61 @@ const darkThemeStyles = {
     modalBox: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 400, bgcolor: '#1e1e1e', border: '2px solid #007FFF', boxShadow: 24, p: 4, color: 'white' },
     totalRow: { backgroundColor: '#333' },
     anomalyCell: { color: '#ff4d4d', fontWeight: 'bold' },
-    sectionTitleCell: {
-        color: '#64b5f6', 
-        fontWeight: 'bold',
-        backgroundColor: '#2a2a2a',
-        borderBottom: '2px solid #007FFF'
-    },
-    totalValueCell: {
-        color: '#82b1ff', // Light blue for totals
-        fontWeight: 'bold',
-        fontFamily: 'monospace'
-    }
+    sectionTitleCell: { color: '#64b5f6', fontWeight: 'bold', backgroundColor: '#2a2a2a', borderBottom: '2px solid #007FFF' },
+    totalValueCell: { color: '#82b1ff', fontWeight: 'bold', fontFamily: 'monospace' }
+};
+
+interface PdfPreviewDialogProps {
+    open: boolean;
+    onClose: () => void;
+    pdfDataUrl: string;
+    pdfFilename: string;
+}
+
+const PdfPreviewDialog: React.FC<PdfPreviewDialogProps> = ({ open, onClose, pdfDataUrl, pdfFilename }) => {
+    const handlePrint = async () => {
+        if (!pdfDataUrl) return;
+        try {
+            const response = await fetch(pdfDataUrl);
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = objectUrl;
+            document.body.appendChild(iframe);
+            iframe.onload = () => {
+                try { iframe.contentWindow?.print(); } catch (e) { console.error(e); }
+                finally { URL.revokeObjectURL(objectUrl); setTimeout(() => document.body.removeChild(iframe), 100); }
+            };
+        } catch (error) { console.error('Stampa fallita:', error); }
+    };
+
+    const handleShare = async () => {
+        try {
+            const response = await fetch(pdfDataUrl);
+            const blob = await response.blob();
+            const file = new File([blob], pdfFilename, { type: 'application/pdf' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: 'Riepilogo Ore', text: `Ecco il riepilogo: ${pdfFilename}` });
+            } else { alert('Condivisione non supportata.'); }
+        } catch (error) { console.error("Errore condivisione:", error); }
+    };
+
+    return (
+        <Dialog fullScreen open={open} onClose={onClose}>
+            <AppBar sx={{ position: 'relative' }}>
+                <Toolbar>
+                    <IconButton edge="start" color="inherit" onClick={onClose} aria-label="close"><Close /></IconButton>
+                    <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">Anteprima Riepilogo</Typography>
+                    {navigator.share && <IconButton color="inherit" onClick={handleShare}><Share /></IconButton>}
+                    <IconButton color="inherit" onClick={handlePrint}><Print /></IconButton>
+                </Toolbar>
+            </AppBar>
+            <DialogContent sx={{ height: 'calc(100vh - 64px)', p: 0 }}>
+                <iframe src={pdfDataUrl} style={{ width: '100%', height: '100%', border: 'none' }} title="Anteprima PDF" />
+            </DialogContent>
+        </Dialog>
+    );
 };
 
 
@@ -156,12 +200,8 @@ const OreTecniciPage = () => {
     const [processedMonthData, setProcessedMonthData] = useState<RisultatoGiornoCCNL[]>([]);
     const [loading, setLoading] = useState(false);
     const [isSaldiModalOpen, setSaldiModalOpen] = useState(false);
-    const [isPrintModalOpen, setPrintModalOpen] = useState(false);
-    const [isBustaPagaModalOpen, setBustaPagaModalOpen] = useState(false);
-    const [bustaPagaData, setBustaPagaData] = useState<object | null>(null);
-    
-    const printRef = useRef<HTMLDivElement>(null);
-    const bustaPagaPrintRef = useRef<HTMLDivElement>(null);
+    const [pdfPreview, setPdfPreview] = useState({ open: false, dataUrl: '', filename: '' });
+    const [snackbar, setSnackbar] = useState<{ open: boolean, message: string, severity: 'success' | 'error' | 'warning' } | null>(null);
 
     const technicians = useLiveQuery(() => db.tecnici.toArray(), []);
     const tipiGiornata = useLiveQuery(() => db.tipiGiornata.toArray(), []);
@@ -216,12 +256,6 @@ const OreTecniciPage = () => {
         };
         fetchData();
     }, [currentDate, selectedTechnicianId, technicians, tipiGiornata, saldiIniziali]);
-
-    useEffect(() => {
-        if (bustaPagaData) {
-            setBustaPagaModalOpen(true);
-        }
-    }, [bustaPagaData]);
 
     const handleSaveSaldi = async (saldi: any) => {
       if (!selectedTechnicianId) return;
@@ -302,31 +336,36 @@ const OreTecniciPage = () => {
         return totaleOreLavorate + totaleOreAssenza;
     }, [totaleOreLavorate, totaleOreAssenza]);
 
-    const handleGeneraBustaPaga = () => {
-        if (!selectedTechnicianId || !technicians) return;
-        
-        const technician = technicians.find(t => t.id === selectedTechnicianId);
-        const finalSaldi = {
-            ferie: (saldiIniziali.saldoFerieOre || 0) - (totaliMensili.ferieScalate || 0),
-            rol: (saldiIniziali.saldoRolOre || 0) - (totaliMensili.rolScalati || 0),
-            exFestivita: (saldiIniziali.saldoExFestivitaOre || 0) - (totaliMensili.exFestivitaScalate || 0),
+    const handlePrint = async () => {
+        if (!selectedTechnicianId || !technicians) {
+            setSnackbar({ open: true, message: 'Seleziona un tecnico prima di stampare.', severity: 'warning' });
+            return;
         }
 
-        const data = {
-            header: {
-                dipendente: `${technician?.cognome} ${technician?.nome}`,
-                periodo: currentDate.format('MMMM YYYY'),
-            },
-            datiCalcolo: {
-                giorniLavoratiNelMese: processedMonthData.filter(d => d.data.startsWith(currentDate.format('YYYY-MM')) && d.pagaBaseOre > 0).length,
-                oreLavorateTotali: totaleOreLavorate,
-                oreContrattualiMese: 173, 
-            },
-            totaliPerVoce: totaliMensili,
-            saldiContatoriFinali: finalSaldi,
-        };
+        const tech = technicians.find(t => t.id === selectedTechnicianId);
+        if (!tech) return;
 
-        setBustaPagaData(data);
+        setLoading(true);
+        try {
+            const { dataUrl, filename } = await oreTecniciPDFGenerator(
+                `${tech.cognome} ${tech.nome}`,
+                currentDate,
+                sezioni,
+                totaliMensili,
+                totaleOreLavorate,
+                totaleOreAssenza,
+                totaleOreRetribuite,
+                saldiIniziali,
+                weeks,
+                processedMonthData
+            );
+            setPdfPreview({ open: true, dataUrl, filename });
+        } catch (error) {
+            console.error("Errore durante la generazione del PDF:", error);
+            setSnackbar({ open: true, message: `Impossibile generare il PDF: ${error instanceof Error ? error.message : String(error)}`, severity: 'error' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -340,11 +379,7 @@ const OreTecniciPage = () => {
                       <InputLabel sx={{ color: 'white' }}>Seleziona Tecnico</InputLabel>
                       <Select 
                         value={selectedTechnicianId || ''} 
-                        onChange={(e) => {
-                            setSelectedTechnicianId(e.target.value as string);
-                            setBustaPagaData(null);
-                            setBustaPagaModalOpen(false);
-                        }}
+                        onChange={(e) => setSelectedTechnicianId(e.target.value as string)}
                         label="Seleziona Tecnico" 
                         sx={darkThemeStyles.select}
                       >
@@ -352,139 +387,119 @@ const OreTecniciPage = () => {
                       </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={6} md={2}>
+                <Grid item xs={6} md={3}>
                     <Button fullWidth variant="contained" onClick={() => setSaldiModalOpen(true)} disabled={!selectedTechnicianId}>Imposta Residui</Button>
                 </Grid>
-                <Grid item xs={6} md={2}>
-                    <Button fullWidth variant="contained" color="secondary" onClick={() => setPrintModalOpen(true)} disabled={!selectedTechnicianId || loading}>
-                        <Print sx={{mr: 1}}/> Stampa
-                    </Button>
-                </Grid>
-                <Grid item xs={12} md={2}>
-                    <Button fullWidth variant="contained" color="primary" onClick={handleGeneraBustaPaga} disabled={!selectedTechnicianId || loading}>
-                        <Receipt sx={{mr: 1}}/> Genera Busta
+                <Grid item xs={6} md={3}>
+                    <Button fullWidth variant="contained" color="primary" onClick={handlePrint} disabled={!selectedTechnicianId || loading} startIcon={<Print />}>
+                        Stampa Riepilogo
                     </Button>
                 </Grid>
               </Grid>
             </Paper>
 
-            <Box ref={printRef}>
-                 {selectedTechnicianId && (
-                    loading ? <Box sx={darkThemeStyles.loaderBox}><CircularProgress /></Box> : (
-                        <>
-                            <Paper sx={darkThemeStyles.paper}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <IconButton onClick={() => setCurrentDate(currentDate.subtract(1, 'month'))} sx={{ color: 'white' }}><ArrowBack /></IconButton>
-                                    <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>{currentDate.format('MMMM YYYY')}</Typography>
-                                    <IconButton onClick={() => setCurrentDate(currentDate.add(1, 'month'))} sx={{ color: 'white' }}><ArrowForward /></IconButton>
-                                </Box>
-                            </Paper>
-                            
-                            {weeks.map((week, weekIndex) => (
-                                 <Paper key={weekIndex} sx={darkThemeStyles.paper}>
-                                    <Typography variant="h6" gutterBottom>{`Settimana ${weekIndex + 1}`}</Typography>
-                                    <TableContainer>
-                                        <Table stickyHeader size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell sx={{...darkThemeStyles.tableCellHeader, minWidth: '240px'}}>Tipo Ora</TableCell>
-                                                    {week.map(day => {
-                                                        const dayObj = dayjs(day);
-                                                        const dayStr = dayObj.format('YYYY-MM-DD');
-                                                        const dayData = processedMonthData.find(d => d.data === dayStr);
-                                                        const isWeekend = dayObj.day() === 0 || dayObj.day() === 6;
-                                                        const cellStyle = {
-                                                            ...darkThemeStyles.tableCellHeader,
-                                                            backgroundColor: dayData ? (isWeekend ? '#4a148c' : '#004d40') : 'transparent'
-                                                        };
-                                                        return <TableCell key={dayStr} align="center" sx={cellStyle}>{dayObj.format('dd').charAt(0).toUpperCase()}<br />{dayObj.format('D')}</TableCell>
-                                                    })}
-                                                </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {sezioni.map(sezione => (
-                                                    <React.Fragment key={sezione.titolo}>
-                                                        {renderTableSection(sezione.titolo, sezione.colonne, week, processedMonthData)}
-                                                    </React.Fragment>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                </Paper>
-                            ))}
-
-                            <Paper sx={darkThemeStyles.paper}>
-                                <Typography variant="h6" gutterBottom sx={{ color: '#64b5f6' }}>Totali Mensili</Typography>
-                                <TableContainer component={Paper} sx={{ backgroundColor: '#1e1e1e' }}>
-                                    <Table size="small">
-                                        <TableHead><TableRow><TableCell sx={darkThemeStyles.tableCellHeader}>Tipo Ora</TableCell><TableCell align="right" sx={darkThemeStyles.tableCellHeader}>Totale</TableCell></TableRow></TableHead>
+            {selectedTechnicianId && (
+                loading ? <Box sx={darkThemeStyles.loaderBox}><CircularProgress /></Box> : (
+                    <Box>
+                        <Paper sx={darkThemeStyles.paper}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <IconButton onClick={() => setCurrentDate(currentDate.subtract(1, 'month'))} sx={{ color: 'white' }}><ArrowBack /></IconButton>
+                                <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>{currentDate.format('MMMM YYYY')}</Typography>
+                                <IconButton onClick={() => setCurrentDate(currentDate.add(1, 'month'))} sx={{ color: 'white' }}><ArrowForward /></IconButton>
+                            </Box>
+                        </Paper>
+                        
+                        {weeks.map((week, weekIndex) => (
+                             <Paper key={weekIndex} sx={darkThemeStyles.paper}>
+                                <Typography variant="h6" gutterBottom>{`Settimana ${weekIndex + 1}`}</Typography>
+                                <TableContainer>
+                                    <Table stickyHeader size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell sx={{...darkThemeStyles.tableCellHeader, minWidth: '240px'}}>Tipo Ora</TableCell>
+                                                {week.map(day => {
+                                                    const dayObj = dayjs(day);
+                                                    const dayStr = dayObj.format('YYYY-MM-DD');
+                                                    const dayData = processedMonthData.find(d => d.data === dayStr);
+                                                    const isWeekend = dayObj.day() === 0 || dayObj.day() === 6;
+                                                    const cellStyle = {
+                                                        ...darkThemeStyles.tableCellHeader,
+                                                        backgroundColor: dayData ? (isWeekend ? '#4a148c' : '#004d40') : 'transparent'
+                                                    };
+                                                    return <TableCell key={dayStr} align="center" sx={cellStyle}>{dayObj.format('dd').charAt(0).toUpperCase()}<br />{dayObj.format('D')}</TableCell>
+                                                })}
+                                            </TableRow>
+                                        </TableHead>
                                         <TableBody>
                                             {sezioni.map(sezione => (
                                                 <React.Fragment key={sezione.titolo}>
-                                                    <TableRow>
-                                                        <TableCell colSpan={2} sx={{...darkThemeStyles.sectionTitleCell, borderTop: '2px solid #007FFF', borderBottom: '1px solid #007FFF'}}>
-                                                            {sezione.titolo}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                    {sezione.colonne.map(({id, label}) => (
-                                                        <TableRow key={id}>
-                                                            <TableCell sx={darkThemeStyles.tableCell}>{label}</TableCell>
-                                                            <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell, ...(id === 'anomaliaDebitoUncovered' && totaliMensili[id] > 0 && darkThemeStyles.anomalyCell)}}>
-                                                                {(totaliMensili[id] || 0).toFixed(2)}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
+                                                    {renderTableSection(sezione.titolo, sezione.colonne, week, processedMonthData)}
                                                 </React.Fragment>
                                             ))}
                                         </TableBody>
-                                        <TableFooter>
-                                            <TableRow sx={darkThemeStyles.totalRow}>
-                                                <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>Totale Ore Lavorate</TableCell>
-                                                <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell}}>{totaleOreLavorate.toFixed(2)}</TableCell>
-                                            </TableRow>
-                                            <TableRow sx={darkThemeStyles.totalRow}>
-                                                <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>Totale Ore Assenza</TableCell>
-                                                <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell}}>{totaleOreAssenza.toFixed(2)}</TableCell>
-                                            </TableRow>
-                                            <TableRow sx={{...darkThemeStyles.totalRow, backgroundColor: '#002b4d' }}>
-                                                <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold', fontSize: '1.1rem'}}>Totale Ore Retribuite</TableCell>
-                                                <TableCell align="right" sx={{...darkThemeStyles.tableCell, fontWeight: 'bold', fontSize: '1.1rem', color: '#cce7ff'}}>{totaleOreRetribuite.toFixed(2)}</TableCell>
-                                            </TableRow>
-                                        </TableFooter>
                                     </Table>
                                 </TableContainer>
                             </Paper>
-                            
-                            <SaldiContatoriUI saldiIniziali={saldiIniziali} totaliMensili={totaliMensili} />
-                        </>
-                    )
-                )}
-            </Box>
-            
-            <div style={{ display: 'none' }}>
-                <div ref={bustaPagaPrintRef}>
-                    <BustaPagaPDF data={bustaPagaData} />
-                </div>
-            </div>
+                        ))}
 
+                        <Paper sx={darkThemeStyles.paper}>
+                            <Typography variant="h6" gutterBottom sx={{ color: '#64b5f6' }}>Totali Mensili</Typography>
+                            <TableContainer component={Paper} sx={{ backgroundColor: '#1e1e1e' }}>
+                                <Table size="small">
+                                    <TableHead><TableRow><TableCell sx={darkThemeStyles.tableCellHeader}>Tipo Ora</TableCell><TableCell align="right" sx={darkThemeStyles.tableCellHeader}>Totale</TableCell></TableRow></TableHead>
+                                    <TableBody>
+                                        {sezioni.map(sezione => (
+                                            <React.Fragment key={sezione.titolo}>
+                                                <TableRow>
+                                                    <TableCell colSpan={2} sx={{...darkThemeStyles.sectionTitleCell, borderTop: '2px solid #007FFF', borderBottom: '1px solid #007FFF'}}>
+                                                        {sezione.titolo}
+                                                    </TableCell>
+                                                </TableRow>
+                                                {sezione.colonne.map(({id, label}) => (
+                                                    <TableRow key={id}>
+                                                        <TableCell sx={darkThemeStyles.tableCell}>{label}</TableCell>
+                                                        <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell, ...(id === 'anomaliaDebitoUncovered' && totaliMensili[id] > 0 && darkThemeStyles.anomalyCell)}}>
+                                                            {(totaliMensili[id] || 0).toFixed(2)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </React.Fragment>
+                                        ))}
+                                    </TableBody>
+                                    <TableFooter>
+                                        <TableRow sx={darkThemeStyles.totalRow}>
+                                            <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>Totale Ore Lavorate</TableCell>
+                                            <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell}}>{totaleOreLavorate.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                        <TableRow sx={darkThemeStyles.totalRow}>
+                                            <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold'}}>Totale Ore Assenza</TableCell>
+                                            <TableCell align="right" sx={{...darkThemeStyles.tableCell, ...darkThemeStyles.totalValueCell}}>{totaleOreAssenza.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                        <TableRow sx={{...darkThemeStyles.totalRow, backgroundColor: '#002b4d' }}>
+                                            <TableCell sx={{...darkThemeStyles.tableCell, fontWeight: 'bold', fontSize: '1.1rem'}}>Totale Ore Retribuite</TableCell>
+                                            <TableCell align="right" sx={{...darkThemeStyles.tableCell, fontWeight: 'bold', fontSize: '1.1rem', color: '#cce7ff'}}>{totaleOreRetribuite.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                    </TableFooter>
+                                </Table>
+                            </TableContainer>
+                        </Paper>
+                        
+                        <SaldiContatoriUI saldiIniziali={saldiIniziali} totaliMensili={totaliMensili} />
+                    </Box>
+                )
+            )}
+            
             <SaldiInizialiModal open={isSaldiModalOpen} onClose={() => setSaldiModalOpen(false)} onSave={handleSaveSaldi} tecnicoId={selectedTechnicianId!} />
-            
-            <PrintModal
-                open={isPrintModalOpen}
-                onClose={() => setPrintModalOpen(false)}
-                title={`Report Ore ${technicians?.find(t => t.id === selectedTechnicianId)?.cognome || ''} - ${currentDate.format('MMMM YYYY')}`}
-                contentRef={printRef}
+
+            <PdfPreviewDialog
+                open={pdfPreview.open}
+                onClose={() => setPdfPreview({ open: false, dataUrl: '', filename: '' })}
+                pdfDataUrl={pdfPreview.dataUrl}
+                pdfFilename={pdfPreview.filename}
             />
 
-            <PrintModal
-                open={isBustaPagaModalOpen}
-                onClose={() => {
-                    setBustaPagaModalOpen(false);
-                    setBustaPagaData(null); 
-                }}
-                title={`Busta Paga ${technicians?.find(t => t.id === selectedTechnicianId)?.cognome || ''} - ${currentDate.format('MMMM YYYY')}`}
-                contentRef={bustaPagaPrintRef}
-            />
+            {snackbar && <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar(null)}><Alert onClose={() => setSnackbar(null)} severity={snackbar.severity || 'info'} sx={{ width: '100%' }}>{snackbar.message}</Alert></Snackbar>}
+
         </Box>
     );
 };
