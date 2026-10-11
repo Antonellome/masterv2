@@ -1,3 +1,29 @@
+# MEMORANDUM TECNICO SULLA STRUTTURA DELLE VOCI DI PAGA
+
+**Data Conferma: 24 Maggio 2024**
+
+**Decisione Approvata:** Per garantire la massima chiarezza e eliminare ogni ambiguità nella retribuzione delle ore, si stabilisce di adottare una struttura di voci paga che distingua esplicitamente tra lavoro notturno ordinario e lavoro notturno straordinario. L'approccio precedente, che utilizzava categorie generiche come "Maggiorazione Notturno", è deprecato e sostituito dalla seguente struttura (Opzione A), che è ora la fonte di verità.
+
+### Struttura delle Voci di Paga (Implementazione Opzione A)
+
+La visualizzazione e il calcolo delle ore devono seguire questa suddivisione, che riflette fedelmente la logica del CCNL e del motore di calcolo (`BustaPagaService.ts`).
+
+1.  **Sezione: Lavoro Ordinario**
+    *   `Ordinarie Diurne` (id: `pagaBaseOre`)
+    *   `Lavoro Notturno Ordinario (20-22) (+15%)` (id: `oreNotturnoSeraleOrd`)
+    *   `Lavoro Notturno Ordinario (22-06) (+30%)` (id: `oreNotturnoPienoOrd`)
+
+2.  **Sezione: Lavoro Straordinario**
+    *   `Straordinario Feriale (Prime 2h) (+25%)` (id: `strDiu12Intero`)
+    *   `Straordinario Feriale (Oltre 2h) (+30%)` (id: `strDiuSuccessIntero`)
+    *   `Straordinario Sabato Diurno (+50%)` (id: `straordinarioSabatoDiurno50`)
+    *   `Straordinario Notturno Feriale/Sabato (+50%)` (id: `straordinarioNotturno50`)
+    *   `Straordinario Festivo/Domenicale Diurno (+55%)` (id: `straordinarioFestivo55`)
+    *   `Straordinario Notturno Festivo (+75%)` (id: `straordinarioNotturnoFestivo75`)
+
+**Logica Fondamentale:** Questa struttura garantisce che un'ora di lavoro non possa mai essere conteggiata due volte. Le ore lavorate vengono prima scomposte in blocchi mutuamente esclusivi (diurno, notturno serale, notturno pieno, sconfinamento festivo) e solo successivamente classificate come ordinarie o straordinarie. Questo previene errori di doppio conteggio e assicura una corrispondenza 1:1 tra le ore lavorate e le ore retribuite.
+
+---
 
 # LOGICA DI CALCOLO BUSTA PAGA - FONTE DI VERITÀ DEFINITIVA
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     Box, Typography, Paper, Button, IconButton, Table, TableBody, TableCell, 
@@ -190,12 +189,14 @@ const OreTecniciPage = () => {
             
             const rapportini = await db.rapportini
                 .where('data').between(extendedInterval.start, extendedInterval.end, true, true)
-                .filter(r => 
+                .filter(r => !r.isDeleted && (
                     r.tecnicoId === selectedTechnicianId || 
                     (r.presenze && r.presenze.includes(selectedTechnicianId)) ||
                     (r.dettaglioOreTecnici && r.dettaglioOreTecnici.some((d: any) => d.tecnicoId === selectedTechnicianId))
-                )
+                ))
                 .toArray();
+
+            console.log("RAW RAPPORTINI FETCHED:", JSON.stringify(rapportini, null, 2));
             
             const tipiGiornataMap = new Map(tipiGiornata.map(t => [t.id, t.nome]));
 
@@ -230,19 +231,17 @@ const OreTecniciPage = () => {
         {   titolo: 'Lavoro Ordinario', colonne: [
                 { id: 'pagaBaseOre', label: 'Ordinarie Diurne' },
                 { id: 'trasfertaOre', label: 'Trasferta' },
+                { id: 'oreNotturnoSeraleOrd', label: 'Lavoro Notturno Ordinario (20-22) (+15%)' },
+                { id: 'oreNotturnoPienoOrd', label: 'Lavoro Notturno Ordinario (22-06) (+30%)' },
             ]
         },
         {   titolo: 'Lavoro Straordinario', colonne: [
-                { id: 'strDiu12Intero', label: 'Straordinario Feriale (+25%)' },
-                { id: 'strDiuSuccessIntero', label: 'Straordinario Feriale (>2h) (+30%)' },
-                { id: 'straordinarioSabatoDiurno50', label: 'Straordinario Sabato (+50%)' },
-                { id: 'straordinarioFestivo55', label: 'Straordinario Festivo (+55%)' },
-            ]
-        },
-        {   titolo: 'Lavoro Notturno e Maggiorazioni', colonne: [
-                { id: 'oreNotturnoSeraleOrd', label: 'Notturno (20-22)' },
-                { id: 'oreNotturnoPienoOrd', label: 'Notturno (22-06)' },
-                { id: 'straordinarioNotturnoFestivo75', label: 'Sconfinamento Notturno in Festivo (+75%)' },
+                { id: 'strDiu12Intero', label: 'Straordinario Feriale (Prime 2h) (+25%)' },
+                { id: 'strDiuSuccessIntero', label: 'Straordinario Feriale (Oltre 2h) (+30%)' },
+                { id: 'straordinarioSabatoDiurno50', label: 'Straordinario Sabato Diurno (+50%)' },
+                { id: 'straordinarioNotturno50', label: 'Straordinario Notturno Feriale/Sabato (+50%)'},
+                { id: 'straordinarioFestivo55', label: 'Straordinario Festivo/Domenicale Diurno (+55%)' },
+                { id: 'straordinarioNotturnoFestivo75', label: 'Straordinario Notturno Festivo (+75%)' },
             ]
         },
         {   titolo: 'Assenze Retribuite', colonne: [
@@ -276,7 +275,7 @@ const OreTecniciPage = () => {
 
     const totaleOreLavorate = useMemo(() => {
         const chiaviOreLavorate = sezioni
-            .filter(s => ['Lavoro Ordinario', 'Lavoro Straordinario', 'Lavoro Notturno e Maggiorazioni'].includes(s.titolo))
+            .filter(s => ['Lavoro Ordinario', 'Lavoro Straordinario'].includes(s.titolo))
             .flatMap(s => s.colonne.map(c => c.id));
         return processedMonthData.reduce((acc, curr) => {
             return acc + chiaviOreLavorate.reduce((dayTotal, key) => dayTotal + (Number((curr as any)[key]) || 0), 0);

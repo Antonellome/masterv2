@@ -80,6 +80,7 @@ export interface RisultatoGiornoCCNL {
   // Maggiorazioni Notturne
   oreNotturnoSeraleOrd: number;
   oreNotturnoPienoOrd: number;
+  straordinarioNotturno50: number; // NUOVO CAMPO
   straordinarioNotturnoFestivo75: number;
   
   // Banca Ore

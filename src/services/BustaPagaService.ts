@@ -1,35 +1,16 @@
 import dayjs from 'dayjs';
-import duration from 'dayjs/plugin/duration';
-import { Dipendente, SaldiContatori, GiustificativoAssenza, TimbratureGiornaliere, RisultatoGiornoCCNL, AnalisiIntervalloACavallo, TipoAssenza } from "@/models/definitions";
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import { Dipendente, SaldiContatori, GiustificativoAssenza, RisultatoGiornoCCNL, AnalisiIntervalloACavallo, TipoAssenza, Rapportino } from "@/models/definitions";
 
-// Definiamo qui una interfaccia per il Rapportino basandoci sulla struttura di Firestore
-interface FirestoreTimestamp {
-    seconds: number;
-    nanoseconds: number;
-}
+dayjs.extend(isSameOrBefore);
 
-interface DettaglioOreTecnico {
-    isManual: boolean;
-    nome: string;
-    oraFine: string;
-    oraInizio: string;
-    ore: number;
-    pausa: number;
-    tecnicoId: string; 
-}
-
-export interface Rapportino {
-    id: string;
-    data: FirestoreTimestamp | Date; // Può essere un oggetto o una data
-    dettaglioOreTecnici?: DettaglioOreTecnico[];
-    tipoGiornataId: string;
-}
-
-dayjs.extend(duration);
-
-// ==========================================
-// UTILITY TEMPORALI E ANALISI TURNO A CAVALLO
-// ==========================================
+const tipiAssenzaMap: { [key: string]: TipoAssenza } = {
+    'Ferie': 'FERIE',
+    'Malattia': 'MALATTIA',
+    'Permesso': 'PERMESSO',
+    'Legge 104': 'LEGGE_104',
+    'ROL': 'ROL'
+};
 
 export function analizzaIntervalloACavallo(
   oraIngresso: string, 
@@ -53,15 +34,13 @@ export function analizzaIntervalloACavallo(
   let oreNotturnoPieno = 0;
   let oreSconfinamentoFestivo = 0;
 
-  // Itera minuto per minuto per analizzare le fasce
   for (let min = minIngresso; min < minUscita; min++) {
-    const currentHour = (min / 60) % 24;
+    const currentHour = Math.floor(min / 60) % 24;
     const isNextDay = min >= 1440;
 
     if (isNextDay && isFestivoGiornoSuccessivo) {
         oreSconfinamentoFestivo += 1/60;
-    }
-    else if (currentHour >= 22 || currentHour < 6) {
+    } else if (currentHour >= 22 || currentHour < 6) {
       oreNotturnoPieno += 1/60;
     } else if (currentHour >= 20 && currentHour < 22) {
       oreNotturnoSerale += 1/60;
@@ -76,164 +55,224 @@ export function analizzaIntervalloACavallo(
   };
 }
 
-// ==========================================
-// MOTORE DI CALCOLO UNIFICATO
-// ==========================================
-
 export function calcolaGiornata(
-    dipendente: Dipendente,
-    timbratura: TimbratureGiornaliere,
+    datiGiorno: {
+        data: string;
+        oreDiurne: number;
+        oreNotturnoSerale: number;
+        oreNotturnoPieno: number;
+        oreSconfinamentoFestivo: number;
+        isSabato: boolean;
+        isDomenica: boolean;
+        isFestivo: boolean;
+        oreTeorichePreviste: number;
+    },
     assenze: GiustificativoAssenza[],
     saldi: SaldiContatori
   ): { risultato: RisultatoGiornoCCNL; saldiAggiornati: SaldiContatori } {
   
-    const dataStr = timbratura.data;
-    const oreTeoriche = timbratura.oreTeorichePreviste || 8.0;
-  
-    let oreLavorateEffettive = timbratura.oreLavorateEffettive ?? 0;
-    let dettaglioFasce: AnalisiIntervalloACavallo = { oreTotali: 0, oreNotturnoSerale: 0, oreNotturnoPieno: 0, oreSconfinamentoFestivo: 0 };
-  
-    if (oreLavorateEffettive === 0 && timbratura.oraIngresso && timbratura.oraUscita) {
-        const [hIn, mIn] = timbratura.oraIngresso.split(':').map(Number);
-        const [hOut, mOut] = timbratura.oraUscita.split(':').map(Number);
-        const minIngresso = hIn * 60 + mIn;
-        let minUscita = hOut * 60 + mOut;
-        if (minUscita <= minIngresso) { minUscita += 24 * 60; }
-
-        const durataLordaMinuti = minUscita - minIngresso;
-        const pausaMinuti = timbratura.pausa ?? 0;
-        oreLavorateEffettive = (durataLordaMinuti - pausaMinuti) / 60;
-
-        dettaglioFasce = analizzaIntervalloACavallo(timbratura.oraIngresso, timbratura.oraUscita, !!timbratura.isFestivoGiornoSuccessivo);
-    }
+    const { data, oreDiurne, oreNotturnoSerale, oreNotturnoPieno, oreSconfinamentoFestivo, isSabato, isDomenica, isFestivo, oreTeorichePreviste } = datiGiorno;
   
     const risultato: RisultatoGiornoCCNL = {
-        data: dataStr, pagaBaseOre: 0, trasfertaOre: 0,
+        data, pagaBaseOre: 0, trasfertaOre: 0,
         oreMalattiaCarenzaAzienda: 0, oreMalattiaIntegrazione: 0,
         strDiu12Intero: 0, strDiuSuccessIntero: 0, straordinarioSabatoDiurno50: 0, straordinarioFestivo55: 0,
-        oreNotturnoSeraleOrd: 0, oreNotturnoPienoOrd: 0, straordinarioNotturnoFestivo75: 0,
+        oreNotturnoSeraleOrd: 0, oreNotturnoPienoOrd: 0, straordinarioNotturno50: 0, straordinarioNotturnoFestivo75: 0,
         bancaOreSolaMaggiorazione25: 0, bancaOreSolaMaggiorazione30: 0,
         rolScalati: 0, ferieScalate: 0, exFestivitaScalate: 0, permessiScalati: 0, legge104Scalate: 0,
         anomaliaDebitoUncovered: 0,
     };
   
-    const saldiAggiornati: SaldiContatori = JSON.parse(JSON.stringify(saldi));
+    const saldiAggiornati = { ...saldi };
     let totaleOreAssenza = 0;
 
     for (const assenza of assenze) {
         totaleOreAssenza += assenza.ore;
-        // ... logica assenze ...
+        switch(assenza.tipo) {
+            case 'FERIE': risultato.ferieScalate += assenza.ore; break;
+            case 'ROL': risultato.rolScalati += assenza.ore; break;
+        }
     }
-
-    risultato.pagaBaseOre += totaleOreAssenza;
-    risultato.oreNotturnoPienoOrd = dettaglioFasce.oreNotturnoPieno;
-    risultato.oreNotturnoSeraleOrd = dettaglioFasce.oreNotturnoSerale;
-    risultato.straordinarioNotturnoFestivo75 = dettaglioFasce.oreSconfinamentoFestivo;
-
-    if (timbratura.isFestivo || timbratura.isDomenica) {
-        risultato.straordinarioFestivo55 = oreLavorateEffettive;
-        return { risultato, saldiAggiornati };
-    }
-    if (timbratura.isSabato) {
-        if (oreLavorateEffettive > 2.0) { risultato.straordinarioSabatoDiurno50 = oreLavorateEffettive; } 
-        else { risultato.strDiu12Intero = oreLavorateEffettive; }
-        return { risultato, saldiAggiornati };
-    }
-
-    const oreOrdinarieLavorabili = oreTeoriche - totaleOreAssenza;
-    const oreLavorateOrdinarie = Math.min(oreLavorateEffettive, oreOrdinarieLavorabili);
-    risultato.pagaBaseOre += oreLavorateOrdinarie;
     
-    let oreStraordinario = Math.max(0, oreLavorateEffettive - oreLavorateOrdinarie);
-    let debitoOrario = Math.max(0, oreOrdinarieLavorabili - oreLavorateOrdinarie);
-
-    if (debitoOrario > 0 && oreStraordinario > 0) {
-        const oreDaCompensare = Math.min(debitoOrario, oreStraordinario);
-        risultato.pagaBaseOre += oreDaCompensare;
-        const oreCompensatePrime2 = Math.min(oreDaCompensare, 2);
-        risultato.bancaOreSolaMaggiorazione25 = oreCompensatePrime2;
-        const oreCompensateOltre2 = oreDaCompensare - oreCompensatePrime2;
-        if (oreCompensateOltre2 > 0) { risultato.bancaOreSolaMaggiorazione30 = oreCompensateOltre2; }
-        oreStraordinario -= oreDaCompensare;
-        debitoOrario -= oreDaCompensare;
+    if (assenze.length > 0 && assenze.some(a => a.ore >= oreTeorichePreviste)) {
+      return { risultato, saldiAggiornati };
     }
 
-    if (oreStraordinario > 0) {
-        const oreStraordinarioPrime2 = Math.min(oreStraordinario, 2);
-        risultato.strDiu12Intero = oreStraordinarioPrime2;
-        const oreStraordinarioOltre2 = oreStraordinario - oreStraordinarioPrime2;
-        if (oreStraordinarioOltre2 > 0) { risultato.strDiuSuccessIntero = oreStraordinarioOltre2; }
+    const oreLavorateTotali = oreDiurne + oreNotturnoSerale + oreNotturnoPieno + oreSconfinamentoFestivo;
+    
+    if (oreLavorateTotali <= 0 && totaleOreAssenza <= 0) {
+      if (oreTeorichePreviste > 0) {
+        const debitoIniziale = oreTeorichePreviste - totaleOreAssenza;
+        const rolDaUsare = Math.min(debitoIniziale, saldiAggiornati.saldoRolOre);
+        risultato.rolScalati = rolDaUsare;
+        saldiAggiornati.saldoRolOre -= rolDaUsare;
+        risultato.anomaliaDebitoUncovered = debitoIniziale - rolDaUsare;
+      }
+      return { risultato, saldiAggiornati };
     }
 
+    risultato.straordinarioNotturnoFestivo75 = oreSconfinamentoFestivo;
+
+    if (isFestivo || isDomenica) {
+        risultato.straordinarioFestivo55 = oreDiurne;
+        risultato.straordinarioNotturnoFestivo75 += oreNotturnoSerale + oreNotturnoPieno;
+        return { risultato, saldiAggiornati };
+    }
+    
+    if (isSabato) {
+        const totaleOreSabato = oreDiurne + oreNotturnoSerale + oreNotturnoPieno;
+        risultato.straordinarioSabatoDiurno50 = oreDiurne;
+        risultato.straordinarioNotturno50 = oreNotturnoSerale + oreNotturnoPieno;
+        return { risultato, saldiAggiornati };
+    }
+
+    const oreOrdinarieDaCoprire = Math.max(0, oreTeorichePreviste - totaleOreAssenza);
+
+    const ordDiurne = Math.min(oreDiurne, oreOrdinarieDaCoprire);
+    const strDiurne = oreDiurne - ordDiurne;
+    
+    const ordNottSerale = Math.min(oreNotturnoSerale, Math.max(0, oreOrdinarieDaCoprire - ordDiurne));
+    const strNottSerale = oreNotturnoSerale - ordNottSerale;
+    
+    const ordNottPieno = Math.min(oreNotturnoPieno, Math.max(0, oreOrdinarieDaCoprire - ordDiurne - ordNottSerale));
+    const strNottPieno = oreNotturnoPieno - ordNottPieno;
+
+    risultato.pagaBaseOre = ordDiurne;
+    risultato.oreNotturnoSeraleOrd = ordNottSerale;
+    risultato.oreNotturnoPienoOrd = ordNottPieno;
+
+    const totaleStraordinarioFerialeDiurno = strDiurne + strNottSerale;
+    if (totaleStraordinarioFerialeDiurno > 0) {
+        const oreA25 = Math.min(totaleStraordinarioFerialeDiurno, 2.0);
+        const oreA30 = totaleStraordinarioFerialeDiurno - oreA25;
+        risultato.strDiu12Intero += oreA25;
+        risultato.strDiuSuccessIntero += oreA30;
+    }
+
+    if (strNottPieno > 0) {
+        risultato.straordinarioNotturno50 += strNottPieno;
+    }
+
+    let debitoOrario = Math.max(0, oreOrdinarieDaCoprire - (ordDiurne + ordNottSerale + ordNottPieno));
     if (debitoOrario > 0) {
         const copribileConRol = Math.min(debitoOrario, saldiAggiornati.saldoRolOre);
         if (copribileConRol > 0) {
             risultato.rolScalati += copribileConRol;
-            risultato.pagaBaseOre += copribileConRol;
             saldiAggiornati.saldoRolOre -= copribileConRol;
             debitoOrario -= copribileConRol;
         }
     }
 
-    if (debitoOrario > 0) { risultato.anomaliaDebitoUncovered = debitoOrario; }
+    if (debitoOrario > 0) { 
+        risultato.anomaliaDebitoUncovered = debitoOrario; 
+    }
 
     return { risultato, saldiAggiornati };
 }
 
-// Funzione principale che orchestra il processo
 export function processaMese(
     dipendente: Dipendente,
     rapportini: Rapportino[],
     tipiGiornataMap: Map<string, string>,
     saldiIniziali: SaldiContatori,
     intervallo: { start: Date, end: Date },
+    meseContabile: number
 ): RisultatoGiornoCCNL[] {
-    
-    let saldiCorrenti = { ...saldiIniziali };
     const risultatiFinali: RisultatoGiornoCCNL[] = [];
+    let saldiCorrenti = { ...saldiIniziali };
 
-    for (let day = dayjs(intervallo.start); day.isBefore(dayjs(intervallo.end).add(1, 'day')); day = day.add(1, 'day')) {
-        const giornoStr = day.format('YYYY-MM-DD');
+    for (let d = dayjs(intervallo.start); d.isSameOrBefore(intervallo.end, 'day'); d = d.add(1, 'day')) {
+        const dataCorrenteString = d.format('YYYY-MM-DD');
         
-        const rapportinoDelGiorno = rapportini.find(r => {
+        const rapportiniDelGiorno = rapportini.filter(r => {
             if (!r.data) return false;
-            const rapportinoDay = (r.data as any).seconds 
-                ? dayjs.unix((r.data as any).seconds) 
-                : dayjs(r.data as Date);
-            return rapportinoDay.isSame(day, 'day');
+            const rapportinoDate = (r.data as any).toDate ? (r.data as any).toDate() : r.data;
+            return dayjs(rapportinoDate).format('YYYY-MM-DD') === dataCorrenteString;
         });
 
-        let timbratura: TimbratureGiornaliere;
-        const assenze: GiustificativoAssenza[] = [];
-        const isFestivo = false; // Logica festività da implementare
-
-        if (rapportinoDelGiorno) {
-            const tipoGiornataNome = tipiGiornataMap.get(rapportinoDelGiorno.tipoGiornataId) || 'ORDINARIA';
-            const dettaglioTecnico = rapportinoDelGiorno.dettaglioOreTecnici?.find(d => d.tecnicoId === dipendente.id);
-            
-            // ... gestione assenze ...
-
-            if (dettaglioTecnico) {
-                timbratura = {
-                    dipendenteId: dipendente.id, data: giornoStr,
-                    oraIngresso: dettaglioTecnico.isManual ? undefined : dettaglioTecnico.oraInizio,
-                    oraUscita: dettaglioTecnico.isManual ? undefined : dettaglioTecnico.oraFine,
-                    oreLavorateEffettive: dettaglioTecnico.isManual ? dettaglioTecnico.ore : 0,
-                    pausa: dettaglioTecnico.pausa,
-                    oreTeorichePreviste: 8,
-                    isFestivo: isFestivo, isDomenica: day.day() === 0, isSabato: day.day() === 6
-                };
-            } else {
-                 timbratura = { dipendenteId: dipendente.id, data: giornoStr, oreTeorichePreviste: 8, isFestivo, isDomenica: day.day() === 0, isSabato: day.day() === 6, oreLavorateEffettive: 0 };
-            }
-        } else {
-            timbratura = { dipendenteId: dipendente.id, data: giornoStr, oreTeorichePreviste: 8, isFestivo, isDomenica: day.day() === 0, isSabato: day.day() === 6, oreLavorateEffettive: 0 };
+        if (d.month() !== meseContabile && rapportiniDelGiorno.length === 0) {
+            continue;
         }
+        
+        let oreDiurneNetTot = 0;
+        let oreNotturnoSeraleTot = 0;
+        let oreNotturnoPienoTot = 0;
+        let oreSconfinamentoFestivoTot = 0;
+        let pausaTotaleOre = 0;
+        const assenzeGiorno: GiustificativoAssenza[] = [];
 
-        const { risultato, saldiAggiornati } = calcolaGiornata(dipendente, timbratura, assenze, saldiCorrenti);
+        let fasceLordeGiorno = {
+            oreTotali: 0,
+            oreNotturnoSerale: 0,
+            oreNotturnoPieno: 0,
+            oreSconfinamentoFestivo: 0
+        };
+
+        const tipoAssenzaRapp = rapportiniDelGiorno.length > 0 ? tipiGiornataMap.get(rapportiniDelGiorno[0].tipoGiornataId) : undefined;
+        const tipoAssenza = tipoAssenzaRapp ? tipiAssenzaMap[tipoAssenzaRapp] : undefined;
+
+        if (tipoAssenza) {
+            assenzeGiorno.push({ dipendenteId: dipendente.id, data: dataCorrenteString, tipo: tipoAssenza, ore: 8 });
+        } else {
+            for (const rapportino of rapportiniDelGiorno) {
+                 const dettaglioTecnico = rapportino.dettaglioOreTecnici?.find(det => det.tecnicoId === dipendente.id);
+                if (!dettaglioTecnico) continue;
+
+                pausaTotaleOre += (dettaglioTecnico.pausa || 0) / 60;
+
+                if (dettaglioTecnico.isManual && dettaglioTecnico.ore) {
+                    fasceLordeGiorno.oreTotali += dettaglioTecnico.ore;
+                } else if (dettaglioTecnico.oraInizio && dettaglioTecnico.oraFine) {
+                    const fasceSegmento = analizzaIntervalloACavallo(dettaglioTecnico.oraInizio, dettaglioTecnico.oraFine, false);
+                    fasceLordeGiorno.oreTotali += fasceSegmento.oreTotali;
+                    fasceLordeGiorno.oreNotturnoSerale += fasceSegmento.oreNotturnoSerale;
+                    fasceLordeGiorno.oreNotturnoPieno += fasceSegmento.oreNotturnoPieno;
+                    fasceLordeGiorno.oreSconfinamentoFestivo += fasceSegmento.oreSconfinamentoFestivo; 
+                }
+            }
+        }
+        
+        let oreLordeDiurne = fasceLordeGiorno.oreTotali - fasceLordeGiorno.oreNotturnoSerale - fasceLordeGiorno.oreNotturnoPieno - fasceLordeGiorno.oreSconfinamentoFestivo;
+        
+        let pausaResidua = pausaTotaleOre;
+
+        const diurneNette = Math.max(0, oreLordeDiurne - pausaResidua);
+        pausaResidua = Math.max(0, pausaResidua - oreLordeDiurne);
+
+        const notturneSeraleNette = Math.max(0, fasceLordeGiorno.oreNotturnoSerale - pausaResidua);
+        pausaResidua = Math.max(0, pausaResidua - fasceLordeGiorno.oreNotturnoSerale);
+
+        const notturnePieneNette = Math.max(0, fasceLordeGiorno.oreNotturnoPieno - pausaResidua);
+        
+        oreDiurneNetTot = diurneNette;
+        oreNotturnoSeraleTot = notturneSeraleNette;
+        oreNotturnoPienoTot = notturnePieneNette;
+        oreSconfinamentoFestivoTot = fasceLordeGiorno.oreSconfinamentoFestivo; // Pausa non tocca lo sconfinamento
+
+        const oreTeoriche = (d.day() >= 1 && d.day() <= 5) ? 8 : 0;
+        
+        const { risultato, saldiAggiornati } = calcolaGiornata(
+            {
+                data: dataCorrenteString,
+                oreDiurne: Math.round(oreDiurneNetTot * 100) / 100,
+                oreNotturnoSerale: Math.round(oreNotturnoSeraleTot * 100) / 100,
+                oreNotturnoPieno: Math.round(oreNotturnoPienoTot * 100) / 100,
+                oreSconfinamentoFestivo: Math.round(oreSconfinamentoFestivoTot*100)/100,
+                isSabato: d.day() === 6,
+                isDomenica: d.day() === 0,
+                isFestivo: false, // Logica festività da implementare
+                oreTeorichePreviste: oreTeoriche
+            },
+            assenzeGiorno,
+            saldiCorrenti
+        );
+
         saldiCorrenti = saldiAggiornati;
-        risultatiFinali.push(risultato);
+        
+        if (d.month() === meseContabile) {
+             risultatiFinali.push(risultato);
+        }
     }
-
+    
     return risultatiFinali;
 }

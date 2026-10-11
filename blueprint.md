@@ -145,3 +145,41 @@ Creare una pagina **ORE TECNICI** con le seguenti caratteristiche:
 5.  **Stampa:** Possibilità di stampare le singole sezioni o una stampa multipla tramite generazione di un PDF. Il PDF in anteprima deve avere i pulsanti "Stampa" e "Condividi".
 6.  **Fonte Dati:** La pagina deve leggere i dati dal database locale (Dexie), non direttamente da Firestore.
 7.  **Stile:** Utilizzare uno schema di colori basato su sfondi neri e grigi, testo bianco e l'accento blu dell'app per testi evidenziati, cornici e linee.
+
+---
+
+## 7. SEZIONE ORE TECNICI
+
+Questa sezione descrive lo stato attuale e il piano di correzione per la pagina `OreTecniciPage.tsx` e la logica di calcolo associata.
+
+### 7.1 Lavori Eseguiti fino ad Ora
+
+- **Creazione Pagina:** È stata creata la pagina `src/pages/OreTecniciPage.tsx`.
+- **UI di Base:** La pagina è dotata di:
+    - Un selettore per scegliere il tecnico.
+    - Controlli per navigare tra i mesi.
+    - Un'area di visualizzazione che mostra, per il tecnico e il mese selezionati, tabelle settimanali con le ore suddivise per tipologia (ordinarie, straordinari, assenze, ecc.).
+- **Gestione Saldi:** È stato implementato un modale per impostare i saldi iniziali (ferie, ROL, ecc.) di un tecnico.
+- **Funzionalità di Stampa:** Sono stati aggiunti un pulsante "Stampa" per generare una vista stampabile del riepilogo ore e un pulsante "Genera Busta" per visualizzare un'anteprima del cedolino in formato PDF.
+
+### 7.2 Cosa Non Va: Il Problema Fondamentale
+
+Il problema critico e bloccante è che **la logica di calcolo delle ore è fondamentalmente sbagliata**.
+
+- **Logica Errata:** L'attuale servizio `src/services/BustaPagaService.ts` esegue i calcoli in modo troppo semplicistico, analizzando ogni giorno in maniera isolata.
+- **Violazione delle Regole:** Questo approccio viola le regole di calcolo complesse definite nel file `buste.md` (la fonte di verità). In particolare, il servizio attuale fallisce nel gestire correttamente:
+    - La **Banca Ore** (compensazione tra debito diurno e straordinario notturno).
+    - Le **soglie di straordinario** specifiche per il Sabato.
+    - I **turni a cavallo** della mezzanotte e tra i giorni (es. Sabato/Domenica).
+    - Il bilanciamento tra **ore giornaliere (8h)** e **settimanali (40h)**.
+- **Risultato:** A causa di questa logica errata, i dati visualizzati nelle tabelle sono inaffidabili, spesso vuoti o palesemente scorretti, rendendo inutile qualsiasi tentativo di stampa o generazione della busta paga.
+
+### 7.3 Cosa Devo Fare: Il Piano di Correzione Definitivo
+
+L'unica strada percorribile è una riscrittura completa e fedele del motore di calcolo.
+
+1.  **Eliminazione Logica Esistente:** Il contenuto di `src/services/BustaPagaService.ts` verrà eliminato in quanto concettualmente errato e non recuperabile.
+2.  **Reimplementazione da `buste.md`:** Il file `src/services/BustaPagaService.ts` sarà riscritto da zero, implementando **esattamente** le interfacce, le utility e l'algoritmo di calcolo (`calcolaGiornata`) descritti nel documento `buste.md`.
+3.  **Focus sul Motore:** L'intervento si concentrerà esclusivamente sulla correzione del motore di calcolo. La UI (`OreTecniciPage.tsx`) non verrà modificata fino a quando il nuovo servizio non produrrà dati corretti e affidabili, risolvendo alla radice il problema delle tabelle vuote.
+
+---
