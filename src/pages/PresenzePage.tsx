@@ -1,93 +1,59 @@
+
 import { useState, useMemo } from 'react';
-import { Typography, Box, CircularProgress, Paper, Grid, Autocomplete, TextField, Divider } from '@mui/material';
+import { Typography, Box, CircularProgress, Paper, Grid, Autocomplete, TextField } from '@mui/material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/it';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/database';
-import { Tecnico, Nave, Luogo } from '@/models/definitions';
-import { processaPresenze, ProcessedPresenze } from '@/utils/presenzeUtils';
-import TabellaOrariLavoro from '@/components/Presenze/TabellaOrariLavoro';
-import TabellaInterventi from '@/components/Presenze/TabellaInterventi';
+import type { Tecnico } from '@/models/definitions';
+import { processaPresenze } from '@/utils/presenzeUtils';
+import { TimelineBar, OrariList } from '@/components/presenze/Timeline';
 
 dayjs.locale('it');
 
 const PresenzePage = () => {
-    const checkins = useLiveQuery(() => db.checkins.toArray(), []);
-    const tecnici = useLiveQuery(() => db.tecnici.toArray(), []);
-    const navi = useLiveQuery(() => db.navi.toArray(), []);
-    const luoghi = useLiveQuery(() => db.luoghi.toArray(), []);
+    const allCheckins = useLiveQuery(() => db.checkins.toArray(), []);
+    const allTecnici = useLiveQuery(() => db.tecnici.toArray(), []);
+    const allNavi = useLiveQuery(() => db.navi.toArray(), []);
+    const allLuoghi = useLiveQuery(() => db.luoghi.toArray(), []);
 
-    const isLoading = !checkins || !tecnici || !navi || !luoghi;
+    const isLoading = !allCheckins || !allTecnici || !allNavi || !allLuoghi;
 
     const [selectedDate, setSelectedDate] = useState<Dayjs | null>(dayjs());
     const [selectedTecnico, setSelectedTecnico] = useState<Tecnico | null>(null);
-    const [selectedNave, setSelectedNave] = useState<Nave | null>(null);
-    const [selectedLuogo, setSelectedLuogo] = useState<Luogo | null>(null);
 
-    const { orariLavoro, interventi }: ProcessedPresenze = useMemo(() => {
-        if (isLoading) return { orariLavoro: [], interventi: [] };
-        return processaPresenze(checkins!, navi!, luoghi!, {
-            dataInizio: selectedDate ? selectedDate.startOf('day') : null,
-            dataFine: selectedDate ? selectedDate.endOf('day') : null,
-            tecnico: selectedTecnico,
-            nave: selectedNave,
-            luogo: selectedLuogo,
+    const timelineData = useMemo(() => {
+        if (isLoading) return [];
+        const processed = processaPresenze(allCheckins!);
+        return processed.filter(item => {
+            const dataMatch = selectedDate ? item.data === selectedDate.format('YYYY-MM-DD') : true;
+            const tecnicoMatch = selectedTecnico ? item.tecnicoId === selectedTecnico.id : true;
+            return dataMatch && tecnicoMatch;
         });
-    }, [isLoading, checkins, navi, luoghi, selectedDate, selectedTecnico, selectedNave, selectedLuogo]);
-
-    // FIX: Ordinamento per cognome e poi nome
-    const sortedTecnici = useMemo(() => [...(tecnici || [])].sort((a, b) => (a.cognome || '').localeCompare(b.cognome || '') || (a.nome || '').localeCompare(b.nome || '')), [tecnici]);
-    const sortedNavi = useMemo(() => [...(navi || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [navi]);
-    const sortedLuoghi = useMemo(() => [...(luoghi || [])].sort((a, b) => a.nome.localeCompare(b.nome)), [luoghi]);
+    }, [isLoading, allCheckins, selectedDate, selectedTecnico]);
+    
+    const sortedTecnici = useMemo(() => [...(allTecnici || [])].sort((a, b) => (a.cognome || '').localeCompare(b.cognome || '') || (a.nome || '').localeCompare(b.nome || '')), [allTecnici]);
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="it">
             <Box sx={{ p: { xs: 1, sm: 2 }, display: 'flex', flexDirection: 'column', gap: 2}}>
-                <Typography variant="h5" component="h1">
-                    Report Presenze Giornaliero
-                </Typography>
+                <Typography variant="h5" component="h1">Timeline Presenze Multi-Sessione</Typography>
 
                 <Paper elevation={3} sx={{ p: 2 }}>
-                    {/* FIX: Corretta sintassi Grid, etichette e aggiunte chiavi univoche */}
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={3}>
-                            <DatePicker
-                                label="Data"
-                                value={selectedDate}
-                                onChange={(newValue) => setSelectedDate(newValue)}
-                                sx={{ width: '100%' }}
-                            />
+                        <Grid item xs={12} md={6}>
+                            <DatePicker label="Data" value={selectedDate} onChange={setSelectedDate} sx={{ width: '100%' }} />
                         </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid item xs={12} md={6}>
                             <Autocomplete
                                 options={sortedTecnici}
-                                getOptionLabel={(option) => `${option.cognome} ${option.nome}`} // FIX: Mostra Cognome e Nome
-                                getOptionKey={(option) => option.id} // FIX per chiavi duplicate
+                                getOptionLabel={(option) => `${option.cognome} ${option.nome}`}
                                 value={selectedTecnico}
                                 onChange={(_, newValue) => setSelectedTecnico(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Tecnico" />} // FIX: Etichetta corretta
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Autocomplete
-                                options={sortedNavi}
-                                getOptionLabel={(option) => option.nome}
-                                getOptionKey={(option) => option.id} // FIX per chiavi duplicate
-                                value={selectedNave}
-                                onChange={(_, newValue) => setSelectedNave(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Nave" />} // FIX: Etichetta corretta
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Autocomplete
-                                options={sortedLuoghi}
-                                getOptionLabel={(option) => option.nome}
-                                getOptionKey={(option) => option.id} // FIX per chiavi duplicate
-                                value={selectedLuogo}
-                                onChange={(_, newValue) => setSelectedLuogo(newValue)}
-                                renderInput={(params) => <TextField {...params} label="Luogo" />} // FIX: Etichetta corretta
+                                renderInput={(params) => <TextField {...params} label="Filtra per Tecnico" />}
+                                noOptionsText="Nessun tecnico trovato"
                             />
                         </Grid>
                     </Grid>
@@ -96,16 +62,22 @@ const PresenzePage = () => {
                 {isLoading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
                 ) : (
-                    <Paper elevation={3} sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Box>
-                            <Typography variant="h6" component="h2" sx={{ mb: 1.5 }}>Orario di Lavoro del Giorno</Typography>
-                            <TabellaOrariLavoro rows={orariLavoro} />
-                        </Box>
-                        <Divider />
-                        <Box>
-                             <Typography variant="h6" component="h2" sx={{ mb: 1.5 }}>Interventi su Luoghi/Navi</Typography>
-                             <TabellaInterventi rows={interventi} />
-                        </Box>
+                    <Paper elevation={3} sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {timelineData.length > 0 ? timelineData.map(item => (
+                             <Grid container key={item.id} alignItems="center" spacing={2} sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1, mb: 1 }}>
+                                <Grid item xs={12} sm={4} md={3}>
+                                     <Typography variant="body2" fontWeight="bold">{item.tecnicoName}</Typography>
+                                     <OrariList sessioni={item.sessioniLavoro} />
+                                </Grid>
+                                <Grid item xs={12} sm={8} md={9}>
+                                     <TimelineBar data={item} navi={allNavi!} luoghi={allLuoghi!} />
+                                </Grid>
+                            </Grid>
+                        )) : (
+                            <Typography sx={{ textAlign: 'center', p: 4, color: 'text.secondary' }}>
+                                Nessuna presenza trovata per i filtri selezionati.
+                            </Typography>
+                        )}
                     </Paper>
                 )}
             </Box>

@@ -1,118 +1,101 @@
 
-import { Checkin, OrarioLavoro, Intervento } from '@/models/definitions';
+import type { Checkin, TimelineData, LavoroSessione, InterventoSessione } from '@/models/definitions';
 import dayjs from 'dayjs';
 
-// --- HELPERS ---
-
-const toDate = (value: string | number | Date | null | undefined): Date | null => {
-    if (!value) return null;
-    if (value instanceof Date && !isNaN(value.getTime())) return value;
-    const date = dayjs(value);
-    return date.isValid() ? date.toDate() : null;
+const groupBy = <T, K extends keyof any>(list: T[], getKey: (item: T) => K): Record<K, T[]> => {
+    return list.reduce((previous, currentItem) => {
+        const group = getKey(currentItem);
+        if (!previous[group]) previous[group] = [];
+        previous[group].push(currentItem);
+        return previous;
+    }, {} as Record<K, T[]>);
 };
 
-const groupBy = <T>(array: T[], key: (item: T) => string): Record<string, T[]> => {
-    return array.reduce((result, item) => {
-        const keyValue = key(item);
-        (result[keyValue] = result[keyValue] || []).push(item);
-        return result;
-    }, {} as Record<string, T[]>);
-};
-
-const pairEventsWithStack = (eventi: Checkin[], tipoInizio: string, tipoFine: string): [Checkin | null, Checkin | null][] => {
+const pairEvents = (eventi: Checkin[], tipoInizio: string, tipoFine: string): { start: Date, end?: Date, startReale: Date, endReale?: Date, [key: string]: any }[] => {
+    const sessions = [];
     const stack: Checkin[] = [];
-    const pairs: [Checkin | null, Checkin | null][] = [];
+    const sortedEvents = [...eventi].sort((a, b) => new Date(a.timestampImpostato).getTime() - new Date(b.timestampImpostato).getTime());
 
-    const eventiOrdinati = [...eventi].sort((a, b) => new Date(a.timestampReale!).getTime() - new Date(b.timestampReale!).getTime());
-
-    for (const evento of eventiOrdinati) {
+    for (const evento of sortedEvents) {
         if (evento.tipo === tipoInizio) {
             stack.push(evento);
         } else if (evento.tipo === tipoFine) {
             if (stack.length > 0) {
-                const inizio = stack.pop();
-                pairs.push([inizio, evento]);
-            } else {
-                pairs.push([null, evento]);
+                const inizio = stack.pop(); // Prende l'ultimo inizio, corretto per LIFO
+                if (inizio) {
+                    sessions.push({
+                        start: inizio.timestampImpostato,
+                        end: evento.timestampImpostato,
+                        startReale: inizio.timestampReale,
+                        endReale: evento.timestampReale,
+                        // Aggiungo dati specifici per interventi
+                        luogoId: inizio.luogoId,
+                        naveId: inizio.naveId,
+                    });
+                }
             }
         }
     }
 
-    stack.forEach(inizio => pairs.push([inizio, null]));
-    return pairs;
+    // Gestisce le sessioni lasciate aperte
+    stack.forEach(inizio => {
+        sessions.push({
+            start: inizio.timestampImpostato,
+            end: undefined,
+            startReale: inizio.timestampReale,
+            endReale: undefined,
+            luogoId: inizio.luogoId,
+            naveId: inizio.naveId,
+        });
+    });
+
+    return sessions;
 };
 
-
-export const processaPresenze = (eventi: Checkin[]): { orariLavoro: OrarioLavoro[], interventi: Intervento[] } => {
+export const processaPresenze = (eventi: Checkin[]): TimelineData[] => {
     if (!eventi || eventi.length === 0) {
-        return { orariLavoro: [], interventi: [] };
+        return [];
     }
 
-    const eventiSanificati = eventi.map(e => {
-        let dataValida = e.data;
-        if (!dayjs(dataValida, 'YYYY-MM-DD', true).isValid()) {
-            dataValida = e.timestampReale ? dayjs(e.timestampReale).format('YYYY-MM-DD') : 'invalid';
-        }
-        return { ...e, data: dataValida };
-    }).filter(e => e.data !== 'invalid' && e.tecnicoId && e.timestampReale);
+    const perTecnico = groupBy(eventi, (e) => e.tecnicoId);
+    const risultatoFinale: TimelineData[] = [];
 
-    const allOrariLavoro: OrarioLavoro[] = [];
-    const allInterventi: Intervento[] = [];
+    for (const tecnicoId in perTecnico) {
+        const eventiTecnico = perTecnico[tecnicoId];
+        const perGiorno = groupBy(eventiTecnico, (e) => dayjs(e.timestampImpostato).format('YYYY-MM-DD'));
 
-    const gruppiPerTecnico = groupBy(eventiSanificati, item => item.tecnicoId);
+        for (const data in perGiorno) {
+            const eventiDelGiorno = perGiorno[data];
+            if (eventiDelGiorno.length === 0) continue;
 
-    for (const tecnicoId in gruppiPerTecnico) {
-        const eventiTecnico = gruppiPerTecnico[tecnicoId];
-        const gruppiPerGiorno = groupBy(eventiTecnico, item => item.data);
+            const sessioniLavoro = pairEvents(eventiDelGiorno, 'inizio_giornata', 'fine_giornata') as LavoroSessione[];
+            const sessioniIntervento = pairEvents(eventiDelGiorno, 'check_in_luogo', 'check_out_luogo') as InterventoSessione[];
 
-        for (const data in gruppiPerGiorno) {
-            const eventiDelGiorno = gruppiPerGiorno[data];
-
-            const eventiLavoro = eventiDelGiorno.filter(e => e.tipo === 'inizio_giornata' || e.tipo === 'fine_giornata');
-            const coppieLavoro = pairEventsWithStack(eventiLavoro, 'inizio_giornata', 'fine_giornata');
-
-            coppieLavoro.forEach(([inizio, fine]) => {
-                allOrariLavoro.push({
-                    id: `lavoro_${inizio?.id || 'orphanIn'}_${fine?.id || 'orphanOut'}`,
-                    tecnicoId: inizio?.tecnicoId || fine!.tecnicoId,
-                    tecnicoName: inizio?.tecnicoName || fine!.tecnicoName,
-                    data: inizio?.data || fine!.data,
-                    ingresso: { impostato: toDate(inizio?.timestampImpostato), reale: toDate(inizio?.timestampReale) },
-                    uscita: { impostato: toDate(fine?.timestampImpostato), reale: toDate(fine?.timestampReale) },
+            if (sessioniLavoro.length === 0 && sessioniIntervento.length > 0) {
+                // Caso critico: ci sono interventi ma nessun inizio/fine giornata.
+                // Creiamo una sessione di lavoro fittizia che copra tutti gli interventi.
+                const primoEvento = eventiDelGiorno[0];
+                const ultimoEvento = eventiDelGiorno[eventiDelGiorno.length - 1];
+                sessioniLavoro.push({
+                    start: primoEvento.timestampImpostato,
+                    end: ultimoEvento.tipo !== 'check_in_luogo' ? ultimoEvento.timestampImpostato : undefined,
+                    startReale: primoEvento.timestampReale,
+                    endReale: ultimoEvento.tipo !== 'check_in_luogo' ? ultimoEvento.timestampReale : undefined,
                 });
-            });
+            }
 
-            const eventiIntervento = eventiDelGiorno.filter(e => e.tipo === 'check_in_luogo' || e.tipo === 'check_out_luogo');
-            const coppieIntervento = pairEventsWithStack(eventiIntervento, 'check_in_luogo', 'check_out_luogo');
+            if (sessioniLavoro.length === 0) continue; // Se ancora non ci sono sessioni, salta
 
-            coppieIntervento.forEach(([inizio, fine]) => {
-                allInterventi.push({
-                     id: `intervento_${inizio?.id || 'orphanIn'}_${fine?.id || 'orphanOut'}`,
-                    tecnicoId: inizio?.tecnicoId || fine!.tecnicoId,
-                    tecnicoName: inizio?.tecnicoName || fine!.tecnicoName,
-                    data: inizio?.data || fine!.data,
-                    naveId: inizio?.naveId || fine?.naveId,
-                    luogoId: inizio?.luogoId || fine?.luogoId,
-                    ingresso: { impostato: toDate(inizio?.timestampImpostato), reale: toDate(inizio?.timestampReale) },
-                    uscita: { impostato: toDate(fine?.timestampImpostato), reale: toDate(fine?.timestampReale) },
-                });
+            risultatoFinale.push({
+                id: `${tecnicoId}-${data}`,
+                tecnicoId: tecnicoId,
+                tecnicoName: eventiDelGiorno[0]?.tecnicoName || 'N/D',
+                data: data,
+                sessioniLavoro: sessioniLavoro.sort((a,b) => a.start.getTime() - b.start.getTime()),
+                interventi: sessioniIntervento.sort((a,b) => a.start.getTime() - b.start.getTime()),
             });
         }
     }
 
-    const sortFn = (a: OrarioLavoro | Intervento, b: OrarioLavoro | Intervento) => {
-        const dateA = dayjs(a.data);
-        const dateB = dayjs(b.data);
-        if (dateA.isBefore(dateB)) return -1;
-        if (dateA.isAfter(dateB)) return 1;
-        const timeA = a.ingresso.reale || a.uscita.reale;
-        const timeB = b.ingresso.reale || b.uscita.reale;
-        if (timeA && timeB) return timeA.getTime() - timeB.getTime();
-        return 0;
-    };
-
-    return {
-        orariLavoro: allOrariLavoro.sort(sortFn),
-        interventi: allInterventi.sort(sortFn)
-    };
+    return risultatoFinale.sort((a,b) => dayjs(b.data).valueOf() - dayjs(a.data).valueOf() || a.tecnicoName.localeCompare(b.tecnicoName));
 };

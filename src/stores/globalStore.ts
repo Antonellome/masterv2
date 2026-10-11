@@ -6,7 +6,7 @@ import { getDocs, collection } from 'firebase/firestore';
 import { db as firestoreDb, auth } from '@/config/firebase';
 import { signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import type { GlobalState, GlobalActions, NotificationType, DialogState, CollectionName, Rapportino } from '@/models/definitions';
+import type { GlobalState, GlobalActions, NotificationType, DialogState, CollectionName, Rapportino, Checkin } from '@/models/definitions';
 import { Timestamp } from 'firebase/firestore';
 
 // --- UTILITIES ---
@@ -89,6 +89,33 @@ const processRapportini = (docs: any[]): Rapportino[] => {
     }).filter((r): r is Rapportino => r !== null);
 };
 
+const processCheckins = (docs: any[]): Checkin[] => {
+    return docs.map(docData => {
+        const timestampImpostato = toDateSafe(docData.timestampImpostato);
+        const timestampReale = toDateSafe(docData.timestampReale);
+        const timestampSync = toDateSafe(docData.timestampSync);
+
+        if (!timestampImpostato) {
+            logger.warn(`Checkin scartato (ID: ${docData.id}) per campo \'timestampImpostato\' invalido o non riconosciuto.`, { dataField: docData.timestampImpostato });
+            return null;
+        }
+
+        return {
+            id: docData.id,
+            tecnicoId: docData.tecnicoId || '',
+            tecnicoName: docData.tecnicoName || '',
+            tipo: docData.tipo || '',
+            timestampImpostato: timestampImpostato,
+            timestampReale: timestampReale || timestampImpostato,
+            luogoId: docData.luogoId || undefined,
+            naveId: docData.naveId || undefined,
+            userId: docData.userId || '',
+            timestampSync: timestampSync || new Date(),
+        } as Checkin;
+    }).filter((c): c is Checkin => c !== null);
+};
+
+
 const collectionConfig = {
     anagrafiche: [
         { name: 'tecnici' as CollectionName, table: db.tecnici },
@@ -101,7 +128,7 @@ const collectionConfig = {
         { name: 'veicoli' as CollectionName, table: db.veicoli },
     ],
     rapportini: { name: 'rapportini' as CollectionName, table: db.rapportini, processor: processRapportini },
-    checkins: { name: 'checkin_giornalieri' as CollectionName, table: db.checkins },
+    checkins: { name: 'checkin_giornalieri' as CollectionName, table: db.checkins, processor: processCheckins },
     documenti: { name: 'scadenze' as CollectionName, table: db.documenti },
 };
 

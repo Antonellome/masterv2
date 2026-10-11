@@ -1,75 +1,88 @@
-# Specifica Tecnica Definitiva: Sistema di Presenze (Check-in/Check-out)
+# Specifiche per la Lettura dei Dati di Check-in (Lato Master)
 
-## 1. Introduzione
+**Data Ultimo Aggiornamento:** 31/07/2024
 
-Questo documento fornisce la specifica tecnica **corretta e verificata** del sistema di rilevazione presenze. L\'analisi si basa sull\'ispezione diretta del codice sorgente (`offlineSync.ts` e `definitions.ts`). Lo scopo è fornire al sistema "Master" le informazioni esatte per leggere i dati di check-in da Cloud Firestore.
+Questo documento fornisce le specifiche tecniche essenziali e corrette per leggere e interpretare i dati di check-in inviati dalle app dei tecnici.
 
-**Errore Precedente Riconosciuto:** Il nome della collezione era errato. Il nome corretto è `checkin_giornalieri`.
+---
 
-## 2. Collezione Firestore
+## 1. Collezione Firestore di Riferimento
 
-I dati relativi alle presenze sono archiviati **esclusivamente** nella seguente collezione Firestore:
+I dati di presenza sono archiviati nella seguente collezione Cloud Firestore:
 
--   **Nome Collezione:** `checkin_giornalieri`
+- **Nome Collezione:** `checkin_giornalieri`
 
-## 3. Modello Dati su Firestore (`CheckinGiornaliero`)
+---
 
-Ogni documento nella collezione `checkin_giornalieri` rappresenta un singolo evento di presenza. La struttura dati su Firestore è una versione del tipo `CheckinGiornaliero` locale, con alcune differenze chiave dovute alla sincronizzazione.
+## 2. Struttura del Documento (`checkin_giornalieri`)
 
-**Nota importante:** Il campo `isSync` presente nel database locale **NON esiste** su Firestore, poiché viene rimosso prima del salvataggio.
+Ogni documento rappresenta un singolo evento atomico (es. inizio giornata, entrata in un luogo). Per ricostruire la giornata di un tecnico, è necessario leggere tutti i suoi documenti in ordine cronologico.
 
-### Struttura del Documento su Firestore
+| Campo                | Tipo Dati        | Descrizione                                                                                                   |
+|----------------------|------------------|---------------------------------------------------------------------------------------------------------------|
+| `id`                 | `string`         | L'ID univoco del documento, generato da Firestore.                                                             |
+| `tecnicoId`          | `string`         | **Chiave fondamentale.** L'UID Firebase del tecnico a cui l'evento si riferisce. Da usare per le query.        |
+| `tecnicoName`        | `string`         | Il nome visualizzato del tecnico al momento della creazione dell'evento.                                       |
+| `tipo`               | `string`         | **Campo critico per la logica.** Indica il tipo di evento. Valori possibili:
+                                                                                                                  | - `inizio_giornata`
+                                                                                                                  | - `fine_giornata`
+                                                                                                                  | - `check_in_luogo`
+                                                                                                                  | - `check_out_luogo` |
+| `timestampImpostato` | `string` (ISO)   | **Timestamp di riferimento.** L'orario scelto manualmente dal tecnico per l'evento, in formato stringa ISO 8601 (es. `"2024-07-31T08:00:00"`). **Usare questo campo per ordinare gli eventi.** |
+| `timestampReale`     | `string` (ISO)   | L'orario effettivo del dispositivo al momento della creazione dell'evento. Può essere usato per verifiche.     |
+| `luogoId`            | `string`         | (Opzionale) L'ID del documento nella collezione `luoghi` (presente solo per `check_in_luogo` e `check_out_luogo`). |
+| `naveId`             | `string`         | (Opzionale) L'ID del documento nella collezione `navi` (presente solo per `check_in_luogo` e `check_out_luogo`).     |
+| `userId`             | `string`         | L'UID Firebase di chi ha materialmente creato il record (solitamente coincide con `tecnicoId`).              |
+| `timestampSync`      | `Timestamp`      | Il timestamp di Firestore che indica quando il record è stato sincronizzato dal dispositivo al cloud.        |
 
-| Nome Campo         | Tipo Dati Firestore                                                              | Obbligatorio | Descrizione Dettagliata                                                                                                                              | Esempio Valido                                          |
-| ------------------ | -------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `id`               | `string`                                                                         | No (Auto-gen)  | ID del documento generato automaticamente da Firestore. **Non è l\'ID locale**.                                                                      | `"XyZ123Abc456Def789GhI"`                              |
-| `data`             | `string`                                                                         | Sì           | Data dell\'evento in formato stringa `YYYY-MM-DD`.                                                                                                  | `"2023-10-27"`                                        |
-| `tecnicoId`        | `string`                                                                         | Sì           | UID Firebase dell\'utente (tecnico) che ha eseguito l\'azione.                                                                                        | `"zYxWvUtSrQpOnMlKjIhGfEdCbA12"`                       |
-| `tecnicoName`      | `string`                                                                         | No           | Nome e cognome del tecnico, per convenienza. Potrebbe non essere sempre presente.                                                                   | `"Mario Rossi"`                                         |
-| `tipo`             | `string`                                                                         | Sì           | Enum che descrive la natura dell\'evento. Valori possibili: `"checkin"`, `"checkout"`, `"inizio_giornata"`, `"fine_giornata"`, `"check_in_luogo"`, `"check_out_luogo"`. | `"inizio_giornata"`                                   |
-| `checkIn`          | `Timestamp` di Firestore                                                         | No           | Timestamp che indica l\'orario di inizio. Può essere nullo in un evento di `checkout`.                                                              | `October 27, 2023 at 8:00:00 AM UTC+2`                  |
-| `checkOut`         | `Timestamp` di Firestore                                                         | No           | Timestamp che indica l\'orario di fine. Può essere nullo in un evento di `checkin`.                                                                 | `October 27, 2023 at 5:00:00 PM UTC+2`                  |
-| `userId`           | `string`                                                                         | Sì           | Alias di `tecnicoId`. Presente per retrocompatibilità o usi specifici.                                                                              | `"zYxWvUtSrQpOnMlKjIhGfEdCbA12"`                       |
-| `timestampImpostato` | `Timestamp` di Firestore                                                         | Sì           | L\'orario che l\'utente ha **intenzionalmente** impostato. Se l\'utente modifica l\'orario, questo campo contiene il valore scelto da lui.                  | `October 27, 2023 at 8:01:15 AM UTC+2`                  |
-| `timestampReale`     | `Timestamp` di Firestore                                                         | Sì           | Il timestamp effettivo, registrato dall\'orologio del dispositivo (`new Date()`) nel momento esatto in cui è avvenuto l\'evento.                    | `October 27, 2023 at 8:01:10 AM UTC+2`                  |
-| `naveId`           | `string`                                                                         | No           | ID della nave associata all\'evento, se applicabile (es. `check_in_luogo`).                                                                           | `"NAV-003"`                                           |
-| `luogoId`          | `string`                                                                         | No           | ID del luogo specifico associato all\'evento, se applicabile.                                                                                     | `"LUO-102-SALA-MACCHINE"`                               |
-| `timestampSync`    | `Timestamp` di Firestore                                                         | **Sì (per i nuovi)** | **Campo CRUCIALE**. Viene aggiunto solo quando un *nuovo* record locale viene creato su Firestore. Contiene il `serverTimestamp()` del momento della sincronizzazione. | `October 27, 2023 at 8:01:20 AM UTC+2`                  |
+---
 
+## 3. Come Leggere e Ricostruire i Dati
 
-## 4. Logica di Sincronizzazione (Corretta)
+Per ottenere un quadro completo delle presenze di uno o più tecnici, segui questi passaggi:
 
-1.  **Creazione Locale:** L\'app crea un oggetto `CheckinGiornaliero` nel database locale (Dexie) con un `id` temporaneo (es. `"local-12345"`) e `isSync: false`.
+1.  **Interrogazione della Collezione:** Esegui una query sulla collezione `checkin_giornalieri`.
+2.  **Filtro per Tecnico (Opzionale ma Raccomandato):** Per visualizzare i dati di un singolo tecnico, filtra i documenti per `tecnicoId`.
+3.  **Ordinamento Cronologico:** **È fondamentale** ordinare i documenti in base al campo `timestampImpostato` in ordine ascendente (`asc`) per ricostruire correttamente la sequenza degli eventi della giornata.
 
-2.  **Processo di Coda (`syncCheckin`):**
-    *   Un servizio rileva il record locale con `isSync: false`.
-    *   Prepara i dati per Firestore **rimuovendo il campo `isSync`**.
-    *   Chiama `addDoc` sulla collezione `checkin_giornalieri`.
-    *   **Aggiunge il campo `timestampSync` con il valore `serverTimestamp()`**.
-    *   Firestore genera un ID documento univoco.
-    *   L\'app aggiorna il record locale, sostituendo l\'ID temporaneo con l\'ID di Firestore e impostando `isSync: true`.
+### Esempio di Query (Javascript - SDK v9)
 
-## 5. Esempio JSON di un Documento su Firestore
+```javascript
+import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
+import { db } from "./firebase-config"; // La tua configurazione Firebase
 
-Questo è un esempio **reale e corretto** di come appare un documento nella collezione `checkin_giornalieri` dopo la creazione e sincronizzazione.
+// Funzione per ottenere gli eventi di un tecnico in ordine cronologico
+async function getCheckinEventsByTecnico(tecnicoId) {
+  const collectionRef = collection(db, "checkin_giornalieri");
 
-```json
-{
-  "data": "2023-10-27",
-  "tecnicoId": "zYxWvUtSrQpOnMlKjIhGfEdCbA12",
-  "tecnicoName": "Mario Rossi",
-  "tipo": "inizio_giornata",
-  "checkIn": "2023-10-27T06:00:00.000Z", // Formato Timestamp Firestore
-  "checkOut": null,
-  "userId": "zYxWvUtSrQpOnMlKjIhGfEdCbA12",
-  "timestampImpostato": "2023-10-27T06:00:15.000Z",
-  "timestampReale": "2023-10-27T06:00:10.000Z",
-  "naveId": null,
-  "luogoId": null,
-  "timestampSync": "2023-10-27T06:00:20.000Z"
+  const q = query(
+    collectionRef,
+    where("tecnicoId", "==", tecnicoId),
+    orderBy("timestampImpostato", "asc") // Ordinamento fondamentale
+  );
+
+  const querySnapshot = await getDocs(q);
+
+  const events = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  return events;
 }
+
+// Esempio di utilizzo
+const tecnicoDaCercare = "uid_del_tecnico_qui";
+getCheckinEventsByTecnico(tecnicoDaCercare).then(events => {
+  console.log(`Eventi per il tecnico ${tecnicoDaCercare}:`, events);
+  // Qui puoi processare l'array 'events' per visualizzare la timeline
+});
 ```
 
---- 
+### Ricostruzione della Timeline
 
-Mi scuso di nuovo per l\'inaccuratezza precedente. Questo documento è ora basato sull\'analisi diretta del codice e dovrebbe essere la fonte di verità per l\'integrazione.
+Una volta ottenuto l'array di eventi ordinato, puoi iterarlo per ricostruire la giornata:
+
+- Un evento `inizio_giornata` segna l'inizio delle attività.
+- Un `check_in_luogo` indica l'ingresso in un cantiere (identificato da `luogoId` o `naveId`).
+- Un `check_out_luogo` indica l'uscita.
+- Un `fine_giornata` chiude tutte le attività.
+
+Combinando queste informazioni, puoi calcolare le ore di presenza totali e quelle trascorse in ogni singolo luogo.

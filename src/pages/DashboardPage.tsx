@@ -5,11 +5,12 @@ import {
     List, ListItem, ListItemText, ListItemAvatar, Avatar,
     Select, MenuItem, FormControl, InputLabel, Stack, 
     Accordion, AccordionSummary, AccordionDetails,
-    ToggleButtonGroup, ToggleButton
+    ToggleButtonGroup, ToggleButton,
+    Grid,
+    Paper // <-- HO AGGIUNTO QUESTO
 } from '@mui/material';
-import Grid from '@mui/material/Unstable_Grid2';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/database'; // Importa il DB locale
+import { db } from '@/db/database';
 import type { Rapportino, Tecnico, Nave, Luogo, Checkin, Cliente, TipoGiornata } from '../models/definitions';
 import dayjs from 'dayjs';
 import 'dayjs/locale/it';
@@ -17,18 +18,15 @@ import isBetween from 'dayjs/plugin/isBetween';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import WorkIcon from '@mui/icons-material/Work';
-import ShipIcon from '@mui/icons-material/DirectionsBoat';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { useCheckinData } from '@/hooks/useCheckinData';
 import { useAnagrafiche } from '@/hooks/useAnagrafiche';
 import { parseToDayjs } from '@/utils/dateUtils';
+import { processaPresenze } from '@/utils/presenzeUtils';
+import { TimelineBar } from '@/components/presenze/Timeline';
 
 dayjs.extend(isBetween);
 dayjs.extend(isSameOrBefore);
 dayjs.locale('it');
 
-// Funzione di utilità per calcolare le ore totali di un rapportino
 const calculateRapportinoHours = (rapportino: Rapportino): number => {
     let totalHours = 0;
     if (rapportino.dettaglioOreTecnici && rapportino.dettaglioOreTecnici.length > 0) {
@@ -41,7 +39,6 @@ const calculateRapportinoHours = (rapportino: Rapportino): number => {
     return totalHours;
 };
 
-// --- Componenti UI stateless ---
 const CalendarDayCard: React.FC<{ day: number; missingReports: number; isFuture: boolean; }> = ({ day, missingReports, isFuture }) => {
     const cardColor = isFuture ? 'grey.600' : (missingReports > 0 ? 'error.light' : 'success.light');
     const textColor = isFuture || missingReports > 0 ? 'white' : 'inherit';
@@ -71,20 +68,6 @@ const CustomTabPanel: React.FC<{ children?: React.ReactNode; index: number; valu
     <div role="tabpanel" hidden={value !== index}>{value === index && <Box sx={{ pt: 3 }}>{children}</Box>}</div>
 );
 
-const LocationAccordion: React.FC<{ locations: { id: string; name: string; type: 'nave' | 'luogo'; technicians: Checkin[] }[], tecniciMap: Map<string, Tecnico> }> = ({ locations, tecniciMap }) => (
-    <Box>{locations.map(({ id, name, type, technicians }) => (
-        <Accordion key={id} sx={{ my: 1, boxShadow: 3, '&:before': { display: 'none' } }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}><Avatar sx={{ mr: 2, bgcolor: type === 'nave' ? 'primary.main' : 'secondary.main' }}>{type === 'nave' ? <ShipIcon /> : <LocationOnIcon />}</Avatar><Typography variant="body1" sx={{ fontWeight: 'bold', flexGrow: 1, alignSelf: 'center' }}>{name}</Typography><Typography sx={{ alignSelf: 'center', color: 'text.secondary' }}>{`${technicians.length} tecnici`}</Typography></AccordionSummary>
-            <AccordionDetails sx={{ p: 0, bgcolor: 'grey.50' }}><List dense disablePadding>{technicians.map(checkin => {
-                const tecnico = tecniciMap.get(checkin.tecnicoId);
-                const tecnicoName = tecnico ? `${tecnico.nome} ${tecnico.cognome}`.trim() : 'ID Tecnico non trovato';
-                return <ListItem key={checkin.id} sx={{ pl: 4}}><ListItemText primary={tecnicoName} /></ListItem>;
-            })}</List></AccordionDetails>
-        </Accordion>
-    ))}</Box>
-);
-
-// Componente personalizzato per il tooltip del grafico
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         return (
@@ -97,7 +80,38 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
-// --- Componente Principale della Dashboard ---
+const PresenzeOggiCompatte = () => {
+    const allCheckins = useLiveQuery(() => db.checkins.toArray(), []);
+    const { navi, luoghi, loading, error } = useAnagrafiche();
+
+    const timelineDataOggi = useMemo(() => {
+        if (!allCheckins || loading) return [];
+        const oggi = dayjs().format('YYYY-MM-DD');
+        return processaPresenze(allCheckins).filter(item => item.data === oggi);
+    }, [allCheckins, loading]);
+
+    if (loading) return <CircularProgress />;
+    if (error) return <Alert severity="error">Errore caricamento anagrafiche.</Alert>;
+    if (timelineDataOggi.length === 0) {
+        return <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico presente oggi.</Typography>;
+    }
+
+    return (
+        <Paper elevation={0} sx={{ p: 2 }}>
+            {timelineDataOggi.map(item => (
+                <Grid container key={item.id} alignItems="center" spacing={2} sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1, mb: 1 }}>
+                    <Grid item xs={12} sm={3} md={2}>
+                        <Typography variant="body2" fontWeight="bold">{item.tecnicoName}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={9} md={10}>
+                        <TimelineBar data={item} navi={navi || []} luoghi={luoghi || []} />
+                    </Grid>
+                </Grid>
+            ))}
+        </Paper>
+    );
+};
+
 const DashboardContent = () => {
     const [tabValue, setTabValue] = useState(0);
     const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -105,10 +119,9 @@ const DashboardContent = () => {
 
     const { tecnici, navi, luoghi, clienti, tipiGiornata, loading: lAnagrafiche, error: eAnagrafiche } = useAnagrafiche();
     const rapportini = useLiveQuery(() => db.rapportini.toArray(), []);
-    const { filteredCheckins, loading: lCheckins, error: eCheckins } = useCheckinData(today.format('YYYY-MM-DD'));
     
-    const isLoading = lAnagrafiche || rapportini === undefined || lCheckins;
-    const error = eAnagrafiche || eCheckins;
+    const isLoading = lAnagrafiche || rapportini === undefined;
+    const error = eAnagrafiche;
 
     const handleTimeRangeChange = (event: React.MouseEvent<HTMLElement>, newTimeRange: 'current' | 'previous') => {
         if (newTimeRange !== null) {
@@ -119,52 +132,10 @@ const DashboardContent = () => {
     const selectedMonth = selectedDate.month();
     const selectedYear = selectedDate.year();
 
-    const tecniciMap = useMemo(() => new Map(tecnici?.map(t => [t.id, t]) || []), [tecnici]);
     const naviMap = useMemo(() => new Map(navi?.map(n => [n.id, {nome: n.nome, clienteId: n.clienteId}]) || []), [navi]);
     const luoghiMap = useMemo(() => new Map(luoghi?.map(l => [l.id, l.nome]) || []), [luoghi]);
-    const clientiMap = useMemo(() => new Map(clienti?.map(c => [c.id, c.nome]) || []), [clienti]);
     const simpleTecniciMap = useMemo(() => new Map(tecnici.map(t => [t.id, `${t.nome} ${t.cognome}`])), [tecnici]);
     
-    const { checkinsByClient, luoghiCheckins } = useMemo(() => {
-        if (!filteredCheckins || !navi) return { checkinsByClient: {}, luoghiCheckins: [] };
-
-        const locations: Record<string, { id: string; name: string; type: 'nave' | 'luogo'; technicians: Checkin[], clienteId?: string }> = {};
-        for (const checkin of filteredCheckins) {
-            const locationId = checkin.anagraficaId;
-            if (locations[locationId]) { locations[locationId].technicians.push(checkin); continue; }
-
-            let name: string, type: 'nave' | 'luogo', clienteId: string | undefined;
-            if (naviMap.has(locationId)) {
-                const nave = naviMap.get(locationId)!; name = nave.nome; type = 'nave'; clienteId = nave.clienteId;
-            } else if (luoghiMap.has(locationId)) {
-                name = luoghiMap.get(locationId)!; type = 'luogo';
-            } else { name = checkin.anagraficaNome || 'Luogo Sconosciuto'; type = 'luogo'; }
-            locations[locationId] = { id: locationId, name, type, technicians: [checkin], clienteId };
-        }
-
-        const allLocations = Object.values(locations);
-        const luoghiSorted = allLocations.filter(l => l.type === 'luogo').sort((a,b) => a.name.localeCompare(b.name));
-
-        const naviPerCliente: Record<string, { id: string; name: string; type: 'nave'; technicians: Checkin[] }[]> = {};
-        allLocations.filter(l => l.type === 'nave').forEach(nave => {
-            const clienteId = nave.clienteId || 'nessun-cliente';
-            if (!naviPerCliente[clienteId]) naviPerCliente[clienteId] = [];
-            naviPerCliente[clienteId].push(nave as any);
-        });
-
-        for (const clienteId in naviPerCliente) {
-            naviPerCliente[clienteId].sort((a,b) => a.name.localeCompare(b.name));
-            for (const nave of naviPerCliente[clienteId]) {
-                nave.technicians.sort((a, b) => (tecniciMap.get(a.tecnicoId)?.nome || '').localeCompare(tecniciMap.get(b.tecnicoId)?.nome || ''));
-            }
-        }
-
-        luoghiSorted.forEach(luogo => {
-            luogo.technicians.sort((a,b) => (tecniciMap.get(a.tecnicoId)?.nome || '').localeCompare(tecniciMap.get(b.tecnicoId)?.nome || ''));
-        });
-        return { checkinsByClient: naviPerCliente, luoghiCheckins: luoghiSorted };
-    }, [filteredCheckins, navi, naviMap, luoghiMap, tecniciMap]);
-
     const memoizedStats = useMemo(() => {
         if (!rapportini || !tecnici || !tipiGiornata || !navi || !luoghi) return null;
     
@@ -241,7 +212,6 @@ const DashboardContent = () => {
     if (!memoizedStats) return <Box sx={{ p: 3 }}><Alert severity="info">Dati in caricamento o non sufficienti per la dashboard...</Alert></Box>;
     
     const { oreTotaliRange, rapportiniCreatiRange, orePerNaveChartData, attivitaRecenti, calendarData } = memoizedStats;
-    const clientKeys = Object.keys(checkinsByClient).sort((a,b) => (clientiMap.get(a) || 'zzz').localeCompare(clientiMap.get(b) || 'zzz'));
     const timeRangeValue = selectedDate.isSame(dayjs(), 'month') ? 'current' : (selectedDate.isSame(dayjs().subtract(1, 'month'), 'month') ? 'previous' : null);
     
     return (
@@ -256,9 +226,9 @@ const DashboardContent = () => {
                         </ToggleButtonGroup>
                     </Box>
                     <Grid container spacing={3}>
-                        <Grid xs={12} sm={6}><StatCard title="Ore Lavorate" value={oreTotaliRange} /></Grid>
-                        <Grid xs={12} sm={6}><StatCard title="Rapportini Creati" value={rapportiniCreatiRange} /></Grid>
-                        <Grid xs={12}><Card><CardContent>
+                        <Grid item xs={12} sm={6}><StatCard title="Ore Lavorate" value={oreTotaliRange} /></Grid>
+                        <Grid item xs={12} sm={6}><StatCard title="Rapportini Creati" value={rapportiniCreatiRange} /></Grid>
+                        <Grid item xs={12}><Card><CardContent>
                             <Typography variant="subtitle1" gutterBottom>Ore Lavorate per Nave</Typography>
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={orePerNaveChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
@@ -278,16 +248,15 @@ const DashboardContent = () => {
                 <Typography variant="subtitle1" gutterBottom>Ultime 5 Attività</Typography>
                 <List>{attivitaRecenti.length > 0 ? attivitaRecenti.map(item => <ListItem key={item.id}><ListItemAvatar><Avatar><WorkIcon /></Avatar></ListItemAvatar><ListItemText primary={`${item.tecnico} - ${item.destinazione}`} secondary={`${item.data} - ${item.descrizione}`} /></ListItem>) : <Typography sx={{ p: 2 }}>Nessuna attività recente.</Typography>}</List>
             </CardContent></Card></CustomTabPanel>
-            <CustomTabPanel value={tabValue} index={2}>{(Object.keys(checkinsByClient).length > 0 || luoghiCheckins.length > 0) ? <Grid container spacing={4}>
-                <Grid xs={12} md={6}><Typography variant="h6" component="div" gutterBottom>Navi per Cliente</Typography>{Object.keys(checkinsByClient).length > 0 ? clientKeys.map(clienteId => <Box key={clienteId} sx={{ mb: 3 }}><Typography variant="subtitle1" component="div" sx={{ mb: 1, pl: 1, fontWeight: 'bold' }}>{clientiMap.get(clienteId) || 'Nessun Cliente Associato'}</Typography><LocationAccordion locations={checkinsByClient[clienteId]} tecniciMap={tecniciMap} /></Box>) : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico imbarcato oggi.</Typography>}</Grid>
-                <Grid xs={12} md={6}><Typography variant="h6" component="div" gutterBottom>Luoghi</Typography>{luoghiCheckins.length > 0 ? <LocationAccordion locations={luoghiCheckins} tecniciMap={tecniciMap} /> : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun tecnico in altre sedi oggi.</Typography>}</Grid>
-            </Grid> : <Typography sx={{ p: 2, textAlign: 'center', fontStyle: 'italic' }}>Nessun check-in registrato per oggi.</Typography>}</CustomTabPanel>
+            <CustomTabPanel value={tabValue} index={2}>
+                <PresenzeOggiCompatte />
+            </CustomTabPanel>
             <CustomTabPanel value={tabValue} index={3}>
                 <Stack direction="row" spacing={2} sx={{ mb: 3, justifyContent: 'center' }}>
                     <FormControl size="small"><InputLabel>Mese</InputLabel><Select value={selectedMonth} label="Mese" onChange={(e) => setSelectedDate(selectedDate.month(e.target.value as number))}>{Array.from({ length: 12 }, (_, i) => <MenuItem key={i} value={i}>{dayjs().month(i).format('MMMM')}</MenuItem>)}</Select></FormControl>
                     <FormControl size="small"><InputLabel>Anno</InputLabel><Select value={selectedYear} label="Anno" onChange={(e) => setSelectedDate(selectedDate.year(e.target.value as number))}>{Array.from({ length: 5 }, (_, i) => dayjs().year() - i).map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}</Select></FormControl>
                 </Stack>
-                <Grid container spacing={1}>{calendarData && Array.from({ length: calendarData.offset }).map((_, index) => <Grid xs={12/7} key={`offset-${index}`} />)}{calendarData && calendarData.days.map((dayData) => <Grid xs={12/7} key={dayData.day}><CalendarDayCard day={dayData.day} missingReports={dayData.missingReports} isFuture={dayData.isFuture} /></Grid>)}</Grid>
+                <Grid container spacing={1}>{calendarData && Array.from({ length: calendarData.offset }).map((_, index) => <Grid item xs={12/7} key={`offset-${index}`} />)}{calendarData && calendarData.days.map((dayData) => <Grid item xs={12/7} key={dayData.day}><CalendarDayCard day={dayData.day} missingReports={dayData.missingReports} isFuture={dayData.isFuture} /></Grid>)}</Grid>
             </CustomTabPanel>
         </Box>
     );
