@@ -44,15 +44,25 @@ const GestioneTecnici = () => {
             const isNew = !selectedTecnico?.id;
             const operation = isNew ? 'create' : 'update';
             
-            // ======= PAYLOAD CORRETTO PER LA CLOUD FUNCTION =======
-            // Per l'update, assicuriamoci di passare l'UID di autenticazione,
-            // che è memorizzato nel documento del tecnico.
-            const payload = {
-                ...formData,
-                uid: isNew ? undefined : selectedTecnico.uid, // UID per l'update
-                id: isNew ? undefined : selectedTecnico.id,   // ID documento per riferimento
-            };
-            // =======================================================
+            // PAYLOAD CORRETTO PER LA CLOUD FUNCTION
+            let payload: any;
+            if (isNew) {
+                // Per la creazione, passiamo email e password direttamente.
+                const { email, password, ...otherData } = formData;
+                payload = { 
+                    email, 
+                    password, 
+                    displayName: otherData.displayName,
+                    ...otherData 
+                };
+            } else {
+                // Per l'update, passiamo l'ID del documento e l'UID di autenticazione.
+                payload = {
+                    ...formData,
+                    id: selectedTecnico.id,
+                    uid: selectedTecnico.uid,
+                };
+            }
 
             await tecniciService(operation, payload);
 
@@ -88,7 +98,7 @@ const GestioneTecnici = () => {
             await tecniciService('toggle-active', { id: tecnico.uid, attivo: newStatus });
             showSnackbar(`Stato del tecnico aggiornato.`, 'success');
         } catch (e: any) {
-            logger.error("Errore durante il cambio di stato (GestioneTecnici):", e);
+            logger.error("Errore duringo il cambio di stato (GestioneTecnici):", e);
             showSnackbar("Errore durante l'aggiornamento dello stato.", "error");
         } finally {
             setUpdatingId(null);
